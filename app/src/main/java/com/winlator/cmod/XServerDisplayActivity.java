@@ -348,14 +348,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         imageFs = ImageFs.find(this);
 
-        // Cleanup event files before initializing WinHandler
+        // Prepare dev/input directory - actual event files created after shortcut is loaded
         File devInputDir = new File(imageFs.getRootDir(), "dev/input");
         if (devInputDir.exists() || devInputDir.mkdirs()) {
             for (int i = 0; i < 4; i++) {
                 File eventFile = new File(devInputDir, "event" + i);
                 if (eventFile.exists()) eventFile.delete();
             }
-            try { new File(devInputDir, "event0").createNewFile(); } catch (Exception e) {}
         }
 
         // Initialize the WinHandler
@@ -421,6 +420,18 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (shortcutPath != null && !shortcutPath.isEmpty()) {
             shortcut = new Shortcut(container, new File(shortcutPath));
         }
+
+        // Pre-create event files based on numControllers setting
+        int numControllers = 1;
+        if (shortcut != null) {
+            try { numControllers = Integer.parseInt(shortcut.getExtra("numControllers", "1")); }
+            catch (NumberFormatException e) { numControllers = 1; }
+        }
+        numControllers = Math.max(1, Math.min(numControllers, 4));
+        for (int i = 0; i < numControllers; i++) {
+            try { new File(devInputDir, "event" + i).createNewFile(); } catch (Exception e) {}
+        }
+        Log.d("XServerDisplayActivity", "Pre-created " + numControllers + " controller event file(s)");
 
         taskAffinityMask = (short) ProcessHelper.getAffinityMask(container.getCPUList(true));
         taskAffinityMaskWoW64 = (short) ProcessHelper.getAffinityMask(container.getCPUListWoW64(true));
