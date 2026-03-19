@@ -221,17 +221,56 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     }
 
 
+    private final SensorEventListener gyroListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
+                float gyroX = event.values[0]; // Rotation around the X-axis
+                float gyroY = event.values[1]; // Rotation around the Y-axis
+
+                winHandler.updateGyroData(gyroX, gyroY); // Send gyro data to WinHandler
+            }
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+            // No action needed
+        }
+    };
+
+    private float pickHighestRefreshRate() {
+    	android.view.Display display = getWindowManager().getDefaultDisplay();
+    	android.view.Display.Mode[] modes = display.getSupportedModes();
+    	
+    	float maxRefresh = 0f;
+    	
+    	for (android.view.Display.Mode mode : modes) {
+			if (mode.getRefreshRate() > maxRefresh)
+    	    	maxRefresh = mode.getRefreshRate();
+    	}
+
+    	Log.d("XServerDisplayActivity", "Picking refresh rate " + maxRefresh);
+
+    	return maxRefresh;
+    }
+
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AppUtils.hideSystemUI(this);
         AppUtils.keepScreenOn(this);
+
+        android.view.WindowManager.LayoutParams params = getWindow().getAttributes();
+        params.preferredRefreshRate = pickHighestRefreshRate();
+        getWindow().setAttributes(params);
+        
         setContentView(R.layout.xserver_display_activity);
 
         preloaderDialog = new PreloaderDialog(this);
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
 
-        cursorLock = preferences.getBoolean("cursor_lock", false);
+        cursorLock = preferences.getBoolean("cursor_lock", true);
 
         // Check for Dark Mode
         isDarkMode = preferences.getBoolean("dark_mode", false);
@@ -482,17 +521,20 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             @Override
             public void onMapWindow(Window window) {
                 // Log the class name of the mapped window
-                Log.d("XServerDisplayActivity", "onMapWindow: Detected window className: " + window.getClassName());
+                Log.d("XServerDisplayActivity", "onMapWindow: Mapping window: " + window.getClassName());
                 assignTaskAffinity(window);
             }
 
             @Override
             public void onModifyWindowProperty(Window window, Property property) {
+                String name = (property != null) ? property.nameAsString() : "";
+                Log.d("XServerDisplayActivity", "onModifyWindowProperty: Changed property " + name + " for window " + window.id);
                 changeFrameRatingVisibility(window, property);
             }    
 
             @Override
-            public void onUnmapWindow(Window window) {
+            public void onDestroyWindow(Window window) {
+                Log.d("XServerDisplayActivity", "onDestroyWindow: Destroying window " + window.getClassName());
                 changeFrameRatingVisibility(window, null);
             }
         });
@@ -903,20 +945,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
 
-        if (hasFocus && cursorLock) {
+        if (hasFocus && cursorLock)
             touchpadView.requestPointerCapture();
-            touchpadView.setOnCapturedPointerListener(new View.OnCapturedPointerListener() {
-                @Override
-                public boolean onCapturedPointer(View view, MotionEvent event) {
-                    handleCapturedPointer(event);
-                    return true;
-                }
-            });
-        }
-        else if (!hasFocus) {
+        else if (!hasFocus)
             touchpadView.releasePointerCapture();
-            touchpadView.setOnCapturedPointerListener(null);
-        }
     }
 
     // private void extractInputDLLs() {
@@ -1158,6 +1190,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         touchpadView.setFourFingersTapCallback(() -> {
             if (!drawerLayout.isDrawerOpen(GravityCompat.START)) drawerLayout.openDrawer(GravityCompat.START);
         });
+        View.OnCapturedPointerListener capturedPointerListener = new View.OnCapturedPointerListener() {
+        	@Override
+            public boolean onCapturedPointer(View view, MotionEvent event) {
+            	handleCapturedPointer(event);
+                return true;
+            }
+        };
+        touchpadView.setOnCapturedPointerListener(cursorLock ? capturedPointerListener : null);
+        touchpadView.setFocusable(true);
+        touchpadView.setFocusableInTouchMode(true);
         rootView.addView(touchpadView);
 
         inputControlsView = new InputControlsView(this, timeoutHandler, hideControlsRunnable);
@@ -1458,10 +1500,17 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         File rootDir = imageFs.getRootDir();
 
-        if (dxwrapper.contains("dxvk"))
+        if (dxwrapper.contains("dxvk")) {
             DXVKConfigDialog.setEnvVars(this, dxwrapperConfig, envVars);
-        else
+            String version = dxwrapperConfig.get("version");
+            if (version.equals("1.11.1-sarek")) {
+                Log.d("GraphicsDriverExtraction", "Disabling Wrapper PATCH_OPCONSTCOMP SPIR-V pass");
+                envVars.put("WRAPPER_NO_PATCH_OPCONSTCOMP", "1");
+            }
+        }
+        else {
             WineD3DConfigDialog.setEnvVars(this, dxwrapperConfig, envVars);
+        }
 
         boolean useDRI3 = preferences.getBoolean("use_dri3", true);
         if (!useDRI3) {
@@ -1476,8 +1525,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/wrapper" + ".tzst", rootDir);
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "layers" + ".tzst", rootDir);
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/extra_libs" + ".tzst", rootDir);
-            if (wineInfo.isArm64EC() && !GPUInformation.getRenderer(null,null).contains("Mali"))
-                TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/zink_dlls" + ".tzst", new File(rootDir, imageFs.WINEPREFIX + "/drive_c/windows"));
         }
 
         if (adrenoToolsDriverId != "System") {
@@ -1494,7 +1541,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         envVars.put("WRAPPER_EXTENSION_BLACKLIST", blacklistedExtensions);
 
         String gpuName = graphicsDriverConfig.get("gpuName");
-        if (!gpuName.equals("Device")) {
+        String dxvkVersion = dxwrapperConfig.get("version");
+        if (!gpuName.equals("Device") && !dxvkVersion.equals("1.11.1-sarek")) {
             envVars.put("WRAPPER_DEVICE_NAME", gpuName);
             envVars.put("WRAPPER_DEVICE_ID", WineD3DConfigDialog.getDeviceIdFromGPUName(this, gpuName));
             envVars.put("WRAPPER_VENDOR_ID", WineD3DConfigDialog.getVendorIdFromGPUName(this, gpuName));
@@ -1525,14 +1573,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         switch (bcnEmulation) {
             case "auto" -> {
-                if (bcnEmulationType.equals("compute")) {
+                if (bcnEmulationType.equals("compute") && GPUInformation.getVendorID(null, null) != 0x5143) {
                     envVars.put("ENABLE_BCN_COMPUTE", "1");
                     envVars.put("BCN_COMPUTE_AUTO", "1");
                 }
                 envVars.put("WRAPPER_EMULATE_BCN", "3");
             }
             case "full" -> {
-                if (bcnEmulationType.equals("compute")) {
+                if (bcnEmulationType.equals("compute") && GPUInformation.getVendorID(null, null) != 0x5143) {
                     envVars.put("ENABLE_BCN_COMPUTE", "1");
                     envVars.put("BCN_COMPUTE_AUTO", "0");
                 }
@@ -1615,9 +1663,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         if (dxwrapper.contains("dxvk")) {
             Log.d(TAG, "Extracting DXVK wrapper files, version: " + dxwrapper);
+
             String dxvkWrapper = dxwrapper.split(";")[0];
             String vkd3dWrapper = dxwrapper.split(";")[1];
             String ddrawrapper = dxwrapper.split(";")[2];
+            
             ContentProfile dxvkProfile = contentsManager.getProfileByEntryName(dxvkWrapper);
             if (dxvkProfile != null) {
                 Log.d(TAG, "Applying user-defined DXVK content profile: " + dxvkWrapper);
