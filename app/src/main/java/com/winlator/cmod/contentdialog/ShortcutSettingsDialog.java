@@ -407,8 +407,8 @@ public class ShortcutSettingsDialog extends ContentDialog {
                 boolean touchscreenMode = cbSimTouchScreen.isChecked();
                 shortcut.putExtra("simTouchScreen", touchscreenMode ? "1" : "0");
 
-                int numControllers = sNumControllers.getSelectedItemPosition() + 1;
-                shortcut.putExtra("numControllers", String.valueOf(numControllers));
+                int selectedNumControllers = sNumControllers.getSelectedItemPosition() + 1;
+                shortcut.putExtra("numControllers", String.valueOf(selectedNumControllers));
 
                 String execArgs = etExecArgs.getText().toString();
                 shortcut.putExtra("execArgs", !execArgs.isEmpty() ? execArgs : null);
