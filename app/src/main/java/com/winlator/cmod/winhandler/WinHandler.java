@@ -328,12 +328,13 @@ public class WinHandler {
                     LocalSocket client = vibrationServer.accept();
                     try {
                         java.io.InputStream is = client.getInputStream();
-                        byte[] buf = new byte[4];
+                        byte[] buf = new byte[6];
                         int read = is.read(buf);
-                        if (read == 4) {
+                        if (read == 6) {
                             int strong = (buf[0] & 0xFF) | ((buf[1] & 0xFF) << 8);
                             int weak = (buf[2] & 0xFF) | ((buf[3] & 0xFF) << 8);
-                            triggerVibration(strong, weak);
+                            int durationMs = (buf[4] & 0xFF) | ((buf[5] & 0xFF) << 8);
+                            triggerVibration(strong, weak, durationMs);
                         }
                         client.close();
                     } catch (IOException e) {
@@ -348,7 +349,7 @@ public class WinHandler {
         });
     }
 
-    private void triggerVibration(int strong, int weak) {
+    private void triggerVibration(int strong, int weak, int durationMs) {
         Vibrator vibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
         if (vibrator == null || !vibrator.hasVibrator())
             return;
@@ -356,11 +357,12 @@ public class WinHandler {
         if (strong > 0 || weak > 0) {
             int intensity = Math.max(strong, weak);
             int amplitude = Math.min(255, Math.max(1, (int) ((intensity / 65535.0f) * 255)));
+            int duration = Math.max(1, durationMs);
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(100, amplitude));
+                vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude));
             } else {
-                vibrator.vibrate(100);
+                vibrator.vibrate(duration);
             }
         } else {
             vibrator.cancel();

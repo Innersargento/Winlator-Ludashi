@@ -80,7 +80,7 @@ void setup_signal_handler() {
 static std::unordered_map<int, struct ff_effect> ff_effects;
 static int next_ff_id = 0;
 
-void send_vibration(int strong, int weak) {
+void send_vibration(int strong, int weak, uint16_t duration_ms) {
   if (!vibration_enabled)
     return;
 
@@ -100,9 +100,10 @@ void send_vibration(int strong, int weak) {
     return;
   }
 
-  uint16_t data[2];
+  uint16_t data[3];
   data[0] = (uint16_t)strong;
   data[1] = (uint16_t)weak;
+  data[2] = duration_ms;
   send(sock, data, sizeof(data), 0);
   syscall(SYS_close, sock);
 }
@@ -414,10 +415,11 @@ EXPORT int ioctl(int fd, int op, ...) {
         }
         ff_effects[effect->id] = *effect;
 
+        uint16_t duration = effect->replay.length;
         if (effect->type == FF_RUMBLE) {
-            send_vibration(effect->u.rumble.strong_magnitude, effect->u.rumble.weak_magnitude);
+            send_vibration(effect->u.rumble.strong_magnitude, effect->u.rumble.weak_magnitude, duration);
         } else if (effect->type == FF_PERIODIC) {
-            send_vibration(effect->u.periodic.magnitude, effect->u.periodic.magnitude);
+            send_vibration(effect->u.periodic.magnitude, effect->u.periodic.magnitude, duration);
         }
         return 0;
     }
@@ -516,16 +518,17 @@ static void check_ff_event(const struct input_event *ev) {
     if (value > 0) {
       auto it = ff_effects.find(id);
       if (it != ff_effects.end()) {
+        uint16_t duration = it->second.replay.length;
         if (it->second.type == FF_RUMBLE) {
           send_vibration(it->second.u.rumble.strong_magnitude,
-                         it->second.u.rumble.weak_magnitude);
+                         it->second.u.rumble.weak_magnitude, duration);
         } else if (it->second.type == FF_PERIODIC) {
           send_vibration(it->second.u.periodic.magnitude,
-                         it->second.u.periodic.magnitude);
+                         it->second.u.periodic.magnitude, duration);
         }
       }
     } else {
-      send_vibration(0, 0);
+      send_vibration(0, 0, 0);
     }
   }
 }
