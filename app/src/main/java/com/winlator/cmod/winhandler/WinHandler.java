@@ -76,6 +76,7 @@ public class WinHandler {
     private String fakeInputBasePath;
     private LocalServerSocket vibrationServer;
     private volatile boolean vibrationRunning = false;
+    private boolean[] vibrationEnabledSlots = new boolean[MAX_CONTROLLERS]; // per-slot vibration toggle
 
     private boolean xinputDisabled;
     private boolean xinputDisabledInitialized = false;
@@ -103,6 +104,11 @@ public class WinHandler {
         inputManager.registerInputDeviceListener(inputDeviceListener, null);
 
         preferences = PreferenceManager.getDefaultSharedPreferences(activity.getBaseContext());
+
+        // Load per-slot vibration preferences (default: enabled)
+        for (int i = 0; i < MAX_CONTROLLERS; i++) {
+            vibrationEnabledSlots[i] = preferences.getBoolean("vibration_slot_" + i, true);
+        }
     }
 
     private boolean sendPacket(int port) {
@@ -328,13 +334,14 @@ public class WinHandler {
                     LocalSocket client = vibrationServer.accept();
                     try {
                         java.io.InputStream is = client.getInputStream();
-                        byte[] buf = new byte[6];
+                        byte[] buf = new byte[8];
                         int read = is.read(buf);
-                        if (read == 6) {
+                        if (read == 8) {
                             int strong = (buf[0] & 0xFF) | ((buf[1] & 0xFF) << 8);
                             int weak = (buf[2] & 0xFF) | ((buf[3] & 0xFF) << 8);
                             int durationMs = (buf[4] & 0xFF) | ((buf[5] & 0xFF) << 8);
-                            triggerVibration(strong, weak, durationMs);
+                            int slot = (buf[6] & 0xFF) | ((buf[7] & 0xFF) << 8);
+                            triggerVibration(strong, weak, durationMs, slot);
                         }
                         client.close();
                     } catch (IOException e) {
@@ -349,8 +356,33 @@ public class WinHandler {
         });
     }
 
-    private void triggerVibration(int strong, int weak, int durationMs) {
-        Vibrator vibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
+    private void triggerVibration(int strong, int weak, int durationMs, int slot) {
+        // Check if vibration is enabled for this slot
+        if (slot >= 0 && slot < MAX_CONTROLLERS && !vibrationEnabledSlots[slot])
+            return;
+
+        Vibrator vibrator = null;
+
+        // Find which deviceId owns this slot
+        Integer deviceId = null;
+        for (Map.Entry<Integer, Integer> entry : deviceToSlot.entrySet()) {
+            if (entry.getValue() == slot) {
+                deviceId = entry.getKey();
+                break;
+            }
+        }
+
+        if (deviceId != null && deviceId == OSC_DEVICE_ID) {
+            // OSC is mapped to this slot — use the phone vibrator
+            vibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
+        } else if (deviceId != null) {
+            // Physical controller — use its own vibrator
+            android.view.InputDevice device = android.view.InputDevice.getDevice(deviceId);
+            if (device != null) {
+                vibrator = device.getVibrator();
+            }
+        }
+
         if (vibrator == null || !vibrator.hasVibrator())
             return;
 
@@ -367,6 +399,23 @@ public class WinHandler {
         } else {
             vibrator.cancel();
         }
+    }
+
+    public boolean isVibrationEnabledForSlot(int slot) {
+        if (slot >= 0 && slot < MAX_CONTROLLERS)
+            return vibrationEnabledSlots[slot];
+        return false;
+    }
+
+    public void setVibrationEnabledForSlot(int slot, boolean enabled) {
+        if (slot >= 0 && slot < MAX_CONTROLLERS) {
+            vibrationEnabledSlots[slot] = enabled;
+            preferences.edit().putBoolean("vibration_slot_" + slot, enabled).apply();
+        }
+    }
+
+    public int getMaxControllers() {
+        return MAX_CONTROLLERS;
     }
 
     private void handleRequest(byte requestCode, final int port) {

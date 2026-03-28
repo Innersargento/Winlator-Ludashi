@@ -80,7 +80,7 @@ void setup_signal_handler() {
 static std::unordered_map<int, struct ff_effect> ff_effects;
 static int next_ff_id = 0;
 
-void send_vibration(int strong, int weak, uint16_t duration_ms) {
+void send_vibration(int strong, int weak, uint16_t duration_ms, uint16_t slot) {
   if (!vibration_enabled)
     return;
 
@@ -100,10 +100,11 @@ void send_vibration(int strong, int weak, uint16_t duration_ms) {
     return;
   }
 
-  uint16_t data[3];
+  uint16_t data[4];
   data[0] = (uint16_t)strong;
   data[1] = (uint16_t)weak;
   data[2] = duration_ms;
+  data[3] = slot;
   send(sock, data, sizeof(data), 0);
   syscall(SYS_close, sock);
 }
@@ -417,9 +418,9 @@ EXPORT int ioctl(int fd, int op, ...) {
 
         uint16_t duration = effect->replay.length;
         if (effect->type == FF_RUMBLE) {
-            send_vibration(effect->u.rumble.strong_magnitude, effect->u.rumble.weak_magnitude, duration);
+            send_vibration(effect->u.rumble.strong_magnitude, effect->u.rumble.weak_magnitude, duration, (uint16_t)event_number);
         } else if (effect->type == FF_PERIODIC) {
-            send_vibration(effect->u.periodic.magnitude, effect->u.periodic.magnitude, duration);
+            send_vibration(effect->u.periodic.magnitude, effect->u.periodic.magnitude, duration, (uint16_t)event_number);
         }
         return 0;
     }
@@ -511,7 +512,7 @@ EXPORT ssize_t read(int fd, void *buf, size_t count) {
     return syscall(SYS_read, fd, buf, count);
 }
 
-static void check_ff_event(const struct input_event *ev) {
+static void check_ff_event(const struct input_event *ev, uint16_t slot) {
   if (ev->type == EV_FF) {
     int id = ev->code;
     int value = ev->value;
@@ -521,14 +522,14 @@ static void check_ff_event(const struct input_event *ev) {
         uint16_t duration = it->second.replay.length;
         if (it->second.type == FF_RUMBLE) {
           send_vibration(it->second.u.rumble.strong_magnitude,
-                         it->second.u.rumble.weak_magnitude, duration);
+                         it->second.u.rumble.weak_magnitude, duration, slot);
         } else if (it->second.type == FF_PERIODIC) {
           send_vibration(it->second.u.periodic.magnitude,
-                         it->second.u.periodic.magnitude, duration);
+                         it->second.u.periodic.magnitude, duration, slot);
         }
       }
     } else {
-      send_vibration(0, 0, 0);
+      send_vibration(0, 0, 0, slot);
     }
   }
 }
@@ -540,7 +541,8 @@ EXPORT ssize_t write(int fd, const void *buf, size_t count) {
   auto controller = controller_map.find(fd);
   if (controller != controller_map.end()) {
     if (count == sizeof(struct input_event)) {
-      check_ff_event((const struct input_event *)buf);
+      uint16_t slot = (uint16_t)get_event_number(controller->second);
+      check_ff_event((const struct input_event *)buf, slot);
     }
   }
   return my_write(fd, buf, count);
@@ -549,9 +551,10 @@ EXPORT ssize_t write(int fd, const void *buf, size_t count) {
 EXPORT ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
   auto controller = controller_map.find(fd);
   if (controller != controller_map.end()) {
+    uint16_t slot = (uint16_t)get_event_number(controller->second);
     for (int i = 0; i < iovcnt; i++) {
         if (iov[i].iov_len == sizeof(struct input_event)) {
-            check_ff_event((const struct input_event *)iov[i].iov_base);
+            check_ff_event((const struct input_event *)iov[i].iov_base, slot);
         }
     }
   }
