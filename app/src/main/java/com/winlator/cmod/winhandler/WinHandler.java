@@ -525,8 +525,10 @@ public class WinHandler {
 
     public void sendGamepadState() {
         final ControlsProfile profile = activity.getInputControlsView().getProfile();
-        if (profile == null)
+        if (profile == null) {
+            releaseSlot(OSC_DEVICE_ID);
             return;
+        }
 
         final GamepadState gamepadState = profile.getGamepadState();
         final boolean useVirtualGamepad = profile.isVirtualGamepad()
