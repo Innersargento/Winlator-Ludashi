@@ -603,14 +603,12 @@ public class WinHandler {
         if (slot != null) {
             if (fallbackSlot == slot) fallbackSlot = -1;
             if (writers[slot] != null) {
-                // Use softRelease instead of destroy to keep the event file
-                // This allows games to reconnect without losing the file descriptor
-                writers[slot].softRelease();
-                // Don't null out the writer - keep it for potential reconnection
+                writers[slot].destroy();
+                writers[slot] = null;
             }
             usedSlots.remove(slot);
             controllers.remove(deviceId);
-            Log.d("WinHandler", "Device " + deviceId + " disconnected (or OSC disabled). Slot soft-released: " + slot);
+            Log.d("WinHandler", "Device " + deviceId + " disconnected (or OSC disabled). Slot released: " + slot);
         }
     }
 
