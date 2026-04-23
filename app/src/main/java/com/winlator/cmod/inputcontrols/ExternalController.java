@@ -475,6 +475,7 @@ public class ExternalController {
 
     public static boolean isGameController(InputDevice device) {
         if (device == null) return false;
+        if (device.getName() != null && device.getName().toLowerCase().contains("uinput-fpc")) return false;
         int sources = device.getSources();
         // Exclude devices with SOURCE_MOUSE from being considered controllers
         return !device.isVirtual() && ((sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
