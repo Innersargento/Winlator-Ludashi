@@ -815,22 +815,8 @@ if (enableLogs) {
         xServerView = new XServerView(this, xServer);
         final VulkanRenderer renderer = xServerView.getRenderer();
         renderer.setCursorVisible(false);
-
         {
-            String rdrDriverId = shortcut != null ? shortcut.getRendererDriverId()
-                    : (container != null ? container.getRendererDriverId() : "");
-            if (rdrDriverId == null || rdrDriverId.isEmpty() || rdrDriverId.equalsIgnoreCase("system")) {
-                String graphicsDriverConfigValue = shortcut != null
-                        ? shortcut.getExtra("graphicsDriverConfig", container.getGraphicsDriverConfig())
-                        : (container != null ? container.getGraphicsDriverConfig() : "");
-                HashMap<String, String> wrapperConfig = GraphicsDriverConfigDialog.parseGraphicsDriverConfig(graphicsDriverConfigValue);
-                String wrapperDriverId = wrapperConfig.get("version");
-                if (wrapperDriverId != null && !wrapperDriverId.isEmpty() && !wrapperDriverId.equalsIgnoreCase("system")) {
-                    rdrDriverId = wrapperDriverId;
-                } else {
-                    rdrDriverId = "";
-                }
-            }
+        String rdrDriverId = "";
             if (rdrDriverId != null && !rdrDriverId.isEmpty() && !rdrDriverId.equalsIgnoreCase("system")) {
                 try {
                     String filesDir = getFilesDir().getAbsolutePath();
