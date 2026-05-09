@@ -359,71 +359,131 @@ public class WinHandler {
     }
 
     private void triggerVibration(int strong, int weak, int durationMs, int slot) {
-        // Check if vibration is enabled for this slot
-        if (slot >= 0 && slot < MAX_CONTROLLERS && !vibrationEnabledSlots[slot])
-            return;
+    // Check if vibration is enabled for this slot
+    if (!isValidSlot(slot) || !vibrationEnabledSlots[slot])
+        return;
 
-        Vibrator vibrator = null;
+    // A duration of 0 means cancel, not vibrate
+    boolean shouldCancel = (durationMs == 0 && strong == 0 && weak == 0);
 
-        // Find which deviceId owns this slot
-        Integer deviceId = null;
-        for (Map.Entry<Integer, Integer> entry : deviceToSlot.entrySet()) {
-            if (entry.getValue() == slot) {
-                deviceId = entry.getKey();
-                break;
-            }
+    Vibrator vibrator = null;
+    android.os.VibratorManager vibratorManager = null;
+    boolean hasMultiMotor = false;
+
+    // Find which deviceId owns this slot
+    Integer deviceId = null;
+    for (Map.Entry<Integer, Integer> entry : deviceToSlot.entrySet()) {
+        if (entry.getValue() == slot) {
+            deviceId = entry.getKey();
+            break;
         }
+    }
 
-        if (deviceId != null && deviceId == OSC_DEVICE_ID) {
-            // OSC is mapped to this slot — use the phone vibrator
-            vibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
-        } else if (deviceId != null) {
-            // Physical controller
-            android.view.InputDevice device = android.view.InputDevice.getDevice(deviceId);
-            if (device != null) {
-                vibrator = device.getVibrator();
-                // Check if the physical controller has vibration capabilities
+    if (deviceId != null && deviceId.equals(OSC_DEVICE_ID)) {
+        // OSC is mapped to this slot — use the phone vibrator
+        vibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
+    } else if (deviceId != null) {
+        // Physical controller
+        android.view.InputDevice device = android.view.InputDevice.getDevice(deviceId);
+        if (device != null) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                vibratorManager = device.getVibratorManager();
+                if (vibratorManager != null && vibratorManager.getVibratorIds().length > 1) {
+                    hasMultiMotor = true;
+                }
+            }
+
+            if (!hasMultiMotor) {
+                // Use VibratorManager for single-motor on API 31+ (getVibrator() is deprecated)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                        && vibratorManager != null) {
+                    int[] ids = vibratorManager.getVibratorIds();
+                    if (ids.length > 0) {
+                        vibrator = vibratorManager.getVibrator(ids[0]);
+                    }
+                } else {
+                    vibrator = device.getVibrator();
+                }
+
                 if (vibrator == null || !vibrator.hasVibrator()) {
-                    // Fallback to phone vibrator if OSC is off and no other controller has fallen back
-                    if (!deviceToSlot.containsKey(OSC_DEVICE_ID) && (fallbackSlot == -1 || fallbackSlot == slot)) {
+                    if (!deviceToSlot.containsKey(OSC_DEVICE_ID)
+                            && (fallbackSlot == -1 || fallbackSlot == slot)) {
                         vibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
                         fallbackSlot = slot;
+                    } else {
+                        vibrator = null;
                     }
-                    else vibrator = null;
                 }
             }
         }
+    }
 
-        if (vibrator == null || !vibrator.hasVibrator())
-            return;
+    if (hasMultiMotor && vibratorManager != null
+            && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        int[] vibratorIds = vibratorManager.getVibratorIds();
 
-        if (strong > 0 || weak > 0) {
-            int intensity = Math.max(strong, weak);
-            int amplitude = Math.min(255, Math.max(1, (int) ((intensity / 65535.0f) * 255)));
-            int duration = Math.max(1, durationMs);
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude));
+        if (vibratorIds.length >= 1) {
+            Vibrator vStrong = vibratorManager.getVibrator(vibratorIds[0]);
+            if (!shouldCancel && strong > 0) {
+                int amplitude = clampAmplitude(strong);
+                int duration = Math.max(1, durationMs);
+                vStrong.vibrate(VibrationEffect.createOneShot(duration, amplitude));
             } else {
-                vibrator.vibrate(duration);
+                vStrong.cancel();
             }
+        }
+
+        if (vibratorIds.length >= 2) {
+            Vibrator vWeak = vibratorManager.getVibrator(vibratorIds[1]);
+            if (!shouldCancel && weak > 0) {
+                int amplitude = clampAmplitude(weak);
+                int duration = Math.max(1, durationMs);
+                vWeak.vibrate(VibrationEffect.createOneShot(duration, amplitude));
+            } else {
+                vWeak.cancel();
+            }
+        }
+        return;
+    }
+
+    // --- Single-motor path ---
+    if (vibrator == null || !vibrator.hasVibrator())
+        return;
+
+    if (!shouldCancel && (strong > 0 || weak > 0)) {
+        int intensity = Math.max(strong, weak);
+        int amplitude = clampAmplitude(intensity);
+        int duration = Math.max(1, durationMs);
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude));
         } else {
-            vibrator.cancel();
+            vibrator.vibrate(duration);
         }
+    } else {
+        vibrator.cancel();
     }
+}
 
-    public boolean isVibrationEnabledForSlot(int slot) {
-        if (slot >= 0 && slot < MAX_CONTROLLERS)
-            return vibrationEnabledSlots[slot];
-        return false;
-    }
+/** Maps a 0–65535 intensity value to a 1–255 VibrationEffect amplitude. */
+private int clampAmplitude(int value) {
+    return Math.min(255, Math.max(1, (int) ((value / 65535.0f) * 255)));
+}
 
-    public void setVibrationEnabledForSlot(int slot, boolean enabled) {
-        if (slot >= 0 && slot < MAX_CONTROLLERS) {
-            vibrationEnabledSlots[slot] = enabled;
-            preferences.edit().putBoolean("vibration_slot_" + slot, enabled).apply();
-        }
+private boolean isValidSlot(int slot) {
+    return slot >= 0 && slot < MAX_CONTROLLERS;
+}
+
+public boolean isVibrationEnabledForSlot(int slot) {
+    return isValidSlot(slot) && vibrationEnabledSlots[slot];
+}
+
+public void setVibrationEnabledForSlot(int slot, boolean enabled) {
+    if (isValidSlot(slot)) {
+        vibrationEnabledSlots[slot] = enabled;
+        preferences.edit().putBoolean("vibration_slot_" + slot, enabled).apply();
     }
+}
 
     public int getMaxControllers() {
         return MAX_CONTROLLERS;
