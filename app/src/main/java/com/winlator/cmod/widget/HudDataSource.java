@@ -178,10 +178,11 @@ public class HudDataSource {
                     uA = batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
                 if (uA == Long.MIN_VALUE) uA = 0;
                 if (uA == 0) uA = firstNonZero(CURRENT_PATHS);
+                uA = Math.abs(uA);
+                if (uA > 0 && uA < 100_000) uA *= 1000L;
 
                 if (mv > 0 && uA != 0) {
-                    long mw = Math.abs(uA) * mv / 1_000_000L;
-                    batteryMw.set(mv > 5000 ? (int) (mw * 2) : (int) mw);
+                    batteryMw.set((int)(uA * mv / 1_000_000L));
                 } else {
                     batteryMw.set(-1);
                 }

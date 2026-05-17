@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -418,7 +419,18 @@ public class WinlatorHUD extends View {
             case MotionEvent.ACTION_MOVE:
                 float dx = e.getRawX() - touchX, dy = e.getRawY() - touchY;
                 if (!dragging && Math.hypot(dx, dy) > DRAG_THRESH) dragging = true;
-                if (dragging) { setX(startX + dx); setY(startY + dy); }
+                if (dragging) {
+                    ViewGroup parent = (ViewGroup) getParent();
+                    if (parent != null) {
+                        float maxX = parent.getWidth()  - getWidth()  * getScaleX();
+                        float maxY = parent.getHeight() - getHeight() * getScaleY();
+                        setX(Math.max(0f, Math.min(startX + dx, maxX)));
+                        setY(Math.max(0f, Math.min(startY + dy, maxY)));
+                    } else {
+                        setX(startX + dx);
+                        setY(startY + dy);
+                     }
+                }
                 return true;
             case MotionEvent.ACTION_POINTER_UP:
                 dragging = false;
