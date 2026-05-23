@@ -17,7 +17,7 @@
         android:layout_width="250dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="#050505"
+        android:background="@color/window_background_color"
         android:fillViewport="true">
         
         <include layout="@layout/left_sidebar" />

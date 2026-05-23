@@ -278,6 +278,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
         cursorLock = preferences.getBoolean("cursor_lock", true);
         isDarkMode = preferences.getBoolean("dark_mode", true);
 
+        ScrollView sidebar = findViewById(R.id.LeftSidebar);
+        sidebar.setBackgroundColor(isDarkMode ? 0xFF050505 : 0xFFFAFAFA);
+
         boolean xinputDisabledFromShortcut = false;
 
         handler = new Handler(Looper.getMainLooper());
