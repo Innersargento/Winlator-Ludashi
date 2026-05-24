@@ -25,6 +25,7 @@ import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -280,6 +281,27 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
         ScrollView sidebar = findViewById(R.id.LeftSidebar);
         sidebar.setBackgroundColor(isDarkMode ? 0xFF050505 : 0xFFFAFAFA);
+
+        int colorPrimary   = isDarkMode ? 0xFFFFFFFF : 0xFF000000;
+        int colorSecondary = isDarkMode ? 0xFFCCCCCC : 0xFF333333;
+        int colorTertiary  = isDarkMode ? 0xFFAAAAAA : 0xFF666666;
+
+        ((TextView) findViewById(R.id.TVPause)).setTextColor(colorPrimary);
+
+        LinearLayout llSubInput = findViewById(R.id.LLSubInput);
+        LinearLayout llSubMouse = findViewById(R.id.LLSubMouse);
+        LinearLayout llSubFPS   = findViewById(R.id.LLSubFPS);
+        LinearLayout llSubGraphics = findViewById(R.id.LLSubGraphics);
+        LinearLayout llSubScreen   = findViewById(R.id.LLSubScreen);
+
+        int subBg = isDarkMode ? 0xFF111111 : 0xFFE8E8E8;
+        llSubInput.setBackgroundColor(subBg);
+        llSubMouse.setBackgroundColor(subBg);
+        llSubFPS.setBackgroundColor(subBg);
+        llSubGraphics.setBackgroundColor(subBg);
+        llSubScreen.setBackgroundColor(subBg);
+
+        applyTextColorToLayout((LinearLayout) sidebar.getChildAt(0), colorPrimary, colorSecondary, colorTertiary);
 
         boolean xinputDisabledFromShortcut = false;
 
@@ -1823,6 +1845,21 @@ private void applySidebarSettings() {
             FileUtils.copy(srcFile, dstFile);
         }
    }
+
+    private void applyTextColorToLayout(ViewGroup parent, int primary, int secondary, int tertiary) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            if (child instanceof TextView) {
+                TextView tv = (TextView) child;
+                int currentColor = tv.getCurrentTextColor();
+                if (currentColor == 0xFFFFFFFF) tv.setTextColor(primary);
+                else if (currentColor == 0xFFCCCCCC) tv.setTextColor(secondary);
+                else if (currentColor == 0xFFAAAAAA) tv.setTextColor(tertiary);
+            } else if (child instanceof ViewGroup) {
+                applyTextColorToLayout((ViewGroup) child, primary, secondary, tertiary);
+            }
+        }
+    }
    private String getWineStartCommand() {
         EnvVars envVars = getOverrideEnvVars();
         String args = "";
