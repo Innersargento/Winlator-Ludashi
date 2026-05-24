@@ -608,13 +608,14 @@ public class WinlatorHUD extends View {
 
     public void syncCheckboxes(android.widget.CheckBox cbFps, android.widget.CheckBox cbGpu,
             android.widget.CheckBox cbCpuRam, android.widget.CheckBox cbBattTemp,
-            android.widget.CheckBox cbGraph, android.widget.CheckBox cbRenderer) {
+            android.widget.CheckBox cbGraph, android.widget.CheckBox cbRenderer, android.widget.CheckBox cbRam) {
         if (cbFps      != null) cbFps.setChecked((showMask & SHOW_FPS)       != 0);
         if (cbGpu      != null) cbGpu.setChecked((showMask & SHOW_GPU)       != 0);
         if (cbCpuRam   != null) cbCpuRam.setChecked((showMask & SHOW_CPU)    != 0);
         if (cbBattTemp != null) cbBattTemp.setChecked((showMask & SHOW_BATT) != 0);
         if (cbGraph    != null) cbGraph.setChecked((showMask & SHOW_GRAPH)   != 0);
         if (cbRenderer != null) cbRenderer.setChecked((showMask & SHOW_RENDERER) != 0);
+        if (cbRam != null) cbRam.setChecked((showMask & SHOW_RAM) != 0);
     }
 
     public void setHudScale(float scale) {

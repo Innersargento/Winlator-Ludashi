@@ -1115,7 +1115,7 @@ private void setupLeftSidebar() {
 
         if (frameRating != null) {
             swHudMaster.setChecked(frameRating.getVisibility() == View.VISIBLE);
-            frameRating.syncCheckboxes(cbFps, cbGpu, cbCpuRam, cbBattTemp, cbGraph, cbRenderer);
+            frameRating.syncCheckboxes(cbFps, cbGpu, cbCpuRam, cbBattTemp, cbGraph, cbRenderer, cbRam);
             android.content.SharedPreferences hudPrefs = getSharedPreferences("winlator_hud", MODE_PRIVATE);
             if (sbHudScale != null) {
                 float scale = hudPrefs.getFloat("hud_scale", 1f);
@@ -1149,6 +1149,7 @@ private void setupLeftSidebar() {
         if (cbBattTemp != null) cbBattTemp.setOnClickListener(hudListener);
         if (cbGraph != null) cbGraph.setOnClickListener(hudListener);
         if (cbRenderer != null) cbRenderer.setOnClickListener(hudListener);
+        if (cbRam != null) cbRam.setOnClickListener(hudListener);
 
         if (sbHudScale != null) {
             sbHudScale.setOnTouchListener((v, event) -> {
