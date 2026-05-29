@@ -897,21 +897,21 @@ if (enableLogs) {
         rootView.addView(touchpadView);
         magnifierView = new MagnifierView(this);
         magnifierView.setVisibility(View.GONE);
-        
-        final float[] magnifierZoom = {1.0f};
+
         magnifierView.setZoomButtonCallback((Float delta) -> {
-            magnifierZoom[0] = Mathf.clamp(magnifierZoom[0] + delta, 1.0f, 3.0f);
-            magnifierView.setZoomValue(magnifierZoom[0]);
-            xServerView.setScaleX(magnifierZoom[0]);
-            xServerView.setScaleY(magnifierZoom[0]);
+            renderer.setMagnifierZoom(Mathf.clamp(renderer.getMagnifierZoom() + delta, 1.0f, 3.0f));
+            magnifierView.setZoomValue(renderer.getMagnifierZoom());
+            xServerView.queueEvent(() -> {
+                synchronized (renderer) { }
+                renderer.queueSceneUpdate();
+            });
         });
-        
+
         magnifierView.setHideButtonCallback(() -> {
             magnifierView.setVisibility(View.GONE);
-            magnifierZoom[0] = 1.0f;
+            renderer.setMagnifierZoom(1.0f);
             magnifierView.setZoomValue(1.0f);
-            xServerView.setScaleX(1.0f);
-            xServerView.setScaleY(1.0f);
+            xServerView.queueEvent(renderer::queueSceneUpdate);
         });
         rootView.addView(magnifierView);
         

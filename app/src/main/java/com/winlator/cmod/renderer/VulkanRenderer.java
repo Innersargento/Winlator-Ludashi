@@ -7,6 +7,7 @@ import android.view.Surface;
 import android.widget.Toast;
 
 import com.winlator.cmod.R;
+import com.winlator.cmod.math.Mathf;
 import com.winlator.cmod.widget.WinlatorHUD;
 import com.winlator.cmod.widget.XServerView;
 import com.winlator.cmod.xserver.Bitmask;
@@ -274,7 +275,7 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     private void updateTransform() {
         if (nativeHandle == 0) return;
         if (fullscreen) {
-            nativeSetTransform(nativeHandle, 0, 0, 1.0f, 1.0f);
+            nativeSetTransform(nativeHandle, 0, 0, magnifierZoom, magnifierZoom);
             viewTransformation.update(surfaceWidth, surfaceHeight,
                 xServer.screenInfo.width, xServer.screenInfo.height);
             nativeScanoutSetDst(nativeHandle,
@@ -288,16 +289,29 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                 short halfH = (short)(xServer.screenInfo.height / 2);
                 py = Math.max(0, Math.min(xServer.pointer.getY() - halfH / 2.0f, halfH));
             }
-            nativeSetTransform(nativeHandle,
-                viewTransformation.sceneOffsetX,
-                viewTransformation.sceneOffsetY - py,
-                viewTransformation.sceneScaleX,
-                viewTransformation.sceneScaleY);
+
+            float scaleX = viewTransformation.sceneScaleX * magnifierZoom;
+            float scaleY = viewTransformation.sceneScaleY * magnifierZoom;
+
+            float offsetX = viewTransformation.sceneOffsetX;
+            float offsetY = viewTransformation.sceneOffsetY - py;
+
+            if (magnifierZoom > 1.0f) {
+                offsetX = viewTransformation.sceneOffsetX - Mathf.clamp(
+                        xServer.pointer.getX() * magnifierZoom - xServer.screenInfo.width  * 0.5f,
+                        0, xServer.screenInfo.width  * (magnifierZoom - 1.0f)) * viewTransformation.sceneScaleX;
+
+                offsetY = viewTransformation.sceneOffsetY - Mathf.clamp(
+                        xServer.pointer.getY() * magnifierZoom - xServer.screenInfo.height * 0.5f,
+                        0, xServer.screenInfo.height * (magnifierZoom - 1.0f)) * viewTransformation.sceneScaleY - py;
+            }
+
+            nativeSetTransform(nativeHandle, offsetX, offsetY, scaleX, scaleY);
             nativeScanoutSetDst(nativeHandle,
-                viewTransformation.viewOffsetX,
-                viewTransformation.viewOffsetY,
-                viewTransformation.viewWidth,
-                viewTransformation.viewHeight);
+                    viewTransformation.viewOffsetX,
+                    viewTransformation.viewOffsetY,
+                    viewTransformation.viewWidth,
+                    viewTransformation.viewHeight);
         }
     }
 
@@ -518,6 +532,7 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                 nativeScanoutSetCursorPos(nativeHandle, x, y, hotX, hotY);
             }
             if (screenOffsetYRelativeToCursor) updateTransform();
+            if (magnifierZoom > 1.0f) updateTransform();
         }
     }
 
@@ -696,7 +711,12 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     public void toggleFullscreen() { fullscreen = !fullscreen; synchronized (lock) { updateTransform(); } xServerView.queueEvent(this::updateScene); }
     public void setScreenOffsetYRelativeToCursor(boolean b) { screenOffsetYRelativeToCursor = b; synchronized (lock) { updateTransform(); } }
     public boolean isScreenOffsetYRelativeToCursor() { return screenOffsetYRelativeToCursor; }
-    public void setMagnifierZoom(float zoom) { magnifierZoom = zoom; }
+    public void setMagnifierZoom(float zoom) {
+        magnifierZoom = zoom;
+        synchronized (lock) {
+            if (nativeHandle != 0) updateTransform();
+        }
+    }
     public float getMagnifierZoom() { return magnifierZoom; }
     public void setUnviewableWMClasses(String... classes) { this.unviewableWMClasses = classes; }
     private int fpsLimit = 0;
