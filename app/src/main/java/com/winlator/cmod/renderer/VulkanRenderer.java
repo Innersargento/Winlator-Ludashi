@@ -274,8 +274,17 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
 
     private void updateTransform() {
         if (nativeHandle == 0) return;
+
+        float offsetX = 0;
+        float offsetY = 0;
+
+        if (magnifierZoom > 1.0f) {
+            offsetX = calcMagnifierOffset(xServer.pointer.getX(), xServer.screenInfo.width,  fullscreen ? 1.0f : viewTransformation.sceneScaleX);
+            offsetY = calcMagnifierOffset(xServer.pointer.getY(), xServer.screenInfo.height, fullscreen ? 1.0f : viewTransformation.sceneScaleY);
+        }
+
         if (fullscreen) {
-            nativeSetTransform(nativeHandle, 0, 0, magnifierZoom, magnifierZoom);
+            nativeSetTransform(nativeHandle, offsetX, offsetY, magnifierZoom, magnifierZoom);
             viewTransformation.update(surfaceWidth, surfaceHeight,
                 xServer.screenInfo.width, xServer.screenInfo.height);
             nativeScanoutSetDst(nativeHandle,
@@ -289,30 +298,23 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                 short halfH = (short)(xServer.screenInfo.height / 2);
                 py = Math.max(0, Math.min(xServer.pointer.getY() - halfH / 2.0f, halfH));
             }
-
-            float scaleX = viewTransformation.sceneScaleX * magnifierZoom;
-            float scaleY = viewTransformation.sceneScaleY * magnifierZoom;
-
-            float offsetX = viewTransformation.sceneOffsetX;
-            float offsetY = viewTransformation.sceneOffsetY - py;
-
-            if (magnifierZoom > 1.0f) {
-                offsetX = viewTransformation.sceneOffsetX - Mathf.clamp(
-                        xServer.pointer.getX() * magnifierZoom - xServer.screenInfo.width  * 0.5f,
-                        0, xServer.screenInfo.width  * (magnifierZoom - 1.0f)) * viewTransformation.sceneScaleX;
-
-                offsetY = viewTransformation.sceneOffsetY - Mathf.clamp(
-                        xServer.pointer.getY() * magnifierZoom - xServer.screenInfo.height * 0.5f,
-                        0, xServer.screenInfo.height * (magnifierZoom - 1.0f)) * viewTransformation.sceneScaleY - py;
-            }
-
-            nativeSetTransform(nativeHandle, offsetX, offsetY, scaleX, scaleY);
+            nativeSetTransform(nativeHandle,
+                    viewTransformation.sceneOffsetX + offsetX,
+                    viewTransformation.sceneOffsetY + offsetY - py,
+                    viewTransformation.sceneScaleX * magnifierZoom,
+                    viewTransformation.sceneScaleY * magnifierZoom);
             nativeScanoutSetDst(nativeHandle,
                     viewTransformation.viewOffsetX,
                     viewTransformation.viewOffsetY,
                     viewTransformation.viewWidth,
                     viewTransformation.viewHeight);
         }
+    }
+
+    private float calcMagnifierOffset(float pointerPos, float screenSize, float sceneScale) {
+        return -Mathf.clamp(
+                pointerPos * magnifierZoom - screenSize * 0.5f,
+                0, screenSize * (magnifierZoom - 1.0f)) * sceneScale;
     }
 
     public void updateScene() {
