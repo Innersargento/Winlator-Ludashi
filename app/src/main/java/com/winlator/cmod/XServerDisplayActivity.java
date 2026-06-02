@@ -582,9 +582,6 @@ if (enableLogs) {
                 float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
                 if (xServer.isRelativeMouseMovement()) {
                     xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int)transformedPoint[0], (int)transformedPoint[1], 0);
-                    if (xServer.getRenderer() != null) {
-                        xServer.getRenderer().updateVisualCursorPosition((int) transformedPoint[0], (int) transformedPoint[1]);
-                    }
                 } else xServer.injectPointerMoveDelta((int)transformedPoint[0], (int)transformedPoint[1]);
                 break;
             case MotionEvent.ACTION_SCROLL:
@@ -861,7 +858,6 @@ if (enableLogs) {
             int refreshRateLimit = shortcut != null ? shortcut.getRendererRefreshRateLimit()
                 : (container != null ? container.getRendererRefreshRateLimit() : 60);
             applyRendererRefreshRatePreference(refreshRateLimit);
-            renderer.setRefreshRateLimit(refreshRateLimit);
             boolean swapRB = shortcut != null ? shortcut.getRendererSwapRB()
                 : (container != null && container.getRendererSwapRB());
      		renderer.setSwapRB(swapRB);
@@ -903,7 +899,7 @@ if (enableLogs) {
             magnifierView.setZoomValue(renderer.getMagnifierZoom());
             xServerView.queueEvent(() -> {
                 synchronized (renderer) { }
-                renderer.queueSceneUpdate();
+                renderer.updateScene();
             });
         });
 
@@ -911,7 +907,7 @@ if (enableLogs) {
             magnifierView.setVisibility(View.GONE);
             renderer.setMagnifierZoom(1.0f);
             magnifierView.setZoomValue(1.0f);
-            xServerView.queueEvent(renderer::queueSceneUpdate);
+            xServerView.queueEvent(renderer::updateScene);
         });
         rootView.addView(magnifierView);
         

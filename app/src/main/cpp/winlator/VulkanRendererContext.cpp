@@ -774,6 +774,7 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
         pc.sharpness = activeSharpness;
         pc.resW = (float)std::max(1, d.w);
         pc.resH = (float)std::max(1, d.h);
+        pc.useTexAlpha = 0;
         vk_.CmdPushConstants(cb, pipeLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
         vk_.CmdDraw(cb, 4, 1, 0, 0);
     }
@@ -789,6 +790,7 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
         cpc.sharpness = 1.0f;
         cpc.resW = (float)std::max<short>(1, curW);
         cpc.resH = (float)std::max<short>(1, curH);
+        cpc.useTexAlpha = 1;
         vk_.CmdPushConstants(cb, pipeLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(cpc), &cpc);
         vk_.CmdDraw(cb, 4, 1, 0, 0);
     }

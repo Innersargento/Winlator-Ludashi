@@ -6,6 +6,7 @@ layout(push_constant) uniform PC {
     float sharpness;   
     float resW;
     float resH;
+    int   useTexAlpha;
 } pc;
 
 layout(location = 0) in  vec2 fragTexCoord;
@@ -98,7 +99,10 @@ void main() {
     else if (pc.effectId == 3) c = vec4(applyCRT    (uv), 1.0);
     else if (pc.effectId == 4) c = vec4(applyHDR    (uv), 1.0);
     else if (pc.effectId == 5) c = vec4(applyNatural(uv), 1.0);
-    else                       c = texture(texSampler, uv);
+    else {
+        c = texture(texSampler, uv);
+        if (pc.useTexAlpha == 0) c.a = 1.0;
+    }
     
     outColor = c;
 }

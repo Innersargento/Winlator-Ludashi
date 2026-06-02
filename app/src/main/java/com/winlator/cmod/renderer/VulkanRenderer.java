@@ -7,6 +7,7 @@ import android.view.Surface;
 import android.widget.Toast;
 
 import com.winlator.cmod.R;
+import com.winlator.cmod.math.Mathf;
 import com.winlator.cmod.widget.WinlatorHUD;
 import com.winlator.cmod.widget.HudDataSource;
 import com.winlator.cmod.widget.XServerView;
@@ -263,8 +264,17 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
 
     private void updateTransform() {
         if (nativeHandle == 0) return;
+
+        float offsetX = 0;
+        float offsetY = 0;
+
+        if (magnifierZoom > 1.0f) {
+            offsetX = calcMagnifierOffset(xServer.pointer.getX(), xServer.screenInfo.width,  fullscreen ? 1.0f : viewTransformation.sceneScaleX);
+            offsetY = calcMagnifierOffset(xServer.pointer.getY(), xServer.screenInfo.height, fullscreen ? 1.0f : viewTransformation.sceneScaleY);
+        }
+
         if (fullscreen) {
-            nativeSetTransform(nativeHandle, 0, 0, 1.0f, 1.0f);
+            nativeSetTransform(nativeHandle, offsetX, offsetY, magnifierZoom, magnifierZoom);
             viewTransformation.update(surfaceWidth, surfaceHeight,
                 xServer.screenInfo.width, xServer.screenInfo.height);
             nativeScanoutSetDst(nativeHandle,
@@ -279,16 +289,22 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                 py = Math.max(0, Math.min(xServer.pointer.getY() - halfH / 2.0f, halfH));
             }
             nativeSetTransform(nativeHandle,
-                viewTransformation.sceneOffsetX,
-                viewTransformation.sceneOffsetY - py,
-                viewTransformation.sceneScaleX,
-                viewTransformation.sceneScaleY);
+                    viewTransformation.sceneOffsetX + offsetX,
+                    viewTransformation.sceneOffsetY + offsetY - py,
+                    viewTransformation.sceneScaleX * magnifierZoom,
+                    viewTransformation.sceneScaleY * magnifierZoom);
             nativeScanoutSetDst(nativeHandle,
                 viewTransformation.viewOffsetX,
                 viewTransformation.viewOffsetY,
                 viewTransformation.viewWidth,
                 viewTransformation.viewHeight);
         }
+    }
+
+    private float calcMagnifierOffset(float pointerPos, float screenSize, float sceneScale) {
+        return -Mathf.clamp(
+                pointerPos * magnifierZoom - screenSize * 0.5f,
+                0, screenSize * (magnifierZoom - 1.0f)) * sceneScale;
     }
 
     public void updateScene() {
@@ -510,6 +526,7 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                 nativeScanoutSetCursorPos(nativeHandle, x, y, hotX, hotY);
             }
             if (screenOffsetYRelativeToCursor) updateTransform();
+            if (magnifierZoom > 1.0f) updateTransform();
         }
     }
 
@@ -693,7 +710,12 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     public void toggleFullscreen() { fullscreen = !fullscreen; synchronized (lock) { updateTransform(); } xServerView.queueEvent(this::updateScene); }
     public void setScreenOffsetYRelativeToCursor(boolean b) { screenOffsetYRelativeToCursor = b; synchronized (lock) { updateTransform(); } }
     public boolean isScreenOffsetYRelativeToCursor() { return screenOffsetYRelativeToCursor; }
-    public void setMagnifierZoom(float zoom) { magnifierZoom = zoom; }
+    public void setMagnifierZoom(float zoom) {
+        magnifierZoom = zoom;
+        synchronized (lock) {
+            if (nativeHandle != 0) updateTransform();
+        }
+    }
     public float getMagnifierZoom() { return magnifierZoom; }
     public void setUnviewableWMClasses(String... classes) { this.unviewableWMClasses = classes; }
     private int fpsLimit = 0;

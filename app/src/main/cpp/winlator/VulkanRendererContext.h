@@ -117,6 +117,7 @@ struct WindowPushConstants {
     float sharpness;
     float resW;
     float resH;
+    int   useTexAlpha;
 };
 
 class VulkanRendererContext {
