@@ -582,8 +582,6 @@ if (enableLogs) {
                 float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
                 if (xServer.isRelativeMouseMovement()) {
                     xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int)transformedPoint[0], (int)transformedPoint[1], 0);
-                    xServerView.getRenderer().updateVisualCursorPosition((int)transformedPoint[0], (int)
-                    transformedPoint[1]);
                 } else xServer.injectPointerMoveDelta((int)transformedPoint[0], (int)transformedPoint[1]);
                 break;
             case MotionEvent.ACTION_SCROLL:
