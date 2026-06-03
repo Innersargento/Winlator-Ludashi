@@ -117,6 +117,12 @@ public class TouchpadView extends View {
             XForm.makeScale(xform, (float) innerWidth / outerWidth, (float) innerHeight / outerHeight);
     }
 
+    private void updateVisibleRelativeCursor(short x, short y) {
+        if (xServer.getRenderer() != null) {
+            xServer.getRenderer().onPointerMove(x, y);
+        }
+    }
+
     private class Finger {
         private int x;
         private int y;
@@ -310,9 +316,10 @@ public class TouchpadView extends View {
             case MotionEvent.ACTION_MOVE:
                 if (event.isFromSource(InputDevice.SOURCE_MOUSE)) {
                     float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
-                    if (xServer.isRelativeMouseMovement())
-                        xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int)transformedPoint[0], (int)transformedPoint[1], 0);
-                    else
+                    if (xServer.isRelativeMouseMovement()) {
+                        updateVisibleRelativeCursor((short) transformedPoint[0], (short) transformedPoint[1]);
+                        xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int) transformedPoint[0], (int) transformedPoint[1], 0);
+                    } else
                         xServer.injectPointerMove((int)transformedPoint[0], (int)transformedPoint[1]);
                 } else {
                     for (byte i = 0; i < MAX_FINGERS; i++) {
@@ -387,9 +394,10 @@ public class TouchpadView extends View {
 
     private void handleTouchDown(MotionEvent event) {
         float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
-        if (xServer.isRelativeMouseMovement())
-            xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int)transformedPoint[0], (int)transformedPoint[1], 0);
-        else
+        if (xServer.isRelativeMouseMovement()) {
+            updateVisibleRelativeCursor((short) transformedPoint[0], (short) transformedPoint[1]);
+            xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int) transformedPoint[0], (int) transformedPoint[1], 0);
+        } else
             xServer.injectPointerMove((int) transformedPoint[0], (int) transformedPoint[1]);
 
         // Handle long press for right click (or use a dedicated method to detect long press)
@@ -403,9 +411,10 @@ public class TouchpadView extends View {
 
     private void handleTouchMove(MotionEvent event) {
         float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
-        if (xServer.isRelativeMouseMovement())
-            xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int)transformedPoint[0], (int)transformedPoint[1], 0);
-        else
+        if (xServer.isRelativeMouseMovement()) {
+            updateVisibleRelativeCursor((short) transformedPoint[0], (short) transformedPoint[1]);
+            xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int) transformedPoint[0], (int) transformedPoint[1], 0);
+        } else
             xServer.injectPointerMove((int) transformedPoint[0], (int) transformedPoint[1]);
     }
 
@@ -515,6 +524,7 @@ public class TouchpadView extends View {
             else if (xServer.isRelativeMouseMovement()) {
                 WinHandler winHandler = xServer.getWinHandler();
                 winHandler.mouseEvent(MouseEventFlags.MOVE, dx, dy, 0);
+                updateVisibleRelativeCursor((short) (xServer.pointer.getX() + dx), (short)(xServer.pointer.getY() + dy));
             }
             else xServer.injectPointerMoveDelta(dx, dy);
         }
@@ -629,9 +639,10 @@ public class TouchpadView extends View {
                 case MotionEvent.ACTION_MOVE:
                 case MotionEvent.ACTION_HOVER_MOVE:
                     float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
-                    if (xServer.isRelativeMouseMovement())
-                        xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int)transformedPoint[0], (int)transformedPoint[1], 0);
-                    else
+                    if (xServer.isRelativeMouseMovement()) {
+                        updateVisibleRelativeCursor((short) transformedPoint[0], (short) transformedPoint[1]);
+                        xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, (int) transformedPoint[0], (int) transformedPoint[1], 0);
+                    } else
                         xServer.injectPointerMove((int)transformedPoint[0], (int)transformedPoint[1]);
                     handled = true;
                     break;
