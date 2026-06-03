@@ -578,13 +578,6 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
         }
     }
 
-    public void updateVisualCursorPosition(int x, int y) {
-        synchronized (lock) {
-            if (nativeHandle == 0) return;
-            nativeSetPointerPos(nativeHandle, (short) x, (short) y);
-        }
-    }
-
     public boolean isCursorVisible() { return cursorVisible; }
 
     public void setNativeMode(boolean mode) {
