@@ -1204,6 +1204,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
                 classicHud = new FrameRating(this, graphicsDriverConfig);
                 classicHud.setVisibility(View.GONE);
                 rootView.addView(classicHud);
+                classicHud.enableByUser();
                 renderer.setFrameRating(classicHud);
             } else if (hudMode == 2) {
 
@@ -1852,6 +1853,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
                 container.putExtra("graphicsPostFXMode",
                     String.valueOf(spPostFXMode != null ? spPostFXMode.getSelectedItemPosition() : 0));
                 container.putExtra("graphicsColorMode", "0");
+                container.saveData();
                 Toast.makeText(this, "Preset saved", Toast.LENGTH_SHORT).show();
             });
         }
