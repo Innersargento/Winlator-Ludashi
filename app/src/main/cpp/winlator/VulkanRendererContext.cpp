@@ -249,15 +249,19 @@ void VulkanRendererContext::createSwapchain() {
     VkSurfaceCapabilitiesKHR caps;
     vk_.GetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice,surface,&caps);
 
-    if (caps.currentExtent.width != 0xFFFFFFFF) {
-        swapchainExt = caps.currentExtent;
-    } else if (window) {
-        int winW = ANativeWindow_getWidth(window);
-        int winH = ANativeWindow_getHeight(window);
+    int winW = window ? ANativeWindow_getWidth(window) : 0;
+    int winH = window ? ANativeWindow_getHeight(window) : 0;
+    if (winW > 0 && winH > 0) {
+        // Prefer the live ANativeWindow size. On Android, caps.currentExtent can lag
+        // one resize behind the real window across PiP/resize transitions, which would
+        // build the swapchain at the wrong size -> half black / pixelated after
+        // expanding from PiP. The ANativeWindow size is accurate and current.
         swapchainExt = {
             (uint32_t)std::clamp(winW, (int)caps.minImageExtent.width, (int)caps.maxImageExtent.width),
             (uint32_t)std::clamp(winH, (int)caps.minImageExtent.height, (int)caps.maxImageExtent.height)
         };
+    } else if (caps.currentExtent.width != 0xFFFFFFFF) {
+        swapchainExt = caps.currentExtent;
     } else {
         swapchainExt = {(uint32_t)surfaceWidth, (uint32_t)surfaceHeight};
     }

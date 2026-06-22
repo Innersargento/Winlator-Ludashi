@@ -229,7 +229,11 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     }
 
     public void onSurfaceChanged(int width, int height) {
-        if (inPipMode) return;
+        // A PiP transition resizes the surface like a rotation does; always honor it.
+        // The swapchain self-heals to the real size on the native side, but the cached
+        // scene transform/scissor are derived from these dimensions and only refreshed
+        // here, so suppressing this in PiP left them sized for the small window ->
+        // half black / pixelated after expanding.
         surfaceWidth = width; surfaceHeight = height;
         viewTransformation.update(width, height, xServer.screenInfo.width, xServer.screenInfo.height);
         synchronized (lock) {

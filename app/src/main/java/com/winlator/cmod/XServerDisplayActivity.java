@@ -757,14 +757,6 @@ public class XServerDisplayActivity extends AppCompatActivity {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         if (xServerView == null) return;
         xServerView.getRenderer().setPipMode(isInPictureInPictureMode);
-        if (!isInPictureInPictureMode) {
-            xServerView.post(() -> {
-                if (xServerView == null) return;
-                int w = xServerView.getWidth();
-                int h = xServerView.getHeight();
-                if (w > 0 && h > 0) xServerView.getRenderer().onSurfaceChanged(w, h);
-            });
-        }
     }
 
     private void savePlaytimeData() {
