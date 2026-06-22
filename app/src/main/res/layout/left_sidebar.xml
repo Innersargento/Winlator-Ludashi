@@ -6,9 +6,16 @@
     android:orientation="horizontal"
     android:background="#000000">
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="64dp"
         android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="none"
+        android:background="#000000">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
         android:paddingStart="10dp"
@@ -150,6 +157,7 @@
                 app:tint="#FF5252" />
         </LinearLayout>
     </LinearLayout>
+    </ScrollView>
 
     <View
         android:layout_width="1dp"
