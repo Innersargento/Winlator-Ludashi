@@ -564,21 +564,10 @@
                         android:textSize="15sp" />
                 </LinearLayout>
                 <Switch
-                    android:id="@+id/SWRelativeMouse"
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:layout_marginTop="18dp"
-                    android:background="@drawable/sidebar_card"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp"
-                    android:text="Relative Mouse"
-                    android:textColor="#FFFFFF"
-                    android:textSize="15sp" />
-                <Switch
                     android:id="@+id/SWDisableMouse"
                     android:layout_width="match_parent"
                     android:layout_height="56dp"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginTop="18dp"
                     android:background="@drawable/sidebar_card"
                     android:paddingStart="14dp"
                     android:paddingEnd="14dp"

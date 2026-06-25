@@ -195,7 +195,6 @@ public class XServerDisplayActivity extends AppCompatActivity {
     PreloaderDialog preloaderDialog = null;
     private Runnable configChangedCallback = null;
     private boolean isPaused = false;
-    private boolean isRelativeMouseMovement = false;
     private boolean isMouseDisabled = false;
     private boolean simulateTouchScreen = false;
 
@@ -1138,6 +1137,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
         renderer.setSwapRB(shortcut != null ? shortcut.getRendererSwapRB()
                 : (container != null && container.getRendererSwapRB()));
 
+        // Apply the saved FPS preset right at shortcut start, so the limiter acts
+        // immediately instead of only when the Renderer sidebar tab is first opened.
+        renderer.setFpsLimit(getSavedFpsPresetLimit());
+
         if (shortcut != null) {
             renderer.setUnviewableWMClasses("explorer.exe");
         }
@@ -1337,16 +1340,6 @@ public class XServerDisplayActivity extends AppCompatActivity {
             btSubVibration.setOnClickListener(v -> {
                 showVibrationDialog();
                 drawerLayout.closeDrawers();
-            });
-        }
-
-        Switch swRelativeMouse = findViewById(R.id.SWRelativeMouse);
-        if (swRelativeMouse != null) {
-            swRelativeMouse.setChecked(isRelativeMouseMovement);
-            swRelativeMouse.setOnCheckedChangeListener((btn, checked) -> {
-                isRelativeMouseMovement = checked;
-                if (xServer != null)
-                    xServer.setRelativeMouseMovement(isRelativeMouseMovement);
             });
         }
 
@@ -1714,6 +1707,23 @@ public class XServerDisplayActivity extends AppCompatActivity {
         container.saveData();
     }
 
+    /** FPS values mapped to each "graphicsFpsPreset" spinner position (0 = Off/no limit). */
+    private static final int[] FPS_PRESET_VALUES = {0, 30, 60, 90, 120};
+
+    /** Resolves the saved FPS preset to an actual limit, independent of the sidebar UI. */
+    private int getSavedFpsPresetLimit() {
+        if (container == null) return 0;
+        String saved = container.getExtra("graphicsFpsPreset");
+        if (saved == null || saved.isEmpty()) return 0;
+        int pos;
+        try {
+            pos = Integer.parseInt(saved);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+        return (pos >= 0 && pos < FPS_PRESET_VALUES.length) ? FPS_PRESET_VALUES[pos] : 0;
+    }
+
     private void setupSidebarGraphicsControls() {
         if (xServerView == null) return;
         final VulkanRenderer renderer = xServerView.getRenderer();
@@ -1734,7 +1744,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
         if (spFrameGenFPS  != null) spFrameGenFPS.setVisibility(View.GONE);
         if (spColorMode    != null) spColorMode.setVisibility(View.GONE);
 
-        final int[]    fpsValues = {0, 30, 60, 90, 120};
+        final int[]    fpsValues = FPS_PRESET_VALUES;
         final String[] fpsLabels = {"Off", "30 FPS", "60 FPS", "90 FPS", "120 FPS"};
 
         if (spNativeFPS != null) {
