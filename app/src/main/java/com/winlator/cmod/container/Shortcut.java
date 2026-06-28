@@ -2,6 +2,7 @@ package com.winlator.cmod.container;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.Environment;
 import android.util.Log;
 
 import com.winlator.cmod.core.FileUtils;
@@ -83,6 +84,21 @@ public class Shortcut {
         }
 
 
+        try {
+            File externalStorage = Environment.getExternalStorageDirectory();
+            File customIconsDir = new File(externalStorage, "Winlator/icons");
+            String baseName = FileUtils.getBasename(file.getPath());
+            File customIcon = new File(customIconsDir, baseName + ".png");
+
+            if (customIcon.exists()) {
+                Bitmap customBitmap = BitmapFactory.decodeFile(customIcon.getAbsolutePath());
+                if (customBitmap != null) {
+                    icon = customBitmap;
+                    iconFile = customIcon;
+                }
+            }
+        } catch (Exception e) {}
+
         this.name = FileUtils.getBasename(file.getPath());
         
         this.icon = icon;
@@ -98,6 +114,7 @@ public class Shortcut {
 
         this.customCoverArtPath = getExtra("customCoverArtPath");
         loadCoverArt();
+        Container.checkObsoleteOrMissingProperties(extraData);
     }
 
     private void loadCoverArt() {

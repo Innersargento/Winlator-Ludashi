@@ -99,6 +99,7 @@ import com.winlator.cmod.widget.LogView;
 import com.winlator.cmod.widget.MagnifierView;
 import com.winlator.cmod.widget.TouchpadView;
 import com.winlator.cmod.widget.XServerView;
+import com.winlator.cmod.winhandler.MouseEventFlags;
 import com.winlator.cmod.winhandler.TaskManagerSidebar;
 import com.winlator.cmod.winhandler.WinHandler;
 import com.winlator.cmod.xconnector.UnixSocketConfig;
@@ -175,11 +176,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
     private DebugDialog debugDialog;
     private short taskAffinityMask = 0;
     private short taskAffinityMaskWoW64 = 0;
-    private short systemAffinityMask = 0;
     private String wineCpuTopologyValue = "";
-    private java.util.concurrent.ScheduledExecutorService affinityWatcher;
-    private final java.util.Set<Integer> seenAffinityPids =
-            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     private int frameRatingWindowId = -1;
 
     private int activeRendererWindowId = -1;
@@ -407,14 +404,8 @@ public class XServerDisplayActivity extends AppCompatActivity {
         wineCpuTopologyValue = "";
         if (syncCpuTopology && affinityCpuList != null && !affinityCpuList.isEmpty()) {
             int coreCount = affinityCpuList.split(",").length;
-
             wineCpuTopologyValue = coreCount + ":" + affinityCpuList;
         }
-
-        int numProcessors = Runtime.getRuntime().availableProcessors();
-        int allCoresMask = ProcessHelper.getAffinityMask(0, numProcessors);
-        int complementMask = allCoresMask & ~taskAffinityMask;
-        systemAffinityMask = (short) (complementMask != 0 ? complementMask : taskAffinityMask);
 
         String wmClass = shortcut != null ? shortcut.getExtra("wmClass", "") : "";
         Log.d("XServerDisplayActivity", "Startup wmClass: " + wmClass);
@@ -649,22 +640,30 @@ public class XServerDisplayActivity extends AppCompatActivity {
         switch (event.getAction()) {
             case MotionEvent.ACTION_BUTTON_PRESS: {
                 int button = event.getActionButton();
-                if (button == MotionEvent.BUTTON_PRIMARY)
-                    xServer.injectPointerButtonPress(Pointer.Button.BUTTON_LEFT);
-                else if (button == MotionEvent.BUTTON_SECONDARY)
-                    xServer.injectPointerButtonPress(Pointer.Button.BUTTON_RIGHT);
-                else if (button == MotionEvent.BUTTON_TERTIARY)
-                    xServer.injectPointerButtonPress(Pointer.Button.BUTTON_MIDDLE);
+                if (button == MotionEvent.BUTTON_PRIMARY) {
+                    if (xServer.isRelativeMouseMovement()) winHandler.mouseEvent(MouseEventFlags.LEFTDOWN, 0, 0, 0);
+                    else xServer.injectPointerButtonPress(Pointer.Button.BUTTON_LEFT);
+                } else if (button == MotionEvent.BUTTON_SECONDARY) {
+                    if (xServer.isRelativeMouseMovement()) winHandler.mouseEvent(MouseEventFlags.RIGHTDOWN, 0, 0, 0);
+                    else xServer.injectPointerButtonPress(Pointer.Button.BUTTON_RIGHT);
+                } else if (button == MotionEvent.BUTTON_TERTIARY) {
+                    if (xServer.isRelativeMouseMovement()) winHandler.mouseEvent(MouseEventFlags.MIDDLEDOWN, 0, 0, 0);
+                    else xServer.injectPointerButtonPress(Pointer.Button.BUTTON_MIDDLE);
+                }
                 break;
             }
             case MotionEvent.ACTION_BUTTON_RELEASE: {
                 int button = event.getActionButton();
-                if (button == MotionEvent.BUTTON_PRIMARY)
-                    xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
-                else if (button == MotionEvent.BUTTON_SECONDARY)
-                    xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_RIGHT);
-                else if (button == MotionEvent.BUTTON_TERTIARY)
-                    xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_MIDDLE);
+                if (button == MotionEvent.BUTTON_PRIMARY) {
+                    if (xServer.isRelativeMouseMovement()) winHandler.mouseEvent(MouseEventFlags.LEFTUP, 0, 0, 0);
+                    else xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
+                } else if (button == MotionEvent.BUTTON_SECONDARY) {
+                    if (xServer.isRelativeMouseMovement()) winHandler.mouseEvent(MouseEventFlags.RIGHTUP, 0, 0, 0);
+                    else xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_RIGHT);
+                } else if (button == MotionEvent.BUTTON_TERTIARY) {
+                    if (xServer.isRelativeMouseMovement()) winHandler.mouseEvent(MouseEventFlags.MIDDLEUP, 0, 0, 0);
+                    else xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_MIDDLE);
+                }
                 break;
             }
             case MotionEvent.ACTION_MOVE:
@@ -673,18 +672,27 @@ public class XServerDisplayActivity extends AppCompatActivity {
                 int dx = (int) p[0];
                 int dy = (int) p[1];
                 if (xServer.isRelativeMouseMovement())
-                    xServer.emitRelativeMotion(dx, dy);
-                xServer.injectPointerMoveDelta(dx, dy);
+                    winHandler.mouseEvent(MouseEventFlags.MOVE, dx, dy, 0);
+                else
+                    xServer.injectPointerMoveDelta(dx, dy);
                 break;
             }
             case MotionEvent.ACTION_SCROLL: {
                 float scrollY = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
                 if (scrollY <= -1.0f) {
-                    xServer.injectPointerButtonPress(Pointer.Button.BUTTON_SCROLL_DOWN);
-                    xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_SCROLL_DOWN);
+                    if (xServer.isRelativeMouseMovement()) {
+                        winHandler.mouseEvent(MouseEventFlags.WHEEL, 0, 0, (int) scrollY * 270);
+                    } else {
+                        xServer.injectPointerButtonPress(Pointer.Button.BUTTON_SCROLL_DOWN);
+                        xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_SCROLL_DOWN);
+                    }
                 } else if (scrollY >= 1.0f) {
-                    xServer.injectPointerButtonPress(Pointer.Button.BUTTON_SCROLL_UP);
-                    xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_SCROLL_UP);
+                    if (xServer.isRelativeMouseMovement()) {
+                        winHandler.mouseEvent(MouseEventFlags.WHEEL, 0, 0, (int) scrollY * 270);
+                    } else {
+                        xServer.injectPointerButtonPress(Pointer.Button.BUTTON_SCROLL_UP);
+                        xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_SCROLL_UP);
+                    }
                 }
                 break;
             }
@@ -803,7 +811,6 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
         if (environment != null)
             environment.stopEnvironmentComponents();
-        stopAffinityWatcher();
         if (winHandler != null)
             winHandler.stop();
         if (wineRequestHandler != null)
@@ -1068,30 +1075,6 @@ public class XServerDisplayActivity extends AppCompatActivity {
         environment.startEnvironmentComponents();
 
         winHandler.start();
-
-        winHandler.setWineExecCallback(command -> {
-            String wineBin  = imageFs.getWinePath() + "/bin/wine";
-            String box64Bin = imageFs.getBinDir() + "/box64";
-            File   rootDir  = imageFs.getRootDir();
-
-            EnvVars execEnvVars = new EnvVars();
-            execEnvVars.putAll(envVars);
-            execEnvVars.put("PATH",
-                imageFs.getWinePath() + "/bin:" + rootDir.getPath() + "/usr/bin");
-
-            java.io.File sysvshm = new java.io.File(imageFs.getLibDir(), "libandroid-sysvshm.so");
-            if (sysvshm.exists()) execEnvVars.put("LD_PRELOAD", sysvshm.getAbsolutePath());
-
-            String launcher = wineInfo.isArm64EC()
-                ? wineBin
-                : (box64Bin + " " + wineBin);
-
-            ProcessHelper.exec(
-                launcher + " start " + command,
-                execEnvVars.toStringArray(),
-                rootDir,
-                null);
-        });
 
         if (wineRequestHandler != null)
             wineRequestHandler.start();
@@ -2534,33 +2517,11 @@ public class XServerDisplayActivity extends AppCompatActivity {
         }
     }
 
-    public void execWineCommand(String command) {
-        String wineBin  = imageFs.getWinePath() + "/bin/wine";
-        String box64Bin = imageFs.getBinDir()    + "/box64";
-        File   rootDir  = imageFs.getRootDir();
-
-        EnvVars execEnvVars = new EnvVars();
-        execEnvVars.putAll(envVars);
-        execEnvVars.put("PATH",
-            imageFs.getWinePath() + "/bin:" + rootDir.getPath() + "/usr/bin");
-
-        File sysvshm = new File(imageFs.getLibDir(), "libandroid-sysvshm.so");
-        if (sysvshm.exists())
-            execEnvVars.put("LD_PRELOAD", sysvshm.getAbsolutePath());
-
-        String launcher = wineInfo.isArm64EC()
-            ? wineBin
-            : (box64Bin + " " + wineBin);
-
-        ProcessHelper.exec(
-            launcher + " " + command,
-            execEnvVars.toStringArray(),
-            rootDir,
-            null);
-    }
-
     private String getWineStartCommand() {
+        // Initialize overrideEnvVars if not already done
         EnvVars envVars = getOverrideEnvVars();
+
+        // Define default arguments
         String args = "";
 
         if (shortcut != null) {
@@ -2570,43 +2531,49 @@ public class XServerDisplayActivity extends AppCompatActivity {
             if (shortcut.path.endsWith(".lnk")) {
                 args += "\"" + shortcut.path + "\"" + execArgs;
             } else {
-                String fullPath = shortcut.path.replace("\"", "").trim();
+                String fullPath = shortcut.path.replace("\"", "");
                 String exeDir;
                 String filename;
 
                 if (fullPath.contains("\\")) {
                     int lastSlash = fullPath.lastIndexOf("\\");
-                    exeDir   = fullPath.substring(0, lastSlash);
-                    filename = fullPath.substring(lastSlash + 1);
+                    if (lastSlash != -1) {
+                        exeDir = fullPath.substring(0, lastSlash);
+                        filename = fullPath.substring(lastSlash + 1);
+                    } else {
+                        exeDir = "D:\\";
+                        filename = fullPath;
+                    }
                 } else {
-                    exeDir   = FileUtils.getDirname(fullPath);
+                    exeDir = FileUtils.getDirname(fullPath);
                     filename = FileUtils.getName(fullPath);
                 }
 
-                int dotIndex   = filename.lastIndexOf(".");
+                int dotIndex = filename.lastIndexOf(".");
                 int spaceIndex = (dotIndex != -1) ? filename.indexOf(" ", dotIndex) : -1;
+
                 if (spaceIndex != -1) {
                     execArgs = filename.substring(spaceIndex + 1) + execArgs;
                     filename = filename.substring(0, spaceIndex);
                 }
 
-                String escapedDir = exeDir.replace(" ", "\\ ");
-                args += "/dir " + escapedDir + " \"" + filename + "\"" + execArgs;
+                args += "/dir " + StringUtils.escapeDOSPath(exeDir) + " \"" + filename + "\"" + execArgs;
             }
         } else {
+            // Append EXTRA_EXEC_ARGS from overrideEnvVars if it exists
             if (envVars.has("EXTRA_EXEC_ARGS")) {
                 args += " " + envVars.get("EXTRA_EXEC_ARGS");
-                envVars.remove("EXTRA_EXEC_ARGS");
+                envVars.remove("EXTRA_EXEC_ARGS"); // Remove the key after use
             } else {
                 args += "\"wfm.exe\"";
             }
         }
+        // Construct the final command
+        String command = "winhandler.exe " + args;
 
-        String affinityArg = (taskAffinityMask != 0)
-                ? "/affinity " + Integer.toHexString(taskAffinityMask & 0xFFFF) + " "
-                : "";
-        return "winlauncher.exe " + affinityArg + args;
+        return command;
     }
+
     private String getExecutable() {
         String filename = "wfm.exe";
         if (shortcut != null && shortcut.path != null) {
@@ -2614,7 +2581,11 @@ public class XServerDisplayActivity extends AppCompatActivity {
             int lastSlash = cleanPath.lastIndexOf('/');
             int lastBackslash = cleanPath.lastIndexOf('\\');
             int lastSeparator = Math.max(lastSlash, lastBackslash);
-            filename = lastSeparator != -1 ? cleanPath.substring(lastSeparator + 1) : cleanPath;
+            if (lastSeparator != -1) {
+                filename = cleanPath.substring(lastSeparator + 1);
+            } else {
+                filename = cleanPath;
+            }
         }
         return filename;
     }
@@ -2673,101 +2644,17 @@ public class XServerDisplayActivity extends AppCompatActivity {
     }
 
     private void assignTaskAffinity(Window window) {
-        if (taskAffinityMask == 0) return;
+        if (taskAffinityMask == 0 || taskAffinityMaskWoW64 == 0)
+            return;
         int processId = window.getProcessId();
-        if (processId <= 0) return;
-        String cmdline = readAffinityCmdline(new java.io.File("/proc/" + processId + "/cmdline"));
+        String className = window.getClassName();
+        int processAffinity = window.isWoW64() ? taskAffinityMaskWoW64 : taskAffinityMask;
 
-        int mask;
-        if (cmdline != null && isAffinityExcluded(cmdline)) {
-            mask = systemAffinityMask;
-        } else {
-            mask = window.isWoW64() ? taskAffinityMaskWoW64 : taskAffinityMask;
+        if (processId > 0) {
+            winHandler.setProcessAffinity(processId, processAffinity);
+        } else if (!className.isEmpty()) {
+            winHandler.setProcessAffinity(window.getClassName(), processAffinity);
         }
-        if (mask != 0) ProcessHelper.setProcessAffinity(processId, mask);
-    }
-
-    private void startAffinityWatcher() {
-        if (taskAffinityMask == 0) return;
-        affinityWatcher = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
-        scheduleAffinityScan(1);
-    }
-
-    private void scheduleAffinityScan(int delaySeconds) {
-        if (affinityWatcher == null || affinityWatcher.isShutdown()) return;
-        affinityWatcher.schedule(() -> {
-            boolean foundNewExe = runAffinityScan();
-            int nextDelay = foundNewExe ? 1 : Math.min(delaySeconds + 1, 5);
-            scheduleAffinityScan(nextDelay);
-        }, delaySeconds, java.util.concurrent.TimeUnit.SECONDS);
-    }
-
-    private boolean runAffinityScan() {
-        boolean foundNewExe = false;
-        try {
-            String[] names = new java.io.File("/proc").list();
-            if (names == null) return false;
-            for (String name : names) {
-                if (name.isEmpty()) continue;
-                boolean numeric = true;
-                for (int i = 0; i < name.length(); i++) {
-                    if (!Character.isDigit(name.charAt(i))) { numeric = false; break; }
-                }
-                if (!numeric) continue;
-
-                int pid;
-                try { pid = Integer.parseInt(name); }
-                catch (NumberFormatException e) { continue; }
-                if (!seenAffinityPids.add(pid)) continue;
-
-                String cmdline = readAffinityCmdline(new java.io.File("/proc/" + pid + "/cmdline"));
-                if (cmdline == null || !cmdline.contains(".exe")) continue;
-                foundNewExe = true;
-
-                int mask = isAffinityExcluded(cmdline)
-                        ? systemAffinityMask
-                        : (isWow64AffinityCmdline(cmdline) ? taskAffinityMaskWoW64 : taskAffinityMask);
-                if (mask != 0) ProcessHelper.setProcessAffinity(pid, mask);
-            }
-        } catch (Exception ignored) {}
-        return foundNewExe;
-    }
-
-    private void stopAffinityWatcher() {
-        if (affinityWatcher != null) {
-            affinityWatcher.shutdownNow();
-            affinityWatcher = null;
-        }
-        seenAffinityPids.clear();
-    }
-
-    private static final String[] AFFINITY_EXCLUDED_EXE = {
-        "wineserver", "services.exe", "svchost.exe", "rpcss.exe", "plugplay.exe",
-        "winedevice.exe", "explorer.exe", "spoolsv.exe", "wineboot.exe",
-        "winemenubuilder.exe", "conhost.exe", "start.exe", "winlauncher.exe",
-        "wfm.exe", "crashpad_handler"
-    };
-
-    private static boolean isAffinityExcluded(String cmdline) {
-        String lower = cmdline.toLowerCase(java.util.Locale.ROOT);
-        for (String name : AFFINITY_EXCLUDED_EXE) {
-            if (lower.contains(name)) return true;
-        }
-        return false;
-    }
-
-    private static String readAffinityCmdline(java.io.File file) {
-        try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
-            byte[] buf = new byte[512];
-            int len = fis.read(buf);
-            if (len <= 0) return null;
-            for (int i = 0; i < len; i++) if (buf[i] == 0) buf[i] = ' ';
-            return new String(buf, 0, len).trim();
-        } catch (java.io.IOException e) { return null; }
-    }
-
-    private static boolean isWow64AffinityCmdline(String cmdline) {
-        return cmdline.contains("wine") && !cmdline.contains("wine64");
     }
 
     private void changeFrameRatingVisibility(Window window, Property property) {
