@@ -496,9 +496,7 @@ public class WinHandler {
                 short x = receiveData.getShort();
                 short y = receiveData.getShort();
                 XServer xServer = activity.getXServer();
-                xServer.pointer.setX(x);
-                xServer.pointer.setY(y);
-                activity.getXServerView().requestRender();
+                xServer.injectPointerMove(x, y);
                 break;
             }
             default: {
