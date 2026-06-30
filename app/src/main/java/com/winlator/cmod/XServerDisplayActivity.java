@@ -192,6 +192,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
     PreloaderDialog preloaderDialog = null;
     private Runnable configChangedCallback = null;
     private boolean isPaused = false;
+    private boolean isRelativeMouseMovement = false;
     private boolean isMouseDisabled = false;
     private boolean simulateTouchScreen = false;
 
@@ -1323,6 +1324,16 @@ public class XServerDisplayActivity extends AppCompatActivity {
             btSubVibration.setOnClickListener(v -> {
                 showVibrationDialog();
                 drawerLayout.closeDrawers();
+            });
+        }
+
+        Switch swRelativeMouse = findViewById(R.id.SWRelativeMouse);
+        if (swRelativeMouse != null) {
+            swRelativeMouse.setChecked(isRelativeMouseMovement);
+            swRelativeMouse.setOnCheckedChangeListener((btn, checked) -> {
+                isRelativeMouseMovement = checked;
+                if (xServer != null)
+                    xServer.setRelativeMouseMovement(isRelativeMouseMovement);
             });
         }
 
