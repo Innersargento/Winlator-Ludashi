@@ -272,6 +272,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
         boolean isOpenWithAndroidBrowser = preferences.getBoolean("open_with_android_browser", false);
         boolean isShareAndroidClipboard = preferences.getBoolean("share_android_clipboard", false);
 
+        if (isOpenWithAndroidBrowser || isShareAndroidClipboard)
+            wineRequestHandler = new WineRequestHandler(this);
+
         boolean xinputDisabledFromShortcut = false;
 
         startTime = System.currentTimeMillis();
@@ -1411,15 +1414,8 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
         View btItemTaskManager = findViewById(R.id.BTItemTaskManager);
         if (btItemTaskManager != null) {
-            btItemTaskManager.setOnClickListener(v -> {
-                openSidebarPanel(R.id.BTItemTaskManager, R.id.LLSubTaskManager);
-                View taskPanel = findViewById(R.id.LLSubTaskManager);
-                if (taskPanel != null) {
-                    if (taskManagerSidebar == null)
-                        taskManagerSidebar = new TaskManagerSidebar(this, taskPanel);
-                    taskManagerSidebar.start();
-                }
-            });
+            btItemTaskManager.setOnClickListener(v ->
+                openSidebarPanel(R.id.BTItemTaskManager, R.id.LLSubTaskManager));
         }
 
         if (btItemLogs != null) {
@@ -1503,6 +1499,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
         if (parentId != R.id.BTItemMouse && parentId != R.id.BTItemPause) {
             activeSidebarItemId = parentId;
             activeSidebarPanelId = subId;
+        }
+        if (subId == R.id.LLSubTaskManager && sub != null) {
+            if (taskManagerSidebar == null) taskManagerSidebar = new TaskManagerSidebar(this, sub);
+            taskManagerSidebar.start();
         }
     }
 
