@@ -993,20 +993,6 @@ void VulkanRendererContext::renderFrame() {
     cursorMoved.store(false,std::memory_order_relaxed);
 
     if (surfaceDetached.load(std::memory_order_acquire)) return;
-    if (scanoutActive.load()) {
-        applyScanoutBuffer();
-
-        if (!scanoutBlackFrameDone.load()) {
-            scanoutBlackFrameDone.store(true);
-
-            std::lock_guard<std::mutex> lk(renderMutex);
-            renderList.clear();
-        } else {
-            return;
-        }
-    } else {
-        scanoutBlackFrameDone.store(false);
-    }
     if (surfaceWidth==0||surfaceHeight==0) return;
 
     if (fbResized.load()) {
@@ -1104,7 +1090,7 @@ ok=true;}catch(...){}
     if (hasCurUpload && cursorStgP && !cursorPixels.empty())
         memcpy(cursorStgP, cursorPixels.data(), cursorUploadSize);
 
-    bool effectiveCurVis = curVis && !scanoutActive.load();
+    bool effectiveCurVis = curVis;
     recordCmdBuf(cmdBufs[currentFrame],imgIdx,frameDraws,
         frameAhbTransitions,framePreUpload,framePostUpload,
         curUpload,hasCurUpload,
@@ -1352,9 +1338,6 @@ void VulkanRendererContext::dumpRendererInfo() {
         "SupportedPresentModes: [%s] current=%d",pmList.c_str(),(int)requestedPresentMode);
     __android_log_print(ANDROID_LOG_DEBUG,WLOG_TAG,
         "Filter: mode=%d (%s)", filterMode, filterMode==2?"SGSR":filterMode==1?"NEAREST":"LINEAR");
-    __android_log_print(ANDROID_LOG_DEBUG,WLOG_TAG,
-        "Scanout: active=%d gameFrameDelivered=%d scanoutGameSC=%p",
-        (int)scanoutActive.load(),(int)gameFrameDelivered.load(),scanoutGameSC);
     __android_log_print(ANDROID_LOG_DEBUG,WLOG_TAG,
         "Surface: %dx%d container: %dx%d",
         surfaceWidth,surfaceHeight,containerWidth,containerHeight);

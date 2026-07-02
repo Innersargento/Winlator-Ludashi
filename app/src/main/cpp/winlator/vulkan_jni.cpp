@@ -100,10 +100,13 @@ Java_com_winlator_cmod_renderer_VulkanRenderer_nativeUpdateWindowContentAHB(
     if (r&&ahbPtr) r->updateWindowContentAHB(id,reinterpret_cast<AHardwareBuffer*>(ahbPtr),w,h,x,y);
 }
 extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeSetTransform(
-    JNIEnv*, jobject, jlong handle, jfloat ox, jfloat oy, jfloat sx, jfloat sy)
+Java_com_winlator_cmod_renderer_VulkanRenderer_nativeSetTransformAndScissor(
+    JNIEnv*, jobject, jlong handle,
+    jfloat ox, jfloat oy, jfloat sx, jfloat sy,
+    jboolean hasScissor, jint scX, jint scY, jint scW, jint scH)
 {
-    auto* r=reinterpret_cast<VulkanRendererContext*>(handle); if (r) r->setTransform(ox,oy,sx,sy);
+    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
+    if (r) r->setTransformAndScissor(ox, oy, sx, sy, (bool)hasScissor, scX, scY, scW, scH);
 }
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_renderer_VulkanRenderer_nativeSetPointerPos(JNIEnv*, jobject, jlong handle, jshort x, jshort y) {
@@ -143,75 +146,6 @@ Java_com_winlator_cmod_renderer_VulkanRenderer_nativeRemoveWindow(JNIEnv*, jobje
     auto* r=reinterpret_cast<VulkanRendererContext*>(handle); if (r) r->removeWindow(id);
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeInitScanout(JNIEnv*, jobject, jlong handle) {
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r) r->initScanout();
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeDestroyScanout(JNIEnv*, jobject, jlong handle) {
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r) r->destroyScanout();
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeScanoutSetBuffer(
-    JNIEnv*, jobject, jlong handle, jlong ahbPtr, jint x, jint y, jint w, jint h, jint fenceFd)
-{
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r && ahbPtr) r->scanoutSetBuffer(reinterpret_cast<AHardwareBuffer*>(ahbPtr), x, y, w, h, (int)fenceFd);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeScanoutSetCursorImage(
-    JNIEnv* env, jobject, jlong handle, jobject buf, jshort w, jshort h, jshort stride)
-{
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (!r || !buf) return;
-    void* px = env->GetDirectBufferAddress(buf);
-    if (px && env->GetDirectBufferCapacity(buf) >= (jlong)w*h*4)
-        r->scanoutSetCursorImage(px, w, h, stride);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeScanoutSetCursorPos(
-    JNIEnv*, jobject, jlong handle, jshort x, jshort y, jshort hotX, jshort hotY)
-{
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r) r->scanoutSetCursorPos(x, y, hotX, hotY);
-}
-
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeIsScanoutActive(JNIEnv*, jobject, jlong handle) {
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    return r ? (jboolean)r->scanoutActive.load() : JNI_FALSE;
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeScanoutSetDst(
-    JNIEnv*, jobject, jlong handle, jint x, jint y, jint w, jint h)
-{
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r) r->scanoutSetDst(x, y, w, h);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeSetScanoutWindow(
-    JNIEnv* env, jobject, jlong handle, jobject gameSurface, jobject cursorSurface)
-{
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (!r) return;
-    ANativeWindow* gw = ANativeWindow_fromSurface(env, gameSurface);
-    ANativeWindow* cw = ANativeWindow_fromSurface(env, cursorSurface);
-    if (!gw || !cw) {
-        if (gw) ANativeWindow_release(gw);
-        if (cw) ANativeWindow_release(cw);
-        r->initScanout();
-        return;
-    }
-    r->initScanoutFromWindows(gw, cw);
-}
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_renderer_VulkanRenderer_nativeSetVerboseLog(JNIEnv*, jobject, jlong handle, jboolean v) {
@@ -225,11 +159,6 @@ Java_com_winlator_cmod_renderer_VulkanRenderer_nativeDumpRendererInfo(JNIEnv*, j
     if (r) r->dumpRendererInfo();
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeIsGameFrameDelivered(JNIEnv*, jobject, jlong handle) {
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    return r ? (jboolean)r->gameFrameDelivered.load() : JNI_FALSE;
-}
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_renderer_VulkanRenderer_nativeSetFilterMode(JNIEnv*, jobject, jlong handle, jint mode) {
@@ -289,22 +218,6 @@ Java_com_winlator_cmod_renderer_VulkanRenderer_nativeGetSwapchainSize(JNIEnv* en
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeSetCustomScissor(
-    JNIEnv*, jobject, jlong handle, jint x, jint y, jint w, jint h)
-{
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r) r->setCustomScissor((int)x, (int)y, (int)w, (int)h);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_renderer_VulkanRenderer_nativeClearCustomScissor(
-    JNIEnv*, jobject, jlong handle)
-{
-    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r) r->clearCustomScissor();
-}
-
-extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_renderer_VulkanRenderer_nativeDetachSurface(JNIEnv*, jobject, jlong handle) {
     auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
     if (r) r->detachSurface();
@@ -317,8 +230,5 @@ Java_com_winlator_cmod_renderer_VulkanRenderer_nativeReattachSurface(JNIEnv* env
     ANativeWindow* win = ANativeWindow_fromSurface(env, surface);
     if (!win) return JNI_FALSE;
     bool ok = r->reattachSurface(win);
-    if (ok && r->scanoutActive.load()) {
-        r->destroyScanout();
-    }
     return (jboolean)ok;
 }

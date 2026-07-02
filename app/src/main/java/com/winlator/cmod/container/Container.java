@@ -6,7 +6,6 @@ import com.winlator.cmod.box64.Box64Preset;
 import com.winlator.cmod.contentdialog.DXVKConfigDialog;
 import com.winlator.cmod.contentdialog.WineD3DConfigDialog;
 import com.winlator.cmod.core.DefaultVersion;
-import com.winlator.cmod.core.EnvVars;
 import com.winlator.cmod.core.FileUtils;
 import com.winlator.cmod.core.KeyValueSet;
 import com.winlator.cmod.core.WineInfo;
@@ -541,9 +540,7 @@ public class Container {
                     setStartupSelection((byte)data.getInt(key));
                     break;
                 case "extraData" : {
-                    JSONObject extraData = data.getJSONObject(key);
-                    checkObsoleteOrMissingProperties(extraData);
-                    setExtraData(extraData);
+                    setExtraData(data.getJSONObject(key));
                     break;
                 }
                 case "wineVersion" :
@@ -585,7 +582,7 @@ public class Container {
             }
         }
     }
-    
+
     public static void checkObsoleteOrMissingProperties(JSONObject data) {
         try {
             if (data.has("dxcomponents")) {
@@ -608,16 +605,6 @@ public class Container {
                 }
                 else if (graphicsDriver.equals("llvmpipe")) {
                     data.put("graphicsDriver", "wrapper");
-                }
-            }
-            if (data.has("envVars") && data.has("extraData")) {
-                JSONObject extraData = data.getJSONObject("extraData");
-                int appVersion = Integer.parseInt(extraData.optString("appVersion", "0"));
-                if (appVersion < 16) {
-                    EnvVars defaultEnvVars = new EnvVars(DEFAULT_ENV_VARS);
-                    EnvVars envVars = new EnvVars(data.getString("envVars"));
-                    for (String name : defaultEnvVars) if (!envVars.has(name)) envVars.put(name, defaultEnvVars.get(name));
-                    data.put("envVars", envVars.toString());
                 }
             }
             KeyValueSet wincomponents1 = new KeyValueSet(DEFAULT_WINCOMPONENTS);

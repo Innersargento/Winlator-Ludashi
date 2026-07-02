@@ -22,6 +22,8 @@ import com.winlator.cmod.xserver.XServer;
 
 import java.util.ArrayList;
 
+import dalvik.annotation.optimization.FastNative;
+
 public class VulkanRenderer implements WindowManager.OnWindowModificationListener,
                                        Pointer.OnPointerMotionListener {
 
@@ -40,7 +42,6 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     public int surfaceHeight;
     private String[] unviewableWMClasses = null;
     private boolean cursorVisible = false;
-    private boolean nativeMode = false;
     private String driverPath = null;
     private java.util.concurrent.ExecutorService initExecutor = null;
     private volatile boolean initComplete = false;
@@ -49,13 +50,8 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     private String nativeLibDir = null;
     private Drawable rootCursorDrawable;
     private Cursor lastCursor = null;
-    private boolean xRenderingPausedForScanout = false;
 
     private volatile ArrayList<RenderableWindow> renderableWindows = new ArrayList<>();
-    private android.view.SurfaceControl scanoutGameSC;
-    private android.view.SurfaceControl scanoutCursorSC;
-    private android.view.Surface        scanoutGameSurface;
-    private android.view.Surface        scanoutCursorSurface;
 
     public VulkanRenderer(XServerView xServerView, XServer xServer) {
         this.xServerView = xServerView;
@@ -75,54 +71,46 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
         } catch (Exception e) { return null; }
     }
 
-    private native long nativeInit(Surface surface, int screenWidth, int screenHeight, String driverPath, String libraryName, String nativeLibDir);
+    private native long nativeInit(Surface surface, int screenWidth, int screenHeight,
+        String driverPath, String libraryName, String nativeLibDir);
     private native void nativeResize(long handle, int width, int height);
     private native void nativeDestroy(long handle);
-    private native void nativeUpdateWindowContent(long handle, long id, java.nio.ByteBuffer pixels,
-        short width, short height, short stride, int x, int y);
-    private native void nativeUpdateWindowContentAHB(long handle, long id, long ahbPtr,
-        short width, short height, int x, int y);
-    private native void nativeSetTransform(long handle, float ox, float oy, float sx, float sy);
-    private native void nativeSetPointerPos(long handle, short x, short y);
-    private native void nativeSetCursorVisible(long handle, boolean visible);
-    private native void nativeUpdateCursorImage(long handle, java.nio.ByteBuffer pixels,
-        short width, short height, short hotX, short hotY);
-    private native void nativeSetRenderList(long handle, long[] ids, int[] xs, int[] ys, int count);
-    private native void nativeRemoveWindow(long handle, long id);
-
-    private native void nativeInitScanout(long handle);
     private native void nativeDetachSurface(long handle);
-    private native boolean nativeReattachSurface(long handle, android.view.Surface surface);
-    private native void nativeDestroyScanout(long handle);
-    private native void nativeScanoutSetBuffer(long handle, long ahbPtr, int x, int y, int w, int h, int fenceFd);
-    private native void nativeScanoutSetCursorImage(long handle, java.nio.ByteBuffer pixels, short w, short h, short stride);
-    private native void nativeScanoutSetCursorPos(long handle, short x, short y, short hotX, short hotY);
-    private native boolean nativeIsScanoutActive(long handle);
-    private native boolean nativeIsGameFrameDelivered(long handle);
-    private native void nativeSetScanoutWindow(long handle, android.view.Surface game, android.view.Surface cursor);
-    private native void nativeScanoutSetDst(long handle, int x, int y, int w, int h);
-    private native void nativeSetVerboseLog(long handle, boolean v);
+    private native boolean nativeReattachSurface(long handle, Surface surface);
+    private native int[] nativeGetSwapchainSize(long handle);
+
+    @FastNative private native void nativeUpdateWindowContent(long handle, long id,
+        java.nio.ByteBuffer pixels, short width, short height, short stride, int x, int y);
+    @FastNative private native void nativeUpdateWindowContentAHB(long handle, long id,
+        long ahbPtr, short width, short height, int x, int y);
+    @FastNative private native void nativeSetTransformAndScissor(long handle,
+        float ox, float oy, float sx, float sy,
+        boolean hasScissor, int scX, int scY, int scW, int scH);
+    @FastNative private native void nativeSetPointerPos(long handle, short x, short y);
+    @FastNative private native void nativeSetCursorVisible(long handle, boolean visible);
+    @FastNative private native void nativeUpdateCursorImage(long handle,
+        java.nio.ByteBuffer pixels, short width, short height, short hotX, short hotY);
+    @FastNative private native void nativeSetRenderList(long handle,
+        long[] ids, int[] xs, int[] ys, int count);
+    @FastNative private native void nativeRemoveWindow(long handle, long id);
+    @FastNative private native void nativeSetVerboseLog(long handle, boolean v);
+    @FastNative private native void nativeSetSharpness(long handle, float sharpness);
+
     private native void nativeDumpRendererInfo(long handle);
     private native void nativeSetFilterMode(long handle, int mode);
     private native void nativeSetStretchMode(long handle, int mode);
     private native void nativeSetPostFXMode(long handle, int mode);
-    private native void nativeSetSharpness(long handle, float sharpness);
     private native void nativeSetSwapRB(long handle, boolean enabled);
     private native void nativeSetPresentMode(long handle, int mode);
     private native int[] nativeGetSupportedPresentModes(long handle);
-    private native int[] nativeGetSwapchainSize(long handle);
 
-    
-    
-    
-    private native void nativeSetCustomScissor(long handle, int x, int y, int w, int h);
-    private native void nativeClearCustomScissor(long handle);
 
     private static volatile boolean gpuImageChecked = false;
 
     private static long did(Drawable d) {
         return (long) System.identityHashCode(d);
     }
+
 
     public void onSurfaceCreated(Surface surface) {
         if (!gpuImageChecked) { GPUImage.checkIsSupported(); gpuImageChecked = true; }
@@ -135,27 +123,17 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
         initExecutor.execute(() -> {
             synchronized (lock) {
                 if (nativeHandle != 0) {
-
                     boolean ok = nativeReattachSurface(nativeHandle, surface);
                     if (!ok) {
                         nativeDestroy(nativeHandle);
                         nativeHandle = 0;
                     } else {
-                        
-                        
-                        
-                        
-                        
-                        
                         int[] sc = nativeGetSwapchainSize(nativeHandle);
                         if (sc != null && sc[0] > 0 && sc[1] > 0) {
-                            surfaceWidth = sc[0];
-                            surfaceHeight = sc[1];
+                            surfaceWidth = sc[0]; surfaceHeight = sc[1];
                             viewTransformation.update(surfaceWidth, surfaceHeight,
                                 xServer.screenInfo.width, xServer.screenInfo.height);
                         }
-                        
-                        
                         nativeSetPresentMode(nativeHandle, pendingPresentMode);
                         nativeSetFilterMode(nativeHandle, pendingFilterMode);
                         nativeSetSwapRB(nativeHandle, pendingSwapRB);
@@ -169,9 +147,10 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                         return;
                     }
                 }
-                nativeHandle = nativeInit(surface, xServer.screenInfo.width, xServer.screenInfo.height, driverPath, driverLibraryName, nativeLibDir);
+                nativeHandle = nativeInit(surface,
+                    xServer.screenInfo.width, xServer.screenInfo.height,
+                    driverPath, driverLibraryName, nativeLibDir);
                 if (nativeHandle != 0) {
-
                     nativeSetPresentMode(nativeHandle, pendingPresentMode);
                     nativeSetFilterMode(nativeHandle, pendingFilterMode);
                     nativeSetSwapRB(nativeHandle, pendingSwapRB);
@@ -179,42 +158,6 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                     nativeSetSharpness(nativeHandle, pendingSharpness);
                     updateTransform();
                     nativeSetCursorVisible(nativeHandle, cursorVisible);
-                    if (nativeMode) {
-                        xServerView.post(() -> {
-                            releaseScanoutSurfaces();
-                            if (android.os.Build.VERSION.SDK_INT >= 29) {
-                                try {
-                                    android.view.SurfaceControl xsc = xServerView.getSurfaceControl();
-                                    scanoutGameSC = new android.view.SurfaceControl.Builder()
-                                        .setParent(xsc).setName("winlator_game").setOpaque(true).build();
-                                    scanoutGameSurface = new android.view.Surface(scanoutGameSC);
-                                    scanoutCursorSC = new android.view.SurfaceControl.Builder()
-                                        .setParent(xsc).setName("winlator_cursor").setFormat(1).build();
-                                    scanoutCursorSurface = new android.view.Surface(scanoutCursorSC);
-                                    new android.view.SurfaceControl.Transaction()
-                                        .setLayer(scanoutGameSC,   1)
-                                        .setLayer(scanoutCursorSC, 2)
-                                        .setVisibility(scanoutGameSC,   true)
-                                        .setVisibility(scanoutCursorSC, true)
-                                        .apply();
-                                    applyScanoutSwapTransform();
-                                    synchronized (lock) {
-                                        if (nativeHandle != 0) {
-                                            nativeSetScanoutWindow(nativeHandle, scanoutGameSurface, scanoutCursorSurface);
-                                            updateTransform();
-                                        }
-                                    }
-                                } catch (Exception e) {
-                                    android.util.Log.w("VulkanRenderer", "SC recreate failed on surface restore: " + e);
-                                    synchronized (lock) {
-                                        if (nativeHandle != 0) nativeInitScanout(nativeHandle);
-                                    }
-                                }
-                            } else {
-                                synchronized (lock) { if (nativeHandle != 0) nativeInitScanout(nativeHandle); }
-                            }
-                        });
-                    }
                 }
             }
             synchronized (lock) {
@@ -250,22 +193,10 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
             initExecutor = null;
         }
         synchronized (lock) {
-            if (nativeHandle != 0) {
-                if (nativeMode) {
-
-                    nativeDestroyScanout(nativeHandle);
-                    nativeDestroy(nativeHandle);
-                    nativeHandle = 0;
-                } else {
-
-                    nativeDetachSurface(nativeHandle);
-                }
-            }
+            if (nativeHandle != 0) nativeDetachSurface(nativeHandle);
         }
-        if (nativeMode) xServerView.post(this::releaseScanoutSurfaces);
     }
 
-  
     public void forceCleanup() {
         initComplete = false;
         if (initExecutor != null) {
@@ -276,126 +207,49 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
         }
         synchronized (lock) {
             if (nativeHandle != 0) {
-                if (nativeMode) nativeDestroyScanout(nativeHandle);
                 nativeDestroy(nativeHandle);
                 nativeHandle = 0;
             }
         }
-        if (android.os.Build.VERSION.SDK_INT >= 29) {
-            try {
-                android.view.SurfaceControl.Transaction txn = new android.view.SurfaceControl.Transaction();
-                if (scanoutGameSC != null) txn.setVisibility(scanoutGameSC, false);
-                if (scanoutCursorSC != null) txn.setVisibility(scanoutCursorSC, false);
-                txn.apply();
-            } catch (Exception ignored) {}
-        }
-        releaseScanoutSurfaces();
     }
 
-    private void releaseScanoutSurfaces() {
-        if (scanoutGameSurface   != null) { scanoutGameSurface.release();   scanoutGameSurface   = null; }
-        if (scanoutCursorSurface != null) { scanoutCursorSurface.release(); scanoutCursorSurface = null; }
-        if (scanoutGameSC        != null) { scanoutGameSC.release();        scanoutGameSC        = null; }
-        if (scanoutCursorSC      != null) { scanoutCursorSC.release();      scanoutCursorSC      = null; }
-    }
 
-    private void applyScanoutSwapTransform() {
-        if (scanoutGameSC == null || android.os.Build.VERSION.SDK_INT < 29) return;
-        try {
-            android.view.SurfaceControl.Transaction txn = new android.view.SurfaceControl.Transaction();
-            float[] matrix = pendingSwapRB
-                ? new float[]{0f, 0f, 1f, 0f, 1f, 0f, 1f, 0f, 0f}
-                : new float[]{1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f};
-            float[] translation = new float[]{0f, 0f, 0f};
-            java.lang.reflect.Method setColorTransform = android.view.SurfaceControl.Transaction.class.getMethod(
-                "setColorTransform",
-                android.view.SurfaceControl.class,
-                float[].class,
-                float[].class
-            );
-            setColorTransform.invoke(txn, scanoutGameSC, matrix, translation);
-            txn.apply();
-            txn.close();
-        } catch (Exception e) {
-            android.util.Log.w("VulkanRenderer", "Scanout color transform unavailable: " + e);
-        }
-    }
 
     private void updateTransform() {
         if (nativeHandle == 0) return;
-        float zoom = magnifierZoom;
-        
-        
-        float ptrX = xServer.pointer.getX();
-        float ptrY = xServer.pointer.getY();
+        final float zoom = magnifierZoom;
+        final float ptrX = xServer.pointer.getX();
+        final float ptrY = xServer.pointer.getY();
+
+        final float ox, oy, sx, sy;
         if (fullscreen) {
-            
-            
             viewTransformation.update(surfaceWidth, surfaceHeight,
                 xServer.screenInfo.width, xServer.screenInfo.height);
             if (zoom != 1.0f) {
-                
-                
-                float baseOx = viewTransformation.sceneOffsetX;
-                float baseOy = viewTransformation.sceneOffsetY;
-                float baseSx = viewTransformation.sceneScaleX;
-                float baseSy = viewTransformation.sceneScaleY;
-                nativeSetTransform(nativeHandle,
-                    baseOx + ptrX * baseSx * (1f - zoom),
-                    baseOy + ptrY * baseSy * (1f - zoom),
-                    baseSx * zoom,
-                    baseSy * zoom);
+                ox = viewTransformation.sceneOffsetX + ptrX * viewTransformation.sceneScaleX * (1f - zoom);
+                oy = viewTransformation.sceneOffsetY + ptrY * viewTransformation.sceneScaleY * (1f - zoom);
+                sx = viewTransformation.sceneScaleX * zoom;
+                sy = viewTransformation.sceneScaleY * zoom;
             } else {
-                
-                nativeSetTransform(nativeHandle, 0f, 0f, 1f, 1f);
+                ox = 0f; oy = 0f; sx = 1f; sy = 1f;
             }
-            nativeScanoutSetDst(nativeHandle,
-                viewTransformation.viewOffsetX,
-                viewTransformation.viewOffsetY,
-                viewTransformation.viewWidth,
-                viewTransformation.viewHeight);
         } else {
             float py = 0;
             if (screenOffsetYRelativeToCursor) {
                 short halfH = (short)(xServer.screenInfo.height / 2);
-                py = Math.max(0, Math.min(xServer.pointer.getY() - halfH / 2.0f, halfH));
+                py = Math.max(0, Math.min(ptrY - halfH / 2.0f, halfH));
             }
-            float baseOx = viewTransformation.sceneOffsetX;
-            float baseOy = viewTransformation.sceneOffsetY - py;
-            float baseSx = viewTransformation.sceneScaleX;
-            float baseSy = viewTransformation.sceneScaleY;
-            
-            
-            nativeSetTransform(nativeHandle,
-                baseOx + ptrX * baseSx * (1f - zoom),
-                baseOy + ptrY * baseSy * (1f - zoom),
-                baseSx * zoom,
-                baseSy * zoom);
-            nativeScanoutSetDst(nativeHandle,
-                viewTransformation.viewOffsetX,
-                viewTransformation.viewOffsetY,
-                viewTransformation.viewWidth,
-                viewTransformation.viewHeight);
+            ox = viewTransformation.sceneOffsetX + ptrX * viewTransformation.sceneScaleX * (1f - zoom);
+            oy = viewTransformation.sceneOffsetY - py + ptrY * viewTransformation.sceneScaleY * (1f - zoom);
+            sx = viewTransformation.sceneScaleX * zoom;
+            sy = viewTransformation.sceneScaleY * zoom;
         }
 
-        
-        
-        
-        
-        
-        
-        
-        
-        boolean needScissor = !(fullscreen && zoom == 1.0f);
-        if (needScissor) {
-            nativeSetCustomScissor(nativeHandle,
-                viewTransformation.viewOffsetX,
-                viewTransformation.viewOffsetY,
-                viewTransformation.viewWidth,
-                viewTransformation.viewHeight);
-        } else {
-            nativeClearCustomScissor(nativeHandle);
-        }
+        final boolean needScissor = !(fullscreen && zoom == 1.0f);
+        nativeSetTransformAndScissor(nativeHandle, ox, oy, sx, sy,
+            needScissor,
+            viewTransformation.viewOffsetX, viewTransformation.viewOffsetY,
+            viewTransformation.viewWidth,   viewTransformation.viewHeight);
     }
 
     public void updateScene() {
@@ -432,8 +286,7 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
 
     private void pushRenderList(ArrayList<RenderableWindow> list) {
         if (nativeHandle == 0) return;
-        int screenW = xServer.screenInfo.width, screenH = xServer.screenInfo.height;
-
+        final int screenW = xServer.screenInfo.width, screenH = xServer.screenInfo.height;
         int start = 0;
         for (int i = list.size() - 1; i >= 0; i--) {
             RenderableWindow rw = list.get(i);
@@ -441,44 +294,16 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                 start = i; break;
             }
         }
-
-        if (nativeMode) {
-            ArrayList<RenderableWindow> ns = new ArrayList<>();
-            for (int i = start; i < list.size(); i++) {
-                RenderableWindow rw = list.get(i);
-                if (rw.content != null && !rw.content.isDirectScanout()) ns.add(rw);
-            }
-            int n = ns.size();
-            long[] ids = new long[n]; int[] xs = new int[n]; int[] ys = new int[n];
-            for (int i = 0; i < n; i++) {
-                ids[i] = did(ns.get(i).content);
-                xs[i] = ns.get(i).rootX; ys[i] = ns.get(i).rootY;
-            }
-            nativeSetRenderList(nativeHandle, ids, xs, ys, n);
-            return;
-        }
-        if (fullscreen) {
-            int n = list.size() - start;
-            if (n <= 0) { nativeSetRenderList(nativeHandle, new long[0], new int[0], new int[0], 0); return; }
-            long[] ids = new long[n]; int[] xs = new int[n]; int[] ys = new int[n];
-            for (int i = 0; i < n; i++) {
-                RenderableWindow rw = list.get(start + i);
-                ids[i] = did(rw.content);
-                xs[i] = rw.rootX; ys[i] = rw.rootY;
-            }
-            nativeSetRenderList(nativeHandle, ids, xs, ys, n);
-            return;
-        }
-
-        int n = list.size() - start;
+        final int n = list.size() - start;
+        if (n <= 0) { nativeSetRenderList(nativeHandle, new long[0], new int[0], new int[0], 0); return; }
         long[] ids = new long[n]; int[] xs = new int[n]; int[] ys = new int[n];
         for (int i = 0; i < n; i++) {
             RenderableWindow rw = list.get(start + i);
-            ids[i] = did(rw.content);
-            xs[i] = rw.rootX; ys[i] = rw.rootY;
+            ids[i] = did(rw.content); xs[i] = rw.rootX; ys[i] = rw.rootY;
         }
         nativeSetRenderList(nativeHandle, ids, xs, ys, n);
     }
+
 
     private void sendCursorToNative(Cursor cursor) {
         if (nativeHandle == 0) return;
@@ -492,63 +317,46 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
         if (effVis && cd != null && cd.getBuffer() != null) {
             synchronized (cd.renderLock) {
                 nativeUpdateCursorImage(nativeHandle, cd.getBuffer(), cd.width, cd.height, hotX, hotY);
-                if (nativeMode) {
-                    java.nio.ByteBuffer buf = cd.getBuffer();
-                    short stride = (short)(buf.capacity() / (cd.height * 4));
-                    nativeScanoutSetCursorImage(nativeHandle, buf, cd.width, cd.height, stride);
-                }
             }
         }
     }
 
     public void onUpdateWindowContentDirect(Window window, Drawable pixmap, short xOff, short yOff) {
-        if (!nativeMode && window.id == fpsWindowId) {
+        if (window.id == fpsWindowId) {
             if (hudRef != null) hudRef.onFrame();
             if (classicHudRef != null) classicHudRef.update();
         }
         synchronized (lock) {
             if (nativeHandle == 0 || pixmap == null) return;
-            int rx = window.getRootX() + xOff, ry = window.getRootY() + yOff;
+            final int rx = window.getRootX() + xOff, ry = window.getRootY() + yOff;
             synchronized (pixmap.renderLock) {
                 if (pixmap.getTexture() instanceof GPUImage) {
                     GPUImage g = (GPUImage) pixmap.getTexture();
-                    long ahbPtr = g.getHardwareBufferPtr();
+                    final long ahbPtr = g.getHardwareBufferPtr();
                     if (ahbPtr != 0) {
-                        if (nativeMode && pixmap.isDirectScanout() && nativeIsScanoutActive(nativeHandle)) {
-
-                            int fence = g.unlock();
-                            nativeScanoutSetBuffer(nativeHandle, ahbPtr,
-                                rx, ry, pixmap.width, pixmap.height, fence);
-                            g.lock();
-                        } else {
-
-                            long contentId = did(window.getContent());
-                            nativeUpdateWindowContentAHB(nativeHandle, contentId, ahbPtr,
-                                pixmap.width, pixmap.height, rx, ry);
-                        }
+                        nativeUpdateWindowContentAHB(nativeHandle, did(window.getContent()),
+                            ahbPtr, pixmap.width, pixmap.height, rx, ry);
                         return;
                     }
                     java.nio.ByteBuffer vd = g.getVirtualData();
                     if (vd != null) {
                         short s = g.getStride() > 0 ? g.getStride() : pixmap.width;
-                        nativeUpdateWindowContent(nativeHandle, did(window.getContent()), vd,
-                            pixmap.width, pixmap.height, s, rx, ry);
+                        nativeUpdateWindowContent(nativeHandle, did(window.getContent()),
+                            vd, pixmap.width, pixmap.height, s, rx, ry);
                         return;
                     }
                 }
                 java.nio.ByteBuffer buf = pixmap.getBuffer();
                 if (buf == null) return;
                 short stride = (short)(buf.capacity() / (pixmap.height * 4));
-                nativeUpdateWindowContent(nativeHandle, did(window.getContent()), buf,
-                    pixmap.width, pixmap.height, stride, rx, ry);
+                nativeUpdateWindowContent(nativeHandle, did(window.getContent()),
+                    buf, pixmap.width, pixmap.height, stride, rx, ry);
             }
         }
     }
 
     @Override
     public void onUpdateWindowContent(Window window) {
-        
-        
         synchronized (lock) {
             if (nativeHandle == 0) return;
             Drawable drawable = window.getContent();
@@ -557,50 +365,29 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                 String wc = window.getClassName();
                 for (String cls : unviewableWMClasses) if (wc.contains(cls)) return;
             }
-            int rx = window.getRootX(), ry = window.getRootY();
+            final int rx = window.getRootX(), ry = window.getRootY();
             synchronized (drawable.renderLock) {
                 if (drawable.getTexture() instanceof GPUImage) {
                     GPUImage g = (GPUImage) drawable.getTexture();
-                    long ahbPtr = g.getHardwareBufferPtr();
+                    final long ahbPtr = g.getHardwareBufferPtr();
                     if (ahbPtr != 0) {
-                        boolean scanoutNow = nativeMode && nativeIsScanoutActive(nativeHandle);
-                        if (nativeMode && drawable.isDirectScanout() && scanoutNow) {
-                            boolean wasDelivered = nativeIsGameFrameDelivered(nativeHandle);
-
-                            int fence = g.unlock();
-                            nativeScanoutSetBuffer(nativeHandle, ahbPtr,
-                                rx, ry, drawable.width, drawable.height, fence);
-                            g.lock();
-                            boolean delivered = nativeIsGameFrameDelivered(nativeHandle);
-
-                            if (!xRenderingPausedForScanout && !wasDelivered && delivered) {
-                                xServer.setRenderingEnabled(false);
-                                xRenderingPausedForScanout = true;
-                            }
-                            if (hudRef != null) {
-                                hudRef.onFrame();
-                                hudRef.setIsNative(delivered);
-                            }
-                            if (classicHudRef != null) classicHudRef.update();
-                        } else if (!scanoutNow) {
-                            nativeUpdateWindowContentAHB(nativeHandle, did(drawable), ahbPtr,
-                                drawable.width, drawable.height, rx, ry);
-                        }
+                        nativeUpdateWindowContentAHB(nativeHandle, did(drawable),
+                            ahbPtr, drawable.width, drawable.height, rx, ry);
                         return;
                     }
                     java.nio.ByteBuffer vd = g.getVirtualData();
                     if (vd != null) {
                         short s = g.getStride() > 0 ? g.getStride() : drawable.width;
-                        nativeUpdateWindowContent(nativeHandle, did(drawable), vd,
-                            drawable.width, drawable.height, s, rx, ry);
+                        nativeUpdateWindowContent(nativeHandle, did(drawable),
+                            vd, drawable.width, drawable.height, s, rx, ry);
                         return;
                     }
                 }
                 java.nio.ByteBuffer buf = drawable.getBuffer();
                 if (buf == null) return;
                 short stride = (short)(buf.capacity() / (drawable.height * 4));
-                nativeUpdateWindowContent(nativeHandle, did(drawable), buf,
-                    drawable.width, drawable.height, stride, rx, ry);
+                nativeUpdateWindowContent(nativeHandle, did(drawable),
+                    buf, drawable.width, drawable.height, stride, rx, ry);
             }
         }
     }
@@ -613,14 +400,10 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
             Window pw = xServer.inputDeviceManager.getPointWindow();
             Cursor cursor = pw != null ? pw.attributes.getCursor() : null;
             if (cursor != lastCursor) { lastCursor = cursor; sendCursorToNative(cursor); }
-            if (nativeMode) {
-                short hotX = 0, hotY = 0;
-                if (cursor != null) { hotX = (short)cursor.hotSpotX; hotY = (short)cursor.hotSpotY; }
-                nativeScanoutSetCursorPos(nativeHandle, x, y, hotX, hotY);
-            }
             if (screenOffsetYRelativeToCursor || magnifierZoom != 1.0f) updateTransform();
         }
     }
+
 
     @Override
     public void onDestroyWindow(Window window) {
@@ -672,73 +455,6 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
 
     public boolean isCursorVisible() { return cursorVisible; }
 
-    public void setNativeMode(boolean mode) {
-        if (this.nativeMode == mode) return;
-        this.nativeMode = mode;
-        xRenderingPausedForScanout = false;
-        if (mode) {
-            xServer.setRenderingEnabled(true);
-            xServerView.post(() -> {
-                if (android.os.Build.VERSION.SDK_INT >= 29) {
-                    try {
-                        android.view.SurfaceControl xsc = xServerView.getSurfaceControl();
-                        scanoutGameSC = new android.view.SurfaceControl.Builder()
-                            .setParent(xsc).setName("winlator_game").setOpaque(true).build();
-                        scanoutGameSurface = new android.view.Surface(scanoutGameSC);
-                        scanoutCursorSC = new android.view.SurfaceControl.Builder()
-                            .setParent(xsc).setName("winlator_cursor").setFormat(1).build();
-                        scanoutCursorSurface = new android.view.Surface(scanoutCursorSC);
-                        android.view.SurfaceControl.Transaction scTxn =
-                            new android.view.SurfaceControl.Transaction()
-                            .setLayer(scanoutGameSC,   1)
-                            .setLayer(scanoutCursorSC, 2)
-                            .setVisibility(scanoutGameSC,   true)
-                            .setVisibility(scanoutCursorSC, true);
-
-                        if (android.os.Build.VERSION.SDK_INT >= 30) {
-                            float targetFps = fpsLimit > 0 ? (float)fpsLimit
-                                : xServerView.getDisplay() != null
-                                    ? xServerView.getDisplay().getRefreshRate() : 60f;
-                            scTxn.setFrameRate(scanoutGameSC, targetFps,
-                                android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
-                        }
-                        scTxn.apply();
-                        applyScanoutSwapTransform();
-                        synchronized (lock) {
-                            if (nativeHandle != 0) {
-                                nativeSetScanoutWindow(nativeHandle,
-                                    scanoutGameSurface, scanoutCursorSurface);
-                                updateTransform();
-                            }
-                        }
-                    } catch (Exception e) {
-                        android.util.Log.w("VulkanRenderer", "Sibling SC failed, using child SC: " + e);
-                        synchronized (lock) {
-                            if (nativeHandle != 0) nativeInitScanout(nativeHandle);
-                        }
-                    }
-                } else {
-                    synchronized (lock) { if (nativeHandle != 0) nativeInitScanout(nativeHandle); }
-                }
-            });
-        } else {
-            synchronized (lock) {
-                if (nativeHandle != 0) nativeDestroyScanout(nativeHandle);
-            }
-
-            xServerView.post(() -> {
-                xServer.setRenderingEnabled(true);
-                releaseScanoutSurfaces();
-            });
-        }
-        if (hudRef != null) hudRef.setIsNative(mode && nativeHandle != 0 && nativeIsGameFrameDelivered(nativeHandle));
-        xServerView.queueEvent(this::updateScene);
-        final String msg = mode ? "Native Rendering+ Enabled" : "Native Rendering+ Disabled";
-        xServerView.post(() -> Toast.makeText(xServerView.getContext(), msg, Toast.LENGTH_SHORT).show());
-    }
-
-    public boolean isNativeMode() { return nativeMode; }
-
     public void setDriverInfo(String driverPath, String libraryName, String nativeLibDir) {
         this.driverPath = driverPath;
         this.driverLibraryName = libraryName;
@@ -778,7 +494,6 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     public void setSwapRB(boolean enabled) {
         pendingSwapRB = enabled;
         synchronized (lock) { if (nativeHandle != 0) nativeSetSwapRB(nativeHandle, enabled); }
-
     }
 
     public void setVkPresentMode(int mode) {
@@ -792,23 +507,17 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
         }
         return new int[0];
     }
-    public void setNativeColorFormat(int format) {}
-    public int getNativeColorFormat() { return 0; }
-
-    private WinlatorHUD hudRef = null;
-    private FrameRating classicHudRef = null;
-    private int fpsWindowId = -1;
-
-    public void setFpsWindowId(int id) { fpsWindowId = id; }
-
-    public void setFrameRating(Object fr) {
-        if (fr instanceof WinlatorHUD) hudRef = (WinlatorHUD) fr;
-        else if (fr instanceof FrameRating) classicHudRef = (FrameRating) fr;
-    }
 
     public boolean isFullscreen() { return fullscreen; }
-    public void toggleFullscreen() { fullscreen = !fullscreen; synchronized (lock) { updateTransform(); } xServerView.queueEvent(this::updateScene); }
-    public void setScreenOffsetYRelativeToCursor(boolean b) { screenOffsetYRelativeToCursor = b; synchronized (lock) { updateTransform(); } }
+    public void toggleFullscreen() {
+        fullscreen = !fullscreen;
+        synchronized (lock) { updateTransform(); }
+        xServerView.queueEvent(this::updateScene);
+    }
+    public void setScreenOffsetYRelativeToCursor(boolean b) {
+        screenOffsetYRelativeToCursor = b;
+        synchronized (lock) { updateTransform(); }
+    }
     public boolean isScreenOffsetYRelativeToCursor() { return screenOffsetYRelativeToCursor; }
     public void setMagnifierZoom(float zoom) {
         magnifierZoom = zoom;
@@ -816,30 +525,31 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     }
     public float getMagnifierZoom() { return magnifierZoom; }
     public void setUnviewableWMClasses(String... classes) { this.unviewableWMClasses = classes; }
-    private int fpsLimit = 0;
+
     private int     pendingPresentMode    = 2;
     private int     pendingStretchMode    = 0;
     private int     pendingFilterMode     = 0;
     private int     pendingPostFXMode     = 0;
     private float   pendingSharpness      = 0.5f;
     private boolean pendingSwapRB         = false;
-    public int getFpsLimit() { return fpsLimit; }
-    public void setFpsLimit(int limit) {
-        this.fpsLimit = limit;
-        if (android.os.Build.VERSION.SDK_INT >= 30 && scanoutGameSC != null) {
-            float targetFps = limit > 0 ? (float)limit
-                : xServerView.getDisplay() != null
-                    ? xServerView.getDisplay().getRefreshRate() : 60f;
-            new android.view.SurfaceControl.Transaction()
-                .setFrameRate(scanoutGameSC, targetFps,
-                    android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
-                .apply();
-        }
+
+    private WinlatorHUD hudRef = null;
+    private FrameRating classicHudRef = null;
+    private int fpsWindowId = -1;
+    private int fpsLimit = 0;
+
+    public void setFpsWindowId(int id) { fpsWindowId = id; }
+    public void setFrameRating(Object fr) {
+        if (fr instanceof WinlatorHUD) hudRef = (WinlatorHUD) fr;
+        else if (fr instanceof FrameRating) classicHudRef = (FrameRating) fr;
     }
+    public int getFpsLimit() { return fpsLimit; }
+    public void setFpsLimit(int limit) { this.fpsLimit = limit; }
     public void setPipMode(boolean pip) { inPipMode = pip; }
     public int getSurfaceWidth() { return surfaceWidth; }
     public int getSurfaceHeight() { return surfaceHeight; }
     public void requestRender() {}
+
 
     private static class RenderableWindow {
         public final Drawable content; public int rootX, rootY;

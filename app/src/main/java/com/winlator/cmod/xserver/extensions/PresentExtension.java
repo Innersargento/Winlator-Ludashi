@@ -252,16 +252,7 @@ public class PresentExtension implements Extension {
         long msc = ust / (targetFps > 0 ? (1_000_000L / targetFps) : (1_000_000L / 60));
 
         synchronized (content.renderLock) {
-            boolean isNative = renderer != null && renderer.isNativeMode();
-
-            if (isNative && pixmap.drawable.isDirectScanout()) {
-                content.setTexture(pixmap.drawable.getTexture());
-                content.setDirectScanout(true);
-                sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.FLIP, ust, msc);
-                if (window.attributes.isMapped() && renderer != null)
-                    renderer.onUpdateWindowContent(window);
-                scheduleIdleNotify(window, pixmap, serial, idleFence, targetFps, renderer);
-            } else if (renderer != null && window.attributes.isMapped()) {
+            if (renderer != null && window.attributes.isMapped()) {
                 sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
                 renderer.onUpdateWindowContentDirect(window, pixmap.drawable, xOff, yOff);
                 scheduleIdleNotify(window, pixmap, serial, idleFence, targetFps, renderer);

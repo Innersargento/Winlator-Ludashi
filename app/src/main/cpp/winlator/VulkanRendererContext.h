@@ -96,7 +96,7 @@ struct VkTable {
 #define WLOG_TAG "Winlator_Renderer"
 #define RLOG(...) if(verboseLog) __android_log_print(ANDROID_LOG_DEBUG,WLOG_TAG,__VA_ARGS__)
 #define RLOG_E(...) __android_log_print(ANDROID_LOG_ERROR,WLOG_TAG,__VA_ARGS__)
-#define SCANOUT_LOG(...) __android_log_print(ANDROID_LOG_DEBUG,"Winlator_Scanout",__VA_ARGS__)
+
 
 #include <vulkan/vulkan_android.h>
 #include <android/hardware_buffer.h>
@@ -141,16 +141,6 @@ public:
     void clearBackbuffer() {}
     void beginBatch() {}
     void endBatch() {}
-    void initScanout();
-    void destroyScanout();
-    void applyScanoutBuffer();
-    void initScanoutFromWindows(ANativeWindow* gameWin, ANativeWindow* cursorWin);
-    void scanoutSetDst(int x, int y, int w, int h);
-    void scanoutSetBuffer(AHardwareBuffer* ahb, int x, int y, int w, int h, int fenceFd = -1);
-    void scanoutSetCursorImage(void* pixels, short w, short h, short stride);
-    void scanoutSetCursorPos(short x, short y, short hotX, short hotY);
-    std::atomic<bool> scanoutActive{false};
-    std::atomic<bool> gameFrameDelivered{false};
     std::atomic<bool> surfaceDetached{false};
 
     void detachSurface();
@@ -164,7 +154,6 @@ public:
     std::string adrenoDriverName;
     std::string adrenoNativeLibDir;
     void* vulkanHandle = nullptr;
-    std::atomic<bool> scanoutBlackFrameDone{false};
     PFN_vkGetInstanceProcAddr gipa = nullptr;
     VkTable vk_ = {};
     void loadCustomDriver();
@@ -182,6 +171,13 @@ public:
 
     void setCustomScissor(int x, int y, int w, int h);
     void clearCustomScissor();
+    inline void setTransformAndScissor(float ox, float oy, float sx, float sy,
+                                       bool hasScissor,
+                                       int scissorX, int scissorY, int scissorW, int scissorH) {
+        setTransform(ox, oy, sx, sy);
+        if (hasScissor) setCustomScissor(scissorX, scissorY, scissorW, scissorH);
+        else            clearCustomScissor();
+    }
 
 private:
     struct WinTex {
@@ -239,45 +235,6 @@ private:
     std::vector<VkImageMemoryBarrier>  frameAhbTransitions;
     std::vector<VkImageMemoryBarrier>  framePreUpload;
     std::vector<VkImageMemoryBarrier>  framePostUpload;
-
-    void*  scanoutGameSC      = nullptr;
-    void*  scanoutCursorSC    = nullptr;
-    void*  scanoutCursorBuf   = nullptr;
-    int32_t scanoutCursorBufW = 0;
-    int32_t scanoutCursorBufH = 0;
-
-    void*  scanoutTx          = nullptr;
-    void*  scanoutGameTx      = nullptr;
-
-    ARect  scanoutLastSrc{}, scanoutLastDst{};
-    bool   scanoutGeoDirty    = true;
-    bool   scanoutVisShown    = false;
-    bool   scanoutApiLoaded   = false;
-    void*  fnSCCreateFromWin  = nullptr;
-    void*  fnSCRelease        = nullptr;
-    void*  fnSTCreate         = nullptr;
-    void*  fnSTDelete         = nullptr;
-    void*  fnSTApply          = nullptr;
-    void*  fnSTSetBuffer      = nullptr;
-    void*  fnSTSetZOrder      = nullptr;
-    void*  fnSTSetVisibility  = nullptr;
-    void*  fnSTSetGeometry    = nullptr;
-    void*  fnSTSetBackPressure = nullptr;
-    bool   loadScanoutApi();
-
-    int32_t scanoutDstX=0, scanoutDstY=0, scanoutDstW=0, scanoutDstH=0;
-
-    int32_t lastDstX=0, lastDstY=0, lastDstW=0, lastDstH=0;
-    bool    gameScVisible      = false;
-
-    struct ScanoutPending { AHardwareBuffer* ahb=nullptr; int x=0,y=0,w=0,h=0; int fenceFd=-1; };
-    std::mutex        scanoutMutex;
-    ScanoutPending    scanoutPending{};
-    std::atomic<bool> scanoutPendingDirty{false};
-
-    short  pendingCursorX=0, pendingCursorY=0, pendingCursorHotX=0, pendingCursorHotY=0;
-    bool   cursorPosDirty=false;
-    bool   cursorImageDirty=false;
 
     std::atomic<int>  pointerX{0}, pointerY{0};
     float sceneOffsetX=0.f, sceneOffsetY=0.f, sceneScaleX=1.f, sceneScaleY=1.f;
