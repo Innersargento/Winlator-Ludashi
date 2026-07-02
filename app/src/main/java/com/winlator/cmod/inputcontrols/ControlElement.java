@@ -660,19 +660,31 @@ public class ControlElement {
                 if (currentPosition == null) currentPosition = new PointF();
                 currentPosition.x = boundingBox.left + deltaX * radius + radius;
                 currentPosition.y = boundingBox.top + deltaY * radius + radius;
-                float adjDeltaX = (Math.abs(deltaX) < Math.abs(deltaY) * STICK_CROSS_ZONE) ? 0 : deltaX;
-                float adjDeltaY = (Math.abs(deltaY) < Math.abs(deltaX) * STICK_CROSS_ZONE) ? 0 : deltaY;
-                final boolean[] states = {adjDeltaY <= -STICK_DEAD_ZONE, adjDeltaX >= STICK_DEAD_ZONE, adjDeltaY >= STICK_DEAD_ZONE, adjDeltaX <= -STICK_DEAD_ZONE};
 
-                for (byte i = 0; i < 4; i++) {
-                    float value = i == 1 || i == 3 ? deltaX : deltaY;
-                    Binding binding = getBindingAt(i);
-                    if (binding.isGamepad()) {
-                        value = Mathf.clamp(Math.max(0, Math.abs(value) - 0.01f) * Mathf.sign(value) * STICK_SENSITIVITY, -1, 1);
-                        inputControlsView.handleInputEvent(binding, true, value);
-                        this.states[i] = true;
+                Binding firstBinding = getBindingAt(0);
+                if (firstBinding.isGamepad()) {
+                    float magnitude = (float) Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                    float finalX = 0;
+                    float finalY = 0;
+
+                    if (magnitude > STICK_DEAD_ZONE) {
+                        float scaledMagnitude = Math.min(Math.max(0, magnitude - 0.01f) * STICK_SENSITIVITY, 1.0f);
+                        finalX = (deltaX / magnitude) * scaledMagnitude;
+                        finalY = (deltaY / magnitude) * scaledMagnitude;
                     }
-                    else {
+
+                    inputControlsView.handleStickInput(firstBinding, finalX, finalY);
+
+                    for (byte i = 0; i < 4; i++) this.states[i] = true;
+                }
+                else {
+                    float adjDeltaX = (Math.abs(deltaX) < Math.abs(deltaY) * STICK_CROSS_ZONE) ? 0 : deltaX;
+                    float adjDeltaY = (Math.abs(deltaY) < Math.abs(deltaX) * STICK_CROSS_ZONE) ? 0 : deltaY;
+                    final boolean[] states = {adjDeltaY <= -STICK_DEAD_ZONE, adjDeltaX >= STICK_DEAD_ZONE, adjDeltaY >= STICK_DEAD_ZONE, adjDeltaX <= -STICK_DEAD_ZONE};
+
+                    for (byte i = 0; i < 4; i++) {
+                        float value = i == 1 || i == 3 ? deltaX : deltaY;
+                        Binding binding = getBindingAt(i);
                         boolean state = binding.isMouseMove() ? (states[i] || states[(i+2)%4]) : states[i];
                         inputControlsView.handleInputEvent(binding, state, value);
                         this.states[i] = state;
@@ -682,22 +694,34 @@ public class ControlElement {
                 inputControlsView.invalidate();
             }
             else if (type == Type.TRACKPAD) {
-                final boolean[] states = {deltaY <= -TRACKPAD_MIN_SPEED, deltaX >= TRACKPAD_MIN_SPEED, deltaY >= TRACKPAD_MIN_SPEED, deltaX <= -TRACKPAD_MIN_SPEED};
-                int cursorDx = 0;
-                int cursorDy = 0;
+                Binding firstBinding = getBindingAt(0);
+                if (firstBinding.isGamepad()) {
+                    if (interpolator == null) interpolator = new CubicBezierInterpolator();
+                    interpolator.set(0.075f, 0.95f, 0.45f, 0.95f);
 
-                for (byte i = 0; i < 4; i++) {
-                    float value = (i == 1 || i == 3 ? deltaX : deltaY);
-                    Binding binding = getBindingAt(i);
-                    if (binding.isGamepad()) {
-                        if (interpolator == null) interpolator = new CubicBezierInterpolator();
-                        if (Math.abs(value) > TRACKPAD_ACCELERATION_THRESHOLD) value *= STICK_SENSITIVITY;
-                        interpolator.set(0.075f, 0.95f, 0.45f, 0.95f);
-                        float interpolatedValue = interpolator.getInterpolation(Math.min(1.0f, Math.abs(value / TRACKPAD_MAX_SPEED)));
-                        inputControlsView.handleInputEvent(binding, true, Mathf.clamp(interpolatedValue * Mathf.sign(value), -1, 1));
-                        this.states[i] = true;
-                    }
-                    else {
+                    float valueX = deltaX;
+                    float valueY = deltaY;
+                    if (Math.abs(valueX) > TRACKPAD_ACCELERATION_THRESHOLD) valueX *= STICK_SENSITIVITY;
+                    if (Math.abs(valueY) > TRACKPAD_ACCELERATION_THRESHOLD) valueY *= STICK_SENSITIVITY;
+
+                    float interpX = interpolator.getInterpolation(Math.min(1.0f, Math.abs(valueX / TRACKPAD_MAX_SPEED)));
+                    float interpY = interpolator.getInterpolation(Math.min(1.0f, Math.abs(valueY / TRACKPAD_MAX_SPEED)));
+
+                    float finalX = Mathf.clamp(interpX * Mathf.sign(valueX), -1, 1);
+                    float finalY = Mathf.clamp(interpY * Mathf.sign(valueY), -1, 1);
+
+                    inputControlsView.handleStickInput(firstBinding, finalX, finalY);
+
+                    for (byte i = 0; i < 4; i++) this.states[i] = true;
+                }
+                else {
+                    final boolean[] states = {deltaY <= -TRACKPAD_MIN_SPEED, deltaX >= TRACKPAD_MIN_SPEED, deltaY >= TRACKPAD_MIN_SPEED, deltaX <= -TRACKPAD_MIN_SPEED};
+                    int cursorDx = 0;
+                    int cursorDy = 0;
+
+                    for (byte i = 0; i < 4; i++) {
+                        float value = (i == 1 || i == 3 ? deltaX : deltaY);
+                        Binding binding = getBindingAt(i);
                         if (Math.abs(value) > TouchpadView.CURSOR_ACCELERATION_THRESHOLD) value *= TouchpadView.CURSOR_ACCELERATION;
                         if (binding == Binding.MOUSE_MOVE_LEFT || binding == Binding.MOUSE_MOVE_RIGHT) {
                             cursorDx = Mathf.roundPoint(value);
@@ -710,14 +734,14 @@ public class ControlElement {
                             this.states[i] = states[i];
                         }
                     }
-                }
 
-                if (cursorDx != 0 || cursorDy != 0)  {
-                    XServer xServer = inputControlsView.getXServer();
-                    if (xServer.isRelativeMouseMovement())
-                        xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, cursorDx, cursorDy, 0);
-                    else
-                        inputControlsView.getXServer().injectPointerMoveDelta(cursorDx, cursorDy);
+                    if (cursorDx != 0 || cursorDy != 0)  {
+                        XServer xServer = inputControlsView.getXServer();
+                        if (xServer.isRelativeMouseMovement())
+                            xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, cursorDx, cursorDy, 0);
+                        else
+                            inputControlsView.getXServer().injectPointerMoveDelta(cursorDx, cursorDy);
+                    }
                 }
             }
             else {

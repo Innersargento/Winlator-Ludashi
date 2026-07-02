@@ -55,7 +55,6 @@ import com.winlator.cmod.contentdialog.ContentDialog;
 import com.winlator.cmod.contentdialog.DXVKConfigDialog;
 import com.winlator.cmod.contentdialog.DebugDialog;
 import com.winlator.cmod.contentdialog.GraphicsDriverConfigDialog;
-import com.winlator.cmod.contentdialog.ScreenEffectDialog;
 import com.winlator.cmod.contentdialog.WineD3DConfigDialog;
 import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
@@ -710,16 +709,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     public void onPause() {
         super.onPause();
 
-        if (NotificationService.wakeLock != null && !NotificationService.wakeLock.isHeld())
-            NotificationService.wakeLock.acquire();
-
-        boolean gyroEnabled = preferences.getBoolean("gyro_enabled", true);
-
-        if (gyroEnabled) {
-            // Unregister the sensor listener when the activity is paused
-            sensorManager.unregisterListener(gyroListener);
-        }
-
         // Check if we are entering Picture-in-Picture mode
         if (!isInPictureInPictureMode()) {
             // Only pause environment and xServerView if not in PiP mode
@@ -727,13 +716,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 environment.onPause();
                 xServerView.onPause();
             }
-
-            if (isSuspendEnabled)
-                ProcessHelper.pauseAllWineProcesses();
         }
 
         savePlaytimeData();
         handler.removeCallbacks(savePlaytimeRunnable);
+        ProcessHelper.pauseAllWineProcesses();
     }
 
 
@@ -885,6 +872,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                     });
                     container.addView(magnifierView);
                 }
+                drawerLayout.closeDrawers();
+                break;
+            case R.id.main_menu_vibration:
+                showVibrationDialog();
                 drawerLayout.closeDrawers();
                 break;
             case R.id.main_menu_logs:
