@@ -19,6 +19,8 @@
     <string name="removing_container">Removing Container…</string>
     <string name="duplicating_container">Duplicating Container…</string>
     <string name="installing_system_files">Installing System Files…</string>
+    <string name="installing_wine_files">Installing Wine Files...</string>
+    <string name="installing_drivers_files">Installing System Driver Files...</string>
     <string name="updating_system_files">Updating System Files…</string>
     <string name="starting_up">Starting up…</string>
     <string name="unable_to_install_system_files">Unable to install system files</string>
@@ -273,6 +275,8 @@
     <string name="bring_to_front">Bring to Front</string>
     <string name="options">Options</string>
     <string name="enable_experimental_wow64_mode">Enable experimental WoW64 mode</string>
+    <string name="pause_resume_wine">Suspend Wine when app is in background</string>
+    <string name="high_refresh_rate">Enable High Refresh Rate Mode</string>
     <string name="logs">Logs</string>
     <string name="enable_wine_debug">Enable Wine debug</string>
     <string name="enable_box64_logs">Enable Box64 logs</string>
@@ -454,6 +458,7 @@
     <string name="enable_sendinput_mode">Use Windows SendInput Mode</string>
     <string name="enable_touchscreen_timeout">Touchscreen Timeout (Requires Restart)</string>
     <string name="enable_touchscreen_haptics">Enable Touchscreen Haptic Feedback</string>
+    <string name="disable_mouse">Disable Mouse</string>
     <string name="help_steamgrid">SteamGrid API Key</string>
     <string name="disable_xinput_for_shortcut">Disable Xinput (For Exclusive M/KB Control)</string>
     <string name="num_controllers">Number of Controllers</string>

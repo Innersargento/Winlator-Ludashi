@@ -541,7 +541,7 @@ public void setVibrationEnabledForSlot(int slot, boolean enabled) {
                 XServer xServer = activity.getXServer();
                 xServer.pointer.setX(x);
                 xServer.pointer.setY(y);
-                activity.getXServerView().requestRender();
+                activity.getXServerView().onPointerMove(x, y);
                 break;
             }
             default: {

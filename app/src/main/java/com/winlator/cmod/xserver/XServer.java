@@ -3,7 +3,7 @@ package com.winlator.cmod.xserver;
 import android.util.SparseArray;
 
 import com.winlator.cmod.core.CursorLocker;
-import com.winlator.cmod.renderer.GLRenderer;
+import com.winlator.cmod.widget.XServerView;
 import com.winlator.cmod.winhandler.WinHandler;
 import com.winlator.cmod.xserver.extensions.BigReqExtension;
 import com.winlator.cmod.xserver.extensions.DRI3Extension;
@@ -36,12 +36,13 @@ public class XServer {
     public final GrabManager grabManager;
     public final CursorLocker cursorLocker;
     private SHMSegmentManager shmSegmentManager;
-    private GLRenderer renderer;
     private WinHandler winHandler;
     private final EnumMap<Lockable, ReentrantLock> locks = new EnumMap<>(Lockable.class);
     private boolean relativeMouseMovement = false;
     private boolean simulateTouchScreen = false;
+    private boolean disableMouse = false;
     private boolean isGrabbed = false;
+    private XServerView xServerView;
     private XClient grabbingClient = null;
 
     public XServer(ScreenInfo screenInfo) {
@@ -75,13 +76,22 @@ public class XServer {
     public void setSimulateTouchScreen(boolean simulateTouchScreen) {
         this.simulateTouchScreen = simulateTouchScreen;
     }
-
-    public GLRenderer getRenderer() {
-        return renderer;
+    
+    public void setXServerView(XServerView view) {
+        this.xServerView = view;
     }
-
-    public void setRenderer(GLRenderer renderer) {
-        this.renderer = renderer;
+    
+    public XServerView getXServerView() {
+        return this.xServerView;
+    }
+    
+    public void setMouseDisabled(boolean mouseDisabled) {
+        this.disableMouse = mouseDisabled;
+        xServerView.setCursorVisible(!mouseDisabled);
+    }
+    
+    public boolean isMouseDisabled() {
+        return this.disableMouse;
     }
 
     public WinHandler getWinHandler() {
@@ -194,8 +204,8 @@ public class XServer {
         extensions.put(BigReqExtension.MAJOR_OPCODE, new BigReqExtension());
         extensions.put(MITSHMExtension.MAJOR_OPCODE, new MITSHMExtension());
         extensions.put(DRI3Extension.MAJOR_OPCODE, new DRI3Extension());
-        extensions.put(PresentExtension.MAJOR_OPCODE, new PresentExtension());
-        extensions.put(SyncExtension.MAJOR_OPCODE, new SyncExtension());
+        extensions.put(PresentExtension.MAJOR_OPCODE, new PresentExtension(this));
+        extensions.put(SyncExtension.MAJOR_OPCODE, new SyncExtension(this));
     }
 
     public <T extends Extension> T getExtension(int opcode) {

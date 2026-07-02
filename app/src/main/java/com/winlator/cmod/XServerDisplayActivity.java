@@ -5,8 +5,6 @@ import static com.winlator.cmod.core.AppUtils.showToast;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
@@ -14,6 +12,8 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
@@ -84,12 +84,7 @@ import com.winlator.cmod.math.Mathf;
 import com.winlator.cmod.math.XForm;
 import com.winlator.cmod.midi.MidiHandler;
 import com.winlator.cmod.midi.MidiManager;
-import com.winlator.cmod.renderer.GLRenderer;
-import com.winlator.cmod.renderer.effects.CRTEffect;
-import com.winlator.cmod.renderer.effects.ColorEffect;
-import com.winlator.cmod.renderer.effects.FXAAEffect;
-import com.winlator.cmod.renderer.effects.NTSCCombinedEffect;
-import com.winlator.cmod.renderer.effects.ToonEffect;
+import com.winlator.cmod.services.NotificationService;
 import com.winlator.cmod.widget.FrameRating;
 import com.winlator.cmod.widget.InputControlsView;
 import com.winlator.cmod.widget.LogView;
@@ -133,8 +128,6 @@ import java.util.regex.Pattern;
 import cn.sherlock.com.sun.media.sound.SF2Soundbank;
 
 public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
-    public static String NOTIFICATION_CHANNEL_ID = "Winlator";
-    public static int NOTIFICATION_ID = -1;
     private XServerView xServerView;
     private InputControlsView inputControlsView;
     private TouchpadView touchpadView;
@@ -180,6 +173,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private Runnable configChangedCallback = null;
     private boolean isPaused = false;
     private boolean isRelativeMouseMovement = false;
+    private boolean isSuspendEnabled = true;
     private boolean isMouseDisabled = false;
 
     // Inside the XServerDisplayActivity class
@@ -202,16 +196,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     private GuestProgramLauncherComponent guestProgramLauncherComponent;
     private EnvVars overrideEnvVars;
-
-    private void createNotifcationChannel() {
-        String name = "Winlator";
-        String description = "Winlator XServer Messages";
-        int importance = NotificationManager.IMPORTANCE_HIGH;
-        NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID, name, importance);
-        channel.setDescription(description);
-        NotificationManager notificationManager = getSystemService(NotificationManager.class);
-        notificationManager.createNotificationChannel(channel);
-    }
 
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
@@ -246,14 +230,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         AppUtils.hideSystemUI(this);
         AppUtils.keepScreenOn(this);
 
-        android.view.WindowManager.LayoutParams params = getWindow().getAttributes();
-        params.preferredRefreshRate = pickHighestRefreshRate();
-        getWindow().setAttributes(params);
-        
         setContentView(R.layout.xserver_display_activity);
 
         preloaderDialog = new PreloaderDialog(this);
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
+
+        if (preferences.getBoolean("high_refresh_rate_mode", false)) {
+            android.view.WindowManager.LayoutParams params = getWindow().getAttributes();
+            params.preferredRefreshRate = pickHighestRefreshRate();
+            getWindow().setAttributes(params);
+        }
 
         cursorLock = preferences.getBoolean("cursor_lock", true);
 
@@ -262,6 +248,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         boolean isOpenWithAndroidBrowser = preferences.getBoolean("open_with_android_browser", false);
         boolean isShareAndroidClipboard = preferences.getBoolean("share_android_clipboard", false);
+
+        isSuspendEnabled = preferences.getBoolean("pause_resume_wine", true);
 
 
 
@@ -419,7 +407,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         String wmClass = shortcut != null ? shortcut.getExtra("wmClass", "") : "";
         Log.d("XServerDisplayActivity", "Startup wmClass: " + wmClass);
 
-        firstTimeBoot = container.getExtra("appVersion").isEmpty();
+        firstTimeBoot = container.getExtra("imgVersion").isEmpty();
 
         String wineVersion = container.getWineVersion();
         wineInfo = WineInfo.fromIdentifier(this, contentsManager, wineVersion);
@@ -495,7 +483,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             @Override
             public void onUpdateWindowContent(Window window) {
                 if (!winStarted[0] && window.isApplicationWindow()) {
-                    xServerView.getRenderer().setCursorVisible(true);
+                    if (!xServer.isSimulateTouchScreen()) xServerView.setCursorVisible(true);
                     preloaderDialog.closeOnUiThread();
                     winStarted[0] = true;
                 }
@@ -554,19 +542,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         // Check if a profile is defined by the shortcut
         String controlsProfile = shortcut != null ? shortcut.getExtra("controlsProfile", "") : "";
 
-        createNotifcationChannel();
-
-        Intent notificationIntent = new Intent(this, XServerDisplayActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_stat_ab_gear_0011)
-                .setContentTitle("Winlator")
-                .setContentText("Winlator is running, do not kill or swipe this notification")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(pendingIntent)
-                .setAutoCancel(false);
-
-        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, builder.build());
+        if (!NotificationService.isRunning()) {
+            Intent notificationService = new Intent(this, NotificationService.class);
+            startForegroundService(notificationService);
+        }
 
         Runnable runnable = () -> {
             setupUI();
@@ -713,17 +692,33 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         super.onResume();
 
         if (environment != null) {
-            xServerView.onResume();
             environment.onResume();
+            xServerView.onResume();
         }
+
         startTime = System.currentTimeMillis();
         handler.postDelayed(savePlaytimeRunnable, SAVE_INTERVAL_MS);
-        ProcessHelper.resumeAllWineProcesses();
+
+        if (!isInPictureInPictureMode() && isSuspendEnabled)
+        	ProcessHelper.resumeAllWineProcesses();
+
+        if (NotificationService.wakeLock != null && NotificationService.wakeLock.isHeld())
+            NotificationService.wakeLock.release();
     }
 
     @Override
     public void onPause() {
         super.onPause();
+
+        if (NotificationService.wakeLock != null && !NotificationService.wakeLock.isHeld())
+            NotificationService.wakeLock.acquire();
+
+        boolean gyroEnabled = preferences.getBoolean("gyro_enabled", true);
+
+        if (gyroEnabled) {
+            // Unregister the sensor listener when the activity is paused
+            sensorManager.unregisterListener(gyroListener);
+        }
 
         // Check if we are entering Picture-in-Picture mode
         if (!isInPictureInPictureMode()) {
@@ -732,11 +727,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 environment.onPause();
                 xServerView.onPause();
             }
+
+            if (isSuspendEnabled)
+                ProcessHelper.pauseAllWineProcesses();
         }
 
         savePlaytimeData();
         handler.removeCallbacks(savePlaytimeRunnable);
-        ProcessHelper.pauseAllWineProcesses();
     }
 
 
@@ -771,7 +768,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     }
 
     private void exit() {
-        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID);
         preloaderDialog.showOnUiThread(R.string.shutdown);
         handler.postDelayed(new Runnable() {
             @Override
@@ -784,6 +780,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 if (preloaderDialog != null && preloaderDialog.isShowing()) preloaderDialog.closeOnUiThread();
                 if (winHandler != null) winHandler.stop();
                 if (wineRequestHandler != null) wineRequestHandler.stop();
+                xServerView.onDestroy();
                 /* Gracefully terminate all running wine processes */
                 ProcessHelper.terminateAllWineProcesses();
                 /* Wait until all processes have gracefully terminated, forcefully killing them only after a certain amount of time */
@@ -825,7 +822,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     @SuppressLint("SourceLockedOrientationActivity")
     @Override
     public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-        final GLRenderer renderer = xServerView.getRenderer();
+        XServerView view = getXServerView();
+
         switch (item.getItemId()) {
             case R.id.main_menu_keyboard:
                 AppUtils.showKeyboard(this);
@@ -846,16 +844,18 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 drawerLayout.closeDrawers();
                 break;
             case R.id.main_menu_toggle_fullscreen:
-                renderer.toggleFullscreen();
+                view.toggleFullscreen();
                 drawerLayout.closeDrawers();
                 touchpadView.toggleFullscreen();
                 break;
             case R.id.main_menu_pause:
                 if (isPaused) {
+                    xServerView.onResume();
                     ProcessHelper.resumeAllWineProcesses();
                     item.setIcon(R.drawable.icon_pause);
                 }
                 else {
+                    xServerView.onPause();
                     ProcessHelper.pauseAllWineProcesses();
                     item.setIcon(R.drawable.icon_play);
                 }
@@ -875,47 +875,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                     FrameLayout container = findViewById(R.id.FLXServerDisplay);
                     magnifierView = new MagnifierView(this);
                     magnifierView.setZoomButtonCallback(value -> {
-                        renderer.setMagnifierZoom(Mathf.clamp(renderer.getMagnifierZoom() + value, 1.0f, 3.0f));
-                        magnifierView.setZoomValue(renderer.getMagnifierZoom());
+                        view.setMagnifierZoom(Mathf.clamp(view.getMagnifierZoom() + value, 1.0f, 3.0f));
+                        magnifierView.setZoomValue(view.getMagnifierZoom());
                     });
-                    magnifierView.setZoomValue(renderer.getMagnifierZoom());
+                    magnifierView.setZoomValue(view.getMagnifierZoom());
                     magnifierView.setHideButtonCallback(() -> {
                         container.removeView(magnifierView);
                         magnifierView = null;
                     });
                     container.addView(magnifierView);
                 }
-                drawerLayout.closeDrawers();
-                break;
-            case R.id.main_menu_screen_effects:
-                Log.d("ScreenEffectDialog", "Initializing ScreenEffectDialog");
-                ScreenEffectDialog screenEffectDialog = new ScreenEffectDialog(this);
-                screenEffectDialog.setOnConfirmCallback(() -> {
-                    Log.d("ScreenEffectDialog", "Confirm callback triggered. About to apply effects.");
-                    GLRenderer currentRenderer = xServerView.getRenderer();
-                    ColorEffect colorEffect = (ColorEffect) currentRenderer.getEffectComposer().getEffect(ColorEffect.class);
-                    FXAAEffect fxaaEffect = (FXAAEffect) currentRenderer.getEffectComposer().getEffect(FXAAEffect.class);
-                    CRTEffect crtEffect = (CRTEffect) currentRenderer.getEffectComposer().getEffect(CRTEffect.class);
-                    ToonEffect toonEffect = (ToonEffect) currentRenderer.getEffectComposer().getEffect(ToonEffect.class);
-                    NTSCCombinedEffect ntscEffect = (NTSCCombinedEffect) currentRenderer.getEffectComposer().getEffect(NTSCCombinedEffect.class);
-
-                    // Check if effects are null before applying
-                    Log.d("ScreenEffectDialog", "ColorEffect: " + (colorEffect != null));
-                    Log.d("ScreenEffectDialog", "FXAAEffect: " + (fxaaEffect != null));
-                    Log.d("ScreenEffectDialog", "CRTEffect: " + (crtEffect != null));
-                    Log.d("ScreenEffectDialog", "ToonEffect: " + (toonEffect != null));
-                    Log.d("ScreenEffectDialog", "NTSCCombinedEffect: " + (ntscEffect != null));
-
-                    Log.d("ScreenEffectDialog", "Calling applyEffects()");
-                    screenEffectDialog.applyEffects(colorEffect, currentRenderer, fxaaEffect, crtEffect, toonEffect, ntscEffect);
-                    Log.d("ScreenEffectDialog", "applyEffects() called.");
-                });
-                Log.d("ScreenEffectDialog", "Showing ScreenEffectDialog");
-                screenEffectDialog.show();
-                drawerLayout.closeDrawers();
-                break;
-            case R.id.main_menu_vibration:
-                showVibrationDialog();
                 drawerLayout.closeDrawers();
                 break;
             case R.id.main_menu_logs:
@@ -971,13 +940,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     // }
 
     private void setupWineSystemFiles() {
-        String appVersion = String.valueOf(AppUtils.getVersionCode(this));
         String imgVersion = String.valueOf(imageFs.getVersion());
         boolean containerDataChanged = false;
 
-        if (!container.getExtra("appVersion").equals(appVersion) || !container.getExtra("imgVersion").equals(imgVersion)) {
+        if (!container.getExtra("imgVersion").equals(imgVersion)) {
             applyGeneralPatches(container);
-            container.putExtra("appVersion", appVersion);
             container.putExtra("imgVersion", imgVersion);
             containerDataChanged = true;
         }
@@ -1013,7 +980,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         WineStartMenuCreator.create(this, container);
         WineUtils.createDosdevicesSymlinks(container);
-        
+
         // Configure Wine joystick registry keys based on DInput setting
         int inputType = container.getInputType();
         if (shortcut != null) {
@@ -1023,13 +990,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             }
         }
         boolean dinputEnabled = (inputType & WinHandler.FLAG_INPUT_TYPE_DINPUT) == WinHandler.FLAG_INPUT_TYPE_DINPUT;
-        
+
         boolean exclusiveXInput = container.isExclusiveXInput();
         if (shortcut != null) {
             String extra = shortcut.getExtra("exclusiveXInput");
             if (!extra.isEmpty()) exclusiveXInput = extra.equals("1");
         }
-        
+
         WineUtils.setJoystickRegistryKeys(container, dinputEnabled, exclusiveXInput);
 
         if (shortcut != null)
@@ -1072,7 +1039,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         // Additional container checks and environment configuration
         if (container != null) {
             if (Byte.parseByte(startupSelection) == Container.STARTUP_SELECTION_AGGRESSIVE) {
-                // winHandler.killProcess("services.exe"); 
+                // winHandler.killProcess("services.exe");
             }
             guestProgramLauncherComponent.setContainer(this.container);
             guestProgramLauncherComponent.setWineInfo(this.wineInfo);
@@ -1184,14 +1151,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private void setupUI() {
         FrameLayout rootView = findViewById(R.id.FLXServerDisplay);
         xServerView = new XServerView(this, xServer);
-        final GLRenderer renderer = xServerView.getRenderer();
-        renderer.setCursorVisible(false);
+        xServerView.setCursorVisible(false);
 
         if (shortcut != null) {
-            renderer.setUnviewableWMClasses("explorer.exe");
+            xServerView.setUnviewableWMClass("explorer.exe");
         }
 
-        xServer.setRenderer(renderer);
+        xServer.setXServerView(xServerView);
+
         rootView.addView(xServerView);
 
         globalCursorSpeed = preferences.getFloat("cursor_speed", 1.0f);
@@ -1251,7 +1218,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         if (shouldStretch) {
             // Toggle fullscreen mode based on the final decision
-            renderer.toggleFullscreen();
+            xServerView.toggleFullscreen();
             touchpadView.toggleFullscreen();
         }
 
@@ -1266,7 +1233,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             touchpadView.setSimTouchScreen(simTouchScreen.equals("1"));
         }
 
-        AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
+        AppUtils.observeSoftKeyboardVisibility(drawerLayout, xServerView::setScreenOffsetYRelativeToCursor);
     }
 
 
@@ -1353,6 +1320,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         final CheckBox cbEnableHaptics = dialog.findViewById(R.id.CBEnableHaptics);
         cbEnableHaptics.setChecked(preferences.getBoolean("touchscreen_haptics_enabled", false));
 
+        final CheckBox cbDisableMouse = dialog.findViewById(R.id.CBDisableMouse);
+        cbDisableMouse.setChecked(xServer.isMouseDisabled());
+
         final Runnable updateProfile = () -> {
             int position = sProfile.getSelectedItemPosition();
             if (position > 0) {
@@ -1379,10 +1349,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             inputControlsView.setShowTouchscreenControls(cbShowTouchscreenControls.isChecked());
             boolean isTimeoutEnabled = cbEnableTimeout.isChecked();
             boolean isHapticsEnabled = cbEnableHaptics.isChecked();
+            boolean isMouseDisabled = cbDisableMouse.isChecked();
             SharedPreferences.Editor editor = preferences.edit();
             editor.putBoolean("touchscreen_timeout_enabled", isTimeoutEnabled);
             editor.putBoolean("touchscreen_haptics_enabled", isHapticsEnabled);
             editor.apply();
+
+            xServer.setMouseDisabled(isMouseDisabled);
 
             if (isTimeoutEnabled) {
                 startTouchscreenTimeout(); // Start the timeout functionality if enabled
@@ -1488,7 +1461,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         touchpadView.setPointerButtonRightEnabled(false);
 
         inputControlsView.invalidate();
-        winHandler.sendGamepadState();
     }
 
     private void hideInputControls() {
@@ -1501,7 +1473,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         touchpadView.setPointerButtonRightEnabled(true);
 
         inputControlsView.invalidate();
-        winHandler.sendGamepadState();
     }
 
     private void extractGraphicsDriverFiles() {

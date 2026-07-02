@@ -4,7 +4,7 @@ import androidx.annotation.Keep;
 import com.winlator.cmod.xserver.Drawable;
 import java.nio.ByteBuffer;
 
-public class GPUImage extends Texture {
+public class GPUImage {
     private long hardwareBufferPtr;
     private long imageKHRPtr;
     private ByteBuffer virtualData;
@@ -43,26 +43,6 @@ public class GPUImage extends Texture {
         }
     }
 
-    @Override
-    public void allocateTexture(short width, short height, ByteBuffer data) {
-        if (isAllocated()) return;
-        super.allocateTexture(width, height, null);
-        if (hardwareBufferPtr != 0) {
-            imageKHRPtr = createImageKHR(hardwareBufferPtr, textureId);
-            if (imageKHRPtr == 0) {
-                System.err.println("Error: Failed to create EGL image");
-                destroyHardwareBuffer(hardwareBufferPtr);
-                hardwareBufferPtr = 0;
-            }
-        }
-    }
-
-    @Override
-    public void updateFromDrawable(Drawable drawable) {
-        if (!isAllocated()) allocateTexture(drawable.width, drawable.height, null);
-        needsUpdate = false;
-    }
-
     public short getStride() {
         return stride;
     }
@@ -76,30 +56,8 @@ public class GPUImage extends Texture {
         return virtualData;
     }
 
-    @Override
-    public void destroy() {
-        if (imageKHRPtr != 0) {
-            destroyImageKHR(imageKHRPtr);
-            imageKHRPtr = 0;
-        }
-        if (hardwareBufferPtr != 0) {
-            destroyHardwareBuffer(hardwareBufferPtr);
-            hardwareBufferPtr = 0;
-        }
-        virtualData = null;
-        super.destroy();
-    }
-
     public static boolean isSupported() {
         return supported;
-    }
-
-    public static void checkIsSupported() {
-        final short size = 8;
-        GPUImage gpuImage = new GPUImage(size, size);
-        gpuImage.allocateTexture(size, size, null);
-        supported = gpuImage.hardwareBufferPtr != 0 && gpuImage.imageKHRPtr != 0 && gpuImage.virtualData != null;
-        gpuImage.destroy();
     }
 
     private native long hardwareBufferFromSocket(int fd);
