@@ -130,17 +130,12 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         final Pixmap pixmap = client.xServer.pixmapManager.getPixmap(pixmapId);
         if (pixmap == null) throw new BadPixmap(pixmapId);
 
-        Drawable content = window.getContent();
-        if (content.visual.depth != pixmap.drawable.visual.depth) throw new BadMatch();
-
         long ust = System.nanoTime() / 1000;
         long msc = ust / FAKE_INTERVAL;
 
-        synchronized (content.renderLock) {
-            content.copyArea((short)0, (short)0, xOff, yOff, pixmap.drawable.width, pixmap.drawable.height, pixmap.drawable);
-            sendIdleNotify(window, pixmap, serial, idleFence);
-            sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
-        }
+        pixmap.drawable.updateDirect();
+        sendIdleNotify(window, pixmap, serial, idleFence);
+        sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
     }
 
     private void selectInput(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {

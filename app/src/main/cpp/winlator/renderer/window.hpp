@@ -23,6 +23,12 @@ struct Window {
     std::vector<Window *> children;
     jobject attributes;
     jobject windowObj;
+    std::unordered_map<int, std::unique_ptr<struct Drawable>> directContents;
+    Drawable *currentDirectContent;
+    
+    bool hasDirectContents() {
+        return !directContents.empty();
+    }
     
     int getRootX() {
         int rootX = x;

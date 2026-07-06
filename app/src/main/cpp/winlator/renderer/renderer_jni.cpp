@@ -17,7 +17,7 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void*) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, jobject xServer, jobject rootCursorObj) {
+Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, jobject context, jobject xServer, jobject rootCursorObj) {
     jobject windowManagerObj = env->GetObjectField(xServer, cache.windowManager);
     jobject inputDeviceManagerObj = env->GetObjectField(xServer, cache.inputDeviceManager);
     jobject rootWindowObj = env->GetObjectField(windowManagerObj, cache.rootWindow);
@@ -44,6 +44,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     drawable->height = env->GetShortField(drawableObj, cache.drawableHeight);
     drawable->data = nullptr;
     drawable->isDirty = false;
+    drawable->isDirectContent = false;
     drawable->sizeChanged = false;
     drawable->drawableObj = env->NewGlobalRef(drawableObj);
     rootWindow->drawable = std::move(drawable);
@@ -68,6 +69,8 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     auto cursorDrawable = std::make_unique<struct Drawable>();
     cursorDrawable->id = env->GetIntField(rootCursorObj, cache.drawableID);
     cursorDrawable->textureId = -1;
+    cursorDrawable->isDirectContent = false;
+    cursorDrawable->format = 5;
     cursorDrawable->width = env->GetShortField(rootCursorObj, cache.drawableWidth);
     cursorDrawable->height = env->GetShortField(rootCursorObj, cache.drawableHeight);
     
@@ -129,7 +132,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateWindow(JNIEnv *env, jobjec
         drawable->width = env->GetShortField(drawableObj, cache.drawableWidth);
         drawable->height = env->GetShortField(drawableObj, cache.drawableHeight);
         drawable->data = nullptr;
+        drawable->format = 5;
         drawable->isDirty = false;
+        drawable->isDirectContent = false;
         drawable->sizeChanged = false;
         drawable->drawableObj = env->NewGlobalRef(drawableObj);
         window->drawable = std::move(drawable);
@@ -196,6 +201,8 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateCursor(JNIEnv *env, jobjec
     drawable->width = env->GetShortField(drawableObj, cache.drawableWidth);
     drawable->height = env->GetShortField(drawableObj, cache.drawableHeight);
     drawable->data = nullptr;
+    drawable->format = 5;
+    drawable->isDirectContent = false;
     drawable->isDirty = false;
     drawable->textureId = -1;
     drawable->sizeChanged = false;
@@ -368,4 +375,50 @@ Java_com_winlator_cmod_widget_XServerView_nativeResume(JNIEnv *env, jobject thiz
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeStop(JNIEnv *env, jobject thiz) {
     renderer.stop();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_winlator_cmod_widget_XServerView_nativeAddDirectContent(JNIEnv *env, jobject thiz, jint windowId, jobject drawableObj, jobject gpuImageObj) {
+    AHardwareBuffer *hardwareBuffer = (AHardwareBuffer *)env->GetLongField(gpuImageObj, cache.gpuImageHardwareBufferPtr);
+    if (!hardwareBuffer) return;
+    
+    auto window = windowManager.getWindow(windowId);
+    if (!window) return;
+    
+    auto drawable = std::make_unique<struct Drawable>();
+    drawable->id = env->GetIntField(drawableObj, cache.drawableID);
+    drawable->textureId = -1;
+    drawable->width = env->GetShortField(drawableObj, cache.drawableWidth);
+    drawable->height = env->GetShortField(drawableObj, cache.drawableHeight);
+    drawable->data = nullptr;
+    drawable->isDirty = false;
+    drawable->format = env->GetIntField(gpuImageObj, cache.gpuImageFormat);
+    drawable->sizeChanged = false;
+    drawable->ahb = hardwareBuffer;
+    drawable->isDirectContent = true;
+    drawable->drawableObj = env->NewGlobalRef(drawableObj);
+    
+    window->currentDirectContent = nullptr;
+    window->directContents[drawable->id] = std::move(drawable);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_winlator_cmod_widget_XServerView_nativeUpdateDirectContent(JNIEnv *env, jclass obj, jint windowId, jint drawableId) {
+    auto window = windowManager.getWindow(windowId);
+    if (!window) return;
+    
+    auto directContent = window->directContents[drawableId].get();
+    if (!directContent) return;
+    
+    window->currentDirectContent = directContent;
+    renderer.requestRenderer();
+}
+
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_winlator_cmod_widget_XServerView_nativeRemoveDirectContent(JNIEnv *env, jclass obj, jint windowId, jint drawableId) {
+    auto window = windowManager.getWindow(windowId);
+    if (!window) return;
+    
+    window->directContents.erase(drawableId);
 }

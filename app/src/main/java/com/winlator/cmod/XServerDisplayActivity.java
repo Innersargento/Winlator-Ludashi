@@ -105,6 +105,7 @@ import com.winlator.cmod.xserver.Pointer;
 import com.winlator.cmod.xserver.Property;
 import com.winlator.cmod.xserver.ScreenInfo;
 import com.winlator.cmod.xserver.Window;
+import com.winlator.cmod.xserver.Drawable;
 import com.winlator.cmod.xserver.WindowManager;
 import com.winlator.cmod.xserver.XServer;
 
@@ -479,6 +480,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         // Add the OnWindowModificationListener for dynamic workarounds
         xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {
+            @Override
+            public void onUpdateWindowContentDirect(Window window, Drawable drawable) {
+                if (frameRatingWindowId == window.id) frameRating.update();
+            }
+            
             @Override
             public void onUpdateWindowContent(Window window) {
                 if (!winStarted[0] && window.isApplicationWindow()) {

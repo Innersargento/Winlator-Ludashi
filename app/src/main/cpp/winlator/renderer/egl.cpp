@@ -226,9 +226,13 @@ void EGLRenderer::drawFrame() {
 }
     
 void EGLRenderer::renderWindows() {
-    for (const auto& window : renderableWindows) {
-        if (window == nullptr) continue;
-        renderDrawable(window->content, window->rootX, window->rootY, true);
+    for (const auto& renderableWindow : renderableWindows) {
+        if (renderableWindow == nullptr) continue;
+        
+        if (renderableWindow->window->hasDirectContents())
+            renderDrawable(renderableWindow->window->currentDirectContent, renderableWindow->rootX, renderableWindow->rootY, true);
+        else
+            renderDrawable(renderableWindow->content, renderableWindow->rootX, renderableWindow->rootY, true);
     }
 }
 
@@ -250,17 +254,23 @@ void EGLRenderer::renderCursor() {
 }
 
 void EGLRenderer::renderDrawable(Drawable *drawable, int x, int y, bool isWindow) {
-    if (drawable == nullptr || drawable->data == nullptr) return;
+    if (drawable == nullptr || (drawable->data == nullptr && !drawable->isDirectContent)) return;
     
     if (drawable->textureId < 0) {
-        drawable->textureId = allocateTexture(drawable->width, drawable->height);
+        if (drawable->isDirectContent) 
+            drawable->textureId = allocateTextureDirect(drawable->ahb);
+        else    
+            drawable->textureId = allocateTexture(drawable->width, drawable->height);
     }    
     else if (drawable->sizeChanged) {
-        reallocateTexture(drawable->textureId, drawable->width, drawable->height);
+        if (drawable->isDirectContent) 
+            drawable->textureId = allocateTextureDirect(drawable->ahb);
+        else    
+            reallocateTexture(drawable->textureId, drawable->width, drawable->height);
         drawable->sizeChanged = false;
     }
         
-    if (drawable->isDirty) {
+    if (drawable->isDirty && !drawable->isDirectContent) {
         updateTextureDrawable(drawable->textureId, drawable->width, drawable->height, drawable->data);
         drawable->isDirty = false;
     }    
@@ -268,7 +278,7 @@ void EGLRenderer::renderDrawable(Drawable *drawable, int x, int y, bool isWindow
     XForm::set(tmpXForm1, x, y, drawable->width, drawable->height);
     XForm::multiply(tmpXForm1, tmpXForm1, tmpXForm2);
     
-    renderDrawable(drawable->textureId, 6, tmpXForm1, isWindow);
+    renderDrawable(drawable->textureId, 6, tmpXForm1, isWindow, drawable->format == AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM);
 }
 
 void EGLRenderer::updateScene() {
@@ -286,6 +296,7 @@ void EGLRenderer::collectRenderableWindows(Window *window, int x, int y) {
             renderableWindow->rootX = x;
             renderableWindow->rootY = y;
             renderableWindow->content = window->drawable.get();
+            renderableWindow->window = window;
             renderableWindows.push_back(std::move(renderableWindow));
         }    
     }
@@ -297,7 +308,7 @@ void EGLRenderer::collectRenderableWindows(Window *window, int x, int y) {
 
 void EGLRenderer::updateWindowPosition(Window* window) {
     for (auto& renderableWindow : renderableWindows) {
-        if (renderableWindow->content == window->drawable.get()) {
+        if (renderableWindow->window == window) {
             renderableWindow->rootX = window->getRootX();
             renderableWindow->rootY = window->getRootY();
             break;
@@ -369,7 +380,7 @@ void EGLRenderer::createEGLSurface(ANativeWindow *window) {
         printf("Failed to make context current");
         return;
     }
-        
+
     glFrontFace(GL_CCW);
     glDisable(GL_CULL_FACE);
 
@@ -383,14 +394,60 @@ void EGLRenderer::createEGLSurface(ANativeWindow *window) {
     drawableShader = new DrawableShader();
 }
 
-void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool isFromWindow) {
+void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool isFromWindow, bool isRGBA) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textureId);
     glUniform1i(drawableShader->getUniformLoc("texture"), 0);
     glUniform1fv(drawableShader->getUniformLoc("xform"), length, xform);
     glUniform1i(drawableShader->getUniformLoc("is_cursor"), isFromWindow ? 0 : 1);
+    glUniform1i(drawableShader->getUniformLoc("is_rgba"), isRGBA ? 1 : 0);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+int EGLRenderer::allocateTextureDirect(AHardwareBuffer* hardwareBuffer) {
+    int textureId;
+    
+    if (!hardwareBuffer || !display) {
+        return -1;
+    }
+
+    const EGLint attribList[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
+
+    EGLClientBuffer clientBuffer = eglGetNativeClientBufferANDROID(hardwareBuffer);
+    if (!clientBuffer) {
+        return -1;
+    }
+
+    EGLImageKHR imageKHR = eglCreateImageKHR(display, EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, clientBuffer, attribList);
+    if (!imageKHR) {
+        return -1;
+    }
+    
+    glGenTextures(1, (GLuint *)&textureId);
+    glActiveTexture(GL_TEXTURE0);
+
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    if (glGetError() != GL_NO_ERROR) {
+        eglDestroyImageKHR(display, imageKHR);
+        return -1;
+    }
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, imageKHR);
+    if (glGetError() != GL_NO_ERROR) {
+        eglDestroyImageKHR(display, imageKHR);
+        return -1;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    eglDestroyImageKHR(display, imageKHR);
+    
+    return textureId;
 }
 
 int EGLRenderer::allocateTexture(int width, int height) {

@@ -41,8 +41,11 @@ public class Drawable extends XResource {
     }
 
     public void setGPUImage(GPUImage texture) {
-        this.data = texture.getVirtualData();
         this.gpuImage = texture;
+    }
+    
+    public GPUImage getGPUImage() {
+        return this.gpuImage;
     }
 
     public ByteBuffer getData() {
@@ -170,6 +173,10 @@ public class Drawable extends XResource {
         drawAlphaMaskedBitmap(foreRed, foreGreen, foreBlue, backRed, backGreen, backBlue, srcDrawable.data, maskDrawable.data, this.data);
         this.data.rewind();
 
+        if (onDrawListener != null) onDrawListener.run();
+    }
+    
+    public void updateDirect() {
         if (onDrawListener != null) onDrawListener.run();
     }
     

@@ -2,11 +2,12 @@ package com.winlator.cmod.renderer;
 
 import androidx.annotation.Keep;
 import com.winlator.cmod.xserver.Drawable;
+import com.winlator.cmod.xserver.Window;
 import java.nio.ByteBuffer;
 
 public class GPUImage {
-    private long hardwareBufferPtr;
-    private long imageKHRPtr;
+    public long hardwareBufferPtr;
+    public int format;
     private ByteBuffer virtualData;
     private short stride;
     private static boolean supported = false;
@@ -30,17 +31,9 @@ public class GPUImage {
     }
     
     public GPUImage(int socketFd) {
-        hardwareBufferPtr = hardwareBufferFromSocket(socketFd);
-        if (hardwareBufferPtr != 0) {
-            virtualData = lockHardwareBuffer(hardwareBufferPtr);
-            if (virtualData == null) {
-                System.err.println("Error: Failed to lock hardware buffer");
-                destroyHardwareBuffer(hardwareBufferPtr);
-                hardwareBufferPtr = 0;
-            }
-        } else {
+        hardwareBufferPtr = nativeHardwareBufferFromSocket(socketFd);
+        if (hardwareBufferPtr == 0)
             System.err.println("Error: Failed to create hardware buffer");
-        }
     }
 
     public short getStride() {
@@ -60,15 +53,12 @@ public class GPUImage {
         return supported;
     }
 
-    private native long hardwareBufferFromSocket(int fd);
+    private native long nativeHardwareBufferFromSocket(int fd);
     
     private native long createHardwareBuffer(short width, short height);
 
     private native void destroyHardwareBuffer(long hardwareBufferPtr);
 
     private native ByteBuffer lockHardwareBuffer(long hardwareBufferPtr);
-
-    private native long createImageKHR(long hardwareBufferPtr, int textureId);
-
-    private native void destroyImageKHR(long imageKHRPtr);
 }
+    

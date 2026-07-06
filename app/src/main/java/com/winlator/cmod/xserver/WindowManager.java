@@ -40,6 +40,8 @@ public class WindowManager extends XResourceManager {
         default void onChangeWindowZOrder(Window.StackMode stackMode, Window window, Window sibling) {}
 
         default void onUpdateWindowContent(Window window) {}
+        
+        default void onUpdateWindowContentDirect(Window window, Drawable drawable) {}
 
         default void onUpdateWindowGeometry(Window window, boolean resized) {}
 
@@ -338,6 +340,12 @@ public class WindowManager extends XResourceManager {
     public void triggerOnUpdateWindowContent(Window window) {
         for (int i = onWindowModificationListeners.size()-1; i >= 0; i--) {
             onWindowModificationListeners.get(i).onUpdateWindowContent(window);
+        }
+    }
+    
+    public void triggerOnUpdateWindowContentDirect(Window window, Drawable drawable) {
+        for (int i = onWindowModificationListeners.size()-1; i >= 0; i--) {
+            onWindowModificationListeners.get(i).onUpdateWindowContentDirect(window, drawable);
         }
     }
 

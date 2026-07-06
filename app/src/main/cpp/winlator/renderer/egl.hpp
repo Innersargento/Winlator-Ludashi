@@ -3,10 +3,15 @@
 #include <android/native_window.h>
 #include <android/hardware_buffer.h>
 #include <android/log.h>
+
+#define EGL_EGLEXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES
+
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+
 #include <string>
 #include <algorithm>
 #include <thread>
@@ -30,6 +35,7 @@ class EGLRenderer {
             int rootX;
             int rootY;
             Drawable *content;
+            Window *window;
         };
         
         enum class State {
@@ -88,9 +94,10 @@ class EGLRenderer {
         void renderWindows();
         void destroyEGLSurface();
         void renderCursor();
-        void renderDrawable(int textureId, int length, float xform[], bool isFromWindow);
+        void renderDrawable(int textureId, int length, float xform[], bool isFromWindow, bool isRGBA);
         void updateTextureDrawable(int textureId, int width, int height, void *data);
         int allocateTexture(int width, int height);
+        int allocateTextureDirect(AHardwareBuffer* hardwareBuffer);
         int reallocateTexture(int id, int width, int height);
         void init();
         void createEGLSurface(ANativeWindow *window);
