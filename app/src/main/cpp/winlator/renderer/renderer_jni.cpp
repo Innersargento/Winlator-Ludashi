@@ -1,6 +1,9 @@
 #include "egl.hpp"
 #include "cursor.hpp"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 JNICache cache;
 JNIXServer xserver;
 WindowManager windowManager;
@@ -17,7 +20,7 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void*) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, jobject context, jobject xServer, jobject rootCursorObj) {
+Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, jobject context, jobject xServer) {
     jobject windowManagerObj = env->GetObjectField(xServer, cache.windowManager);
     jobject inputDeviceManagerObj = env->GetObjectField(xServer, cache.inputDeviceManager);
     jobject rootWindowObj = env->GetObjectField(windowManagerObj, cache.rootWindow);
@@ -66,19 +69,31 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     windowManager.setRootWindow(rootWindow.get());
     windowManager.addWindow(rootWindow->id, std::move(rootWindow));
     
+    jclass contextClass = env->GetObjectClass(context);
+    jmethodID getAssets = env->GetMethodID(contextClass, "getAssets", "()Landroid/content/res/AssetManager;");
+    jobject assetManagerObject = env->CallObjectMethod(context, getAssets);
+    AAssetManager *assetManager = AAssetManager_fromJava(env, assetManagerObject);
+    
+    AAsset *cursorAsset = AAssetManager_open(assetManager, "cursor.png", AASSET_MODE_BUFFER);
+    off_t len = AAsset_getLength(cursorAsset);
+    const unsigned char *data = static_cast<const unsigned char *>(AAsset_getBuffer(cursorAsset));
+    
+    int w, h, c;
+    unsigned char *cursorData = stbi_load_from_memory(data, len, &w, &h, &c, 4);
+    
+    AAsset_close(cursorAsset);
+    
     auto cursorDrawable = std::make_unique<struct Drawable>();
-    cursorDrawable->id = env->GetIntField(rootCursorObj, cache.drawableID);
+    cursorDrawable->id = -1;
     cursorDrawable->textureId = -1;
     cursorDrawable->isDirectContent = false;
     cursorDrawable->format = 5;
-    cursorDrawable->width = env->GetShortField(rootCursorObj, cache.drawableWidth);
-    cursorDrawable->height = env->GetShortField(rootCursorObj, cache.drawableHeight);
-    
-    jobject rootCursorData = env->CallObjectMethod(rootCursorObj, cache.drawableGetData);
-    cursorDrawable->data = env->GetDirectBufferAddress(rootCursorData);
+    cursorDrawable->width = w;
+    cursorDrawable->height = h;
+    cursorDrawable->data = cursorData;
     cursorDrawable->isDirty = true;
     cursorDrawable->sizeChanged = false;
-    cursorDrawable->drawableObj = env->NewGlobalRef(rootCursorObj);
+    cursorDrawable->drawableObj = nullptr;
     
     auto rootCursor = std::make_unique<struct Cursor>();
     rootCursor->id = cursorDrawable->id;
