@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
@@ -69,6 +70,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     private SharedPreferences sharedPreferences;
     private ContainerManager containerManager;
     private boolean isDarkMode;
+    private NavigationView navigationView;
 
     private void createNotificationChannel() {
     	String name = "Winlator";
@@ -101,22 +103,12 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             startActivity(intent);
         }
 
-        // Load the user's preferred theme
-        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
-        isDarkMode = sharedPreferences.getBoolean("dark_mode", false);
-
-        // Apply the theme based on the preference
-        if (isDarkMode) {
-            setTheme(R.style.AppTheme_Dark);
-        } else {
-            setTheme(R.style.AppTheme);
-        }
-
+        applyThemeFromPrefs();
 
         setContentView(R.layout.main_activity);
 
         drawerLayout = findViewById(R.id.DrawerLayout);
-        NavigationView navigationView = findViewById(R.id.NavigationView);
+        navigationView = findViewById(R.id.NavigationView);
         navigationView.setNavigationItemSelectedListener(this);
 
         setSupportActionBar(findViewById(R.id.Toolbar));
@@ -126,9 +118,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             actionBar.setHomeAsUpIndicator(R.drawable.icon_action_bar_menu);
         }
 
-        // Determine text color based on dark mode
-        int textColor = isDarkMode ? Color.WHITE : Color.BLACK;
-        setNavigationViewItemTextColor(navigationView, textColor);
+        applyNavTextColor();
 
         // Create Winlator folder if not present
         File winlatorDir = new File(SettingsFragment.DEFAULT_WINLATOR_PATH);
@@ -157,6 +147,26 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                     startForegroundService(notificationService);
             }
         }
+    }
+
+    private void applyThemeFromPrefs() {
+        isDarkMode = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("dark_mode", false);
+        setTheme(isDarkMode ? R.style.AppTheme_Dark : R.style.AppTheme);
+        getWindow().setBackgroundDrawableResource(
+                isDarkMode ? R.color.window_background_color_dark : R.color.window_background_color);
+    }
+
+    private void applyNavTextColor() {
+        if (navigationView == null) return;
+        isDarkMode = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("dark_mode", false);
+        setNavigationViewItemTextColor(navigationView, isDarkMode ? Color.WHITE : Color.BLACK);
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyThemeFromPrefs();
+        applyNavTextColor();
     }
 
     private void showAllFilesAccessDialog() {
