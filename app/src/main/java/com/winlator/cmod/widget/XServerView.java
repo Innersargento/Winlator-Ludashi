@@ -43,7 +43,6 @@ public class XServerView extends SurfaceView implements SurfaceHolder.Callback, 
     static final String RENDERER_LOG_STRING = "Renderer";
     private XServer xServer;
     private Context context;
-    private final Drawable rootCursorDrawable;
     private int surfaceWidth;
     private int surfaceHeight;
     private boolean fullscreen = false;
@@ -59,12 +58,11 @@ public class XServerView extends SurfaceView implements SurfaceHolder.Callback, 
         super(context);
         this.xServer = xserver;
         this.context = context;
-        this.rootCursorDrawable = createRootCursorDrawable();
         getHolder().addCallback(this);
         xServer.windowManager.addOnWindowModificationListener(this);
         xServer.pointer.addOnPointerMotionListener(this);
         xServer.cursorManager.addOnCursorModificationListener(this);
-        nativeInit(this.context, xServer, rootCursorDrawable);
+        nativeInit(this.context, xServer);
     }
     
     @Override
@@ -93,14 +91,6 @@ public class XServerView extends SurfaceView implements SurfaceHolder.Callback, 
     public void onResume() {
         nativeResume();
     }
-    
-    private Drawable createRootCursorDrawable() {
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inScaled = false;
-        Bitmap bitmap = BitmapFactory.decodeResource(context.getResources(), R.drawable.cursor, options);
-        return Drawable.fromBitmap(bitmap);
-    }
-    
     
     public void toggleFullscreen() {
         toggleFullscreen = true;
@@ -222,7 +212,7 @@ public class XServerView extends SurfaceView implements SurfaceHolder.Callback, 
     @FastNative
     public native void nativeDestroySurface();
     @FastNative
-    public native void nativeInit(Context context, XServer xserver, Drawable rootCursor);
+    public native void nativeInit(Context context, XServer xserver);
     @FastNative
     public native void nativeChangeSurface(int width, int height);
     @FastNative

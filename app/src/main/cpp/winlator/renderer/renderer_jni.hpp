@@ -2,6 +2,7 @@
 
 #include <jni.h>
 #include <android/native_window_jni.h>
+#include <android/asset_manager_jni.h>
 
 #define LOAD_METHOD_ID(method, env, cls, name, sig) \
     (method) = (env)->GetMethodID((cls), (name), (sig));
