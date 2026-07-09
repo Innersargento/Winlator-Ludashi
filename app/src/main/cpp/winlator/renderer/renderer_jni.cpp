@@ -25,6 +25,11 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     jobject inputDeviceManagerObj = env->GetObjectField(xServer, cache.inputDeviceManager);
     jobject rootWindowObj = env->GetObjectField(windowManagerObj, cache.rootWindow);
     
+    jstring displayDriver = (jstring)env->CallObjectMethod(xServer, cache.getDisplayDriver);
+    const char *p = env->GetStringUTFChars(displayDriver, nullptr);
+    std::string dispDriver(p);
+    env->ReleaseStringUTFChars(displayDriver, p);
+    
     auto rootWindow = std::make_unique<struct Window>();
     
     rootWindow->id = env->GetIntField(rootWindowObj, cache.windowID);
@@ -107,6 +112,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     
     xserver.windowManager = env->NewGlobalRef(windowManagerObj);
     xserver.inputDeviceManager = env->NewGlobalRef(inputDeviceManagerObj);
+    xserver.displayDriver = dispDriver;
     xserver.xserver = env->NewGlobalRef(xServer);
     
     env->DeleteLocalRef(windowManagerObj);

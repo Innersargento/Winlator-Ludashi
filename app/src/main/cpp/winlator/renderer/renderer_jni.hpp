@@ -16,8 +16,13 @@ class JNIXServer {
         jobject windowManager;
         jobject inputDeviceManager;
         jobject xserver;
+        std::string displayDriver;
         
         JNIXServer() {}
+        
+        bool isDisplayX() {
+            return displayDriver == "displayx";
+        }
 };
 
 class JNICache {
@@ -25,6 +30,7 @@ class JNICache {
         JavaVM *vm;
         
         jclass xserverClass;
+        jmethodID getDisplayDriver;
         jfieldID windowManager;
         jfieldID inputDeviceManager;
         
@@ -93,6 +99,8 @@ class JNICache {
             jclass drawableClass = env->FindClass("com/winlator/cmod/xserver/Drawable");
             jclass cursorClass = env->FindClass("com/winlator/cmod/xserver/Cursor");
             jclass gpuImageClass = env->FindClass("com/winlator/cmod/renderer/GPUImage");
+            
+            LOAD_METHOD_ID(getDisplayDriver, env, xServerClass, "getDisplayDriver", "()Ljava/lang/String;");
             
             LOAD_FIELD_ID(inputDeviceManager, env, xServerClass, "inputDeviceManager", "Lcom/winlator/cmod/xserver/InputDeviceManager;");
             LOAD_METHOD_ID(getPointWindow, env, inputDeviceManagerClass, "getPointWindow", "()Lcom/winlator/cmod/xserver/Window;");

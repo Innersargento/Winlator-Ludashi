@@ -35,6 +35,7 @@ public class XServer {
     public final InputDeviceManager inputDeviceManager;
     public final GrabManager grabManager;
     public final CursorLocker cursorLocker;
+    private String displayDriver;
     private SHMSegmentManager shmSegmentManager;
     private WinHandler winHandler;
     private final EnumMap<Lockable, ReentrantLock> locks = new EnumMap<>(Lockable.class);
@@ -60,6 +61,14 @@ public class XServer {
 
         DesktopHelper.attachTo(this);
         setupExtensions();
+    }
+    
+    public String getDisplayDriver() {
+        return this.displayDriver;
+    }
+    
+    public void setDisplayDriver(String displayDriver) {
+        this.displayDriver = displayDriver;
     }
 
     public boolean isRelativeMouseMovement() {
