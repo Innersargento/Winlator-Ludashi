@@ -18,6 +18,7 @@
 #include <functional>
 #include <queue>
 #include <cmath>
+#include <atomic>
 #include <condition_variable>
 
 #include "shader.hpp"
@@ -68,20 +69,20 @@ class EGLRenderer {
            }
         };
         
-        EGLDisplay display;
-        EGLConfig config;
+        EGLDisplay display = EGL_NO_DISPLAY;
+        EGLConfig config = nullptr;
         EGLSurface surface = EGL_NO_SURFACE;
         EGLContext context = EGL_NO_CONTEXT;
-        DrawableShader *drawableShader;
-        ANativeWindow *window;
+        DrawableShader *drawableShader = nullptr;
+        ANativeWindow *window = nullptr;
         std::vector<std::unique_ptr<struct RenderableWindow>> renderableWindows;
         std::thread renderingThread;
         ViewTransformation viewTransformation;
         RenderLock renderLock;
         State state = State::NONE;
         std::queue<std::function<void()>> eventQueue;
-        int surfaceWidth;
-        int surfaceHeight;
+        int surfaceWidth = 0;
+        int surfaceHeight = 0;
         bool fullscreen = false;
         bool viewportNeedsUpdate = true;
         float tmpXForm1[6] = {1, 0, 0, 1, 0, 0};
@@ -104,11 +105,11 @@ class EGLRenderer {
         void collectRenderableWindows(Window *window, int x, int y);
     
     public:
-        bool screenOffsetYRelativeToCursor = false;
-        bool toggleFullscreen = false;
-        bool magnifierEnabled = true;
-        float magnifierZoom = 1.0f;
-        bool cursorVisible = true;
+        std::atomic<bool> screenOffsetYRelativeToCursor{false};
+        std::atomic<bool> toggleFullscreen{false};
+        std::atomic<bool> magnifierEnabled{true};
+        std::atomic<float> magnifierZoom{1.0f};
+        std::atomic<bool> cursorVisible{true};
         WindowManager *windowManager;
         CursorManager *cursorManager;
         JNICache *cache;

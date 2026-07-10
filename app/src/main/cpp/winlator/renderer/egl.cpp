@@ -18,6 +18,7 @@ void EGLRenderer::requestRenderer() {
 
 void EGLRenderer::createSurface(ANativeWindow *window) {
     auto lock = renderLock.lock();
+    if (this->window && this->window != window) ANativeWindow_release(this->window);
     this->window = window;
     state = State::CREATE_SURFACE;
     renderLock.notify();
@@ -26,10 +27,13 @@ void EGLRenderer::createSurface(ANativeWindow *window) {
 
 void EGLRenderer::destroySurface() {
       auto lock = renderLock.lock();
+      ANativeWindow *oldWindow = this->window;
       this->window = nullptr;
       state = State::DESTROY_SURFACE;
       renderLock.notify();
       renderLock.wait(lock, [&]{ return state == State::NONE; });
+      lock.unlock();
+      if (oldWindow) ANativeWindow_release(oldWindow);
 }
 
 void EGLRenderer::changeSurface(int width, int height) {
@@ -65,6 +69,22 @@ void EGLRenderer::renderingThreadLoop() {
         
         if (state == State::STOP) {
             printf("Received state STOP");
+            if (surface != EGL_NO_SURFACE) {
+                destroyEGLSurface();
+                surface = EGL_NO_SURFACE;
+            }
+            if (context != EGL_NO_CONTEXT) {
+                eglDestroyContext(display, context);
+                context = EGL_NO_CONTEXT;
+            }
+            if (display != EGL_NO_DISPLAY) {
+                eglTerminate(display);
+                display = EGL_NO_DISPLAY;
+            }
+            if (window) {
+                ANativeWindow_release(window);
+                window = nullptr;
+            }
             cache->detachEnv(xServer->env);
             state = State::NONE;
             renderLock.notify();
@@ -137,11 +157,13 @@ void EGLRenderer::renderingThreadLoop() {
         }
         
         if (sizeChanged) {
-            viewTransformation.update(surfaceWidth, surfaceHeight, windowManager->getRootWindow()->width, windowManager->getRootWindow()->height);    
+            viewTransformation.update(surfaceWidth, surfaceHeight, windowManager->getRootWindow()->width, windowManager->getRootWindow()->height);
             viewportNeedsUpdate = true;
             sizeChanged = false;
-            drawFrame();
-            eglSwapBuffers(display, surface);
+            if (surface != EGL_NO_SURFACE) {
+                drawFrame();
+                eglSwapBuffers(display, surface);
+            }
         }
         
         if (requestRender && surface != EGL_NO_SURFACE) {
@@ -182,7 +204,7 @@ void EGLRenderer::drawFrame() {
     if (magnifierEnabled) {
         float pointerX = 0;
         float pointerY = 0;
-        float magnifierZoom = !screenOffsetYRelativeToCursor ? this->magnifierZoom : 1.0f;
+        float magnifierZoom = !screenOffsetYRelativeToCursor ? this->magnifierZoom.load() : 1.0f;
 
         if (magnifierZoom != 1.0f) {
             pointerX = std::clamp(cursorManager->pointer.posX * magnifierZoom - windowManager->getRootWindow()->width * 0.5f, 0.0f, windowManager->getRootWindow()->width * std::abs(1.0f - magnifierZoom));
@@ -238,8 +260,12 @@ void EGLRenderer::renderWindows() {
 
 void EGLRenderer::renderCursor() {
     jobject pointWindowObj = xServer->env->CallObjectMethod(xServer->inputDeviceManager, cache->getPointWindow);
-    jint id = xServer->env->GetIntField(pointWindowObj, cache->windowID);
-    auto pointWindow = windowManager->getWindow(id);
+    Window *pointWindow = nullptr;
+    if (pointWindowObj != nullptr) {
+        jint id = xServer->env->GetIntField(pointWindowObj, cache->windowID);
+        pointWindow = windowManager->getWindow(id);
+        xServer->env->DeleteLocalRef(pointWindowObj);
+    }
     auto cursor = (pointWindow != nullptr) ? pointWindow->cursor : nullptr;
     int x = std::clamp(cursorManager->pointer.posX, 0, windowManager->getRootWindow()->width - 1);
     int y = std::clamp(cursorManager->pointer.posY, 0, windowManager->getRootWindow()->height - 1);
@@ -347,7 +373,7 @@ void EGLRenderer::init() {
     };
     
     result = eglChooseConfig(display, attrib_list, &config, 1, &num_configs);
-    if (result != EGL_TRUE || num_configs < 0) {
+    if (result != EGL_TRUE || num_configs <= 0) {
         printf("Failed to find suitable egl config");
         return;
     }
@@ -490,7 +516,10 @@ void EGLRenderer::updateTextureDrawable(int textureId, int width, int height, vo
 
 void EGLRenderer::destroyEGLSurface() {
     glFinish();
-    delete drawableShader;
+    if (drawableShader) {
+        delete drawableShader;
+        drawableShader = nullptr;
+    }
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroySurface(display, surface);
 }
