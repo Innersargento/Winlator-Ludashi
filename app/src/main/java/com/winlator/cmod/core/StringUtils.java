@@ -96,11 +96,14 @@ public class StringUtils {
             return "";
         }
 
-        // Replace backslashes with double backslashes
+        // Replace backslashes with quadruple backslashes so a single '\'
+        // survives StringUtils.unescape() (4 -> 1) when the shortcut is read back.
         String escapedPath = path.replace("\\", "\\\\\\\\");
 
-        // Replace spaces with escaped spaces
-        escapedPath = escapedPath.replace(" ", "\\\\");
+        // Escape spaces as "\ " (backslash + space). The previous "\\" replacement
+        // deleted the space entirely on unescape, turning e.g.
+        // "Grand Theft Auto IV" into "GrandTheftAutoIV" -> Wine "Path not found".
+        escapedPath = escapedPath.replace(" ", "\\ ");
 
         return escapedPath;
     }
