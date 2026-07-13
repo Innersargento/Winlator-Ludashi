@@ -6,8 +6,8 @@
         <item android:icon="@drawable/icon_open" android:id="@+id/main_menu_file_manager" android:title="File Manager" />
         <item android:icon="@drawable/icon_container" android:id="@+id/main_menu_containers" android:title="@string/containers" />
         <item android:icon="@drawable/icon_input_controls" android:id="@+id/main_menu_input_controls" android:title="@string/input_controls" />
-        <item android:icon="@drawable/icon_open" android:id="@+id/main_menu_contents" android:title="@string/contents"/>
-        <item android:icon="@drawable/icon_open" android:id="@+id/main_menu_adrenotools_gpu_drivers" android:title="@string/adrenotools_gpu_drivers"/>
+        <item android:icon="@drawable/icon_contents" android:id="@+id/main_menu_contents" android:title="@string/contents"/>
+        <item android:icon="@drawable/icon_adrenotools" android:id="@+id/main_menu_adrenotools_gpu_drivers" android:title="@string/adrenotools_gpu_drivers"/>
         <item android:icon="@drawable/icon_settings" android:id="@+id/main_menu_settings" android:title="@string/settings" />
         <item android:icon="@drawable/icon_about" android:id="@+id/main_menu_about" android:title="@string/about" />
     </group>
