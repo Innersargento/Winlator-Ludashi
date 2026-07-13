@@ -10,9 +10,11 @@
             android:id="@+id/main_menu_input_controls"
             android:title="@string/input_controls" />
         <item
+            android:icon="@drawable/icon_relative_mouse"
             android:id="@+id/main_menu_relative_mouse_movement"
             android:title="Toggle Relative Mouse Movement" />
         <item
+            android:icon="@drawable/icon_disable_mouse"
             android:id="@+id/main_menu_disable_mouse"
             android:title="@string/disable_mouse" />
         <item
