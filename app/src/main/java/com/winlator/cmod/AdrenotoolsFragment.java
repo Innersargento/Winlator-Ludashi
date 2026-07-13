@@ -28,6 +28,7 @@ public class AdrenotoolsFragment extends Fragment {
     @Override 
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setHasOptionsMenu(true);
         this.adrenotoolsManager = new AdrenotoolsManager(getActivity());
     }
     
@@ -64,8 +65,32 @@ public class AdrenotoolsFragment extends Fragment {
             if (!driver.isEmpty())
                 ((DriversAdapter)recyclerView.getAdapter()).addItem(driver);
         }
-     }       
-    
+     }
+
+    @Override
+    public void onCreateOptionsMenu(android.view.Menu menu, android.view.MenuInflater inflater) {
+        android.view.MenuItem item = menu.add(0, 1, 0, "Baixar");
+        item.setIcon(android.R.drawable.stat_sys_download);
+        item.setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(android.view.MenuItem item) {
+        if (item.getItemId() == 1) {
+            com.winlator.cmod.contentdialog.RepositoryManagerDialog repoDialog = new com.winlator.cmod.contentdialog.RepositoryManagerDialog(getContext());
+
+            repoDialog.setOnDismissCallback(() -> {
+                if (recyclerView != null && recyclerView.getAdapter() instanceof DriversAdapter) {
+                    ((DriversAdapter) recyclerView.getAdapter()).reloadList();
+                }
+            });
+
+            repoDialog.show();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
     private class DriversAdapter extends RecyclerView.Adapter<DriversAdapter.ViewHolder> {
         private ArrayList<String> driversList;
 
@@ -85,7 +110,12 @@ public class AdrenotoolsFragment extends Fragment {
         public DriversAdapter(ArrayList<String> driversList) {
             this.driversList = driversList;
         }
-        
+
+        public void reloadList() {
+            this.driversList = adrenotoolsManager.enumarateInstalledDrivers();
+            notifyDataSetChanged();
+        }
+
         @Override
         public ViewHolder onCreateViewHolder(ViewGroup viewGroup, int viewType) {
             View view = LayoutInflater.from(viewGroup.getContext()).inflate(R.layout.adrenotools_list_item, viewGroup, false);
