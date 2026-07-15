@@ -18,7 +18,6 @@ void EGLRenderer::requestRenderer() {
 
 void EGLRenderer::createSurface(ANativeWindow *window) {
     auto lock = renderLock.lock();
-    if (this->window && this->window != window) ANativeWindow_release(this->window);
     this->window = window;
     state = State::CREATE_SURFACE;
     renderLock.notify();
@@ -27,13 +26,10 @@ void EGLRenderer::createSurface(ANativeWindow *window) {
 
 void EGLRenderer::destroySurface() {
       auto lock = renderLock.lock();
-      ANativeWindow *oldWindow = this->window;
       this->window = nullptr;
       state = State::DESTROY_SURFACE;
       renderLock.notify();
       renderLock.wait(lock, [&]{ return state == State::NONE; });
-      lock.unlock();
-      if (oldWindow) ANativeWindow_release(oldWindow);
 }
 
 void EGLRenderer::changeSurface(int width, int height) {
@@ -51,7 +47,7 @@ void EGLRenderer::renderingThreadLoop() {
     bool hasSurface = false;
     bool paused = false;
     
-    xServer->env = cache->getEnv();
+    this->env = cache->getEnv();
     
     while (true) {
         std::function<void()> func = nullptr;
@@ -69,23 +65,7 @@ void EGLRenderer::renderingThreadLoop() {
         
         if (state == State::STOP) {
             printf("Received state STOP");
-            if (surface != EGL_NO_SURFACE) {
-                destroyEGLSurface();
-                surface = EGL_NO_SURFACE;
-            }
-            if (context != EGL_NO_CONTEXT) {
-                eglDestroyContext(display, context);
-                context = EGL_NO_CONTEXT;
-            }
-            if (display != EGL_NO_DISPLAY) {
-                eglTerminate(display);
-                display = EGL_NO_DISPLAY;
-            }
-            if (window) {
-                ANativeWindow_release(window);
-                window = nullptr;
-            }
-            cache->detachEnv(xServer->env);
+            cache->detachEnv(env);
             state = State::NONE;
             renderLock.notify();
             return;
@@ -157,13 +137,11 @@ void EGLRenderer::renderingThreadLoop() {
         }
         
         if (sizeChanged) {
-            viewTransformation.update(surfaceWidth, surfaceHeight, windowManager->getRootWindow()->width, windowManager->getRootWindow()->height);
+            viewTransformation.update(surfaceWidth, surfaceHeight, windowManager->getRootWindow()->width, windowManager->getRootWindow()->height);    
             viewportNeedsUpdate = true;
             sizeChanged = false;
-            if (surface != EGL_NO_SURFACE) {
-                drawFrame();
-                eglSwapBuffers(display, surface);
-            }
+            drawFrame();
+            eglSwapBuffers(display, surface);
         }
         
         if (requestRender && surface != EGL_NO_SURFACE) {
@@ -204,7 +182,7 @@ void EGLRenderer::drawFrame() {
     if (magnifierEnabled) {
         float pointerX = 0;
         float pointerY = 0;
-        float magnifierZoom = !screenOffsetYRelativeToCursor ? this->magnifierZoom.load() : 1.0f;
+        float magnifierZoom = !screenOffsetYRelativeToCursor ? this->magnifierZoom : 1.0f;
 
         if (magnifierZoom != 1.0f) {
             pointerX = std::clamp(cursorManager->pointer.posX * magnifierZoom - windowManager->getRootWindow()->width * 0.5f, 0.0f, windowManager->getRootWindow()->width * std::abs(1.0f - magnifierZoom));
@@ -259,13 +237,9 @@ void EGLRenderer::renderWindows() {
 }
 
 void EGLRenderer::renderCursor() {
-    jobject pointWindowObj = xServer->env->CallObjectMethod(xServer->inputDeviceManager, cache->getPointWindow);
-    Window *pointWindow = nullptr;
-    if (pointWindowObj != nullptr) {
-        jint id = xServer->env->GetIntField(pointWindowObj, cache->windowID);
-        pointWindow = windowManager->getWindow(id);
-        xServer->env->DeleteLocalRef(pointWindowObj);
-    }
+    jobject pointWindowObj = env->CallObjectMethod(xServer->inputDeviceManager, cache->getPointWindow);
+    jint id = env->GetIntField(pointWindowObj, cache->windowID);
+    auto pointWindow = windowManager->getWindow(id);
     auto cursor = (pointWindow != nullptr) ? pointWindow->cursor : nullptr;
     int x = std::clamp(cursorManager->pointer.posX, 0, windowManager->getRootWindow()->width - 1);
     int y = std::clamp(cursorManager->pointer.posY, 0, windowManager->getRootWindow()->height - 1);
@@ -304,7 +278,7 @@ void EGLRenderer::renderDrawable(Drawable *drawable, int x, int y, bool isWindow
     XForm::set(tmpXForm1, x, y, drawable->width, drawable->height);
     XForm::multiply(tmpXForm1, tmpXForm1, tmpXForm2);
     
-    renderDrawable(drawable->textureId, 6, tmpXForm1, isWindow, drawable->format == AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM);
+    renderDrawable(drawable->textureId, 6, tmpXForm1, isWindow);
 }
 
 void EGLRenderer::updateScene() {
@@ -315,7 +289,7 @@ void EGLRenderer::updateScene() {
 void EGLRenderer::collectRenderableWindows(Window *window, int x, int y) {
     if (!window->mapped) return;
     if (window != windowManager->getRootWindow()) {
-        bool viewable = xServer->env->CallBooleanMethod(window->attributes, cache->windowAttributesIsEnabled);
+        bool viewable = env->CallBooleanMethod(window->attributes, cache->windowAttributesIsEnabled);
 
         if (viewable) {
             auto renderableWindow = std::make_unique<struct RenderableWindow>();
@@ -373,7 +347,7 @@ void EGLRenderer::init() {
     };
     
     result = eglChooseConfig(display, attrib_list, &config, 1, &num_configs);
-    if (result != EGL_TRUE || num_configs <= 0) {
+    if (result != EGL_TRUE || num_configs < 0) {
         printf("Failed to find suitable egl config");
         return;
     }
@@ -420,13 +394,12 @@ void EGLRenderer::createEGLSurface(ANativeWindow *window) {
     drawableShader = new DrawableShader();
 }
 
-void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool isFromWindow, bool isRGBA) {
+void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool isFromWindow) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textureId);
     glUniform1i(drawableShader->getUniformLoc("texture"), 0);
     glUniform1fv(drawableShader->getUniformLoc("xform"), length, xform);
     glUniform1i(drawableShader->getUniformLoc("is_cursor"), isFromWindow ? 0 : 1);
-    glUniform1i(drawableShader->getUniformLoc("is_rgba"), isRGBA ? 1 : 0);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -516,10 +489,7 @@ void EGLRenderer::updateTextureDrawable(int textureId, int width, int height, vo
 
 void EGLRenderer::destroyEGLSurface() {
     glFinish();
-    if (drawableShader) {
-        delete drawableShader;
-        drawableShader = nullptr;
-    }
+    delete drawableShader;
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroySurface(display, surface);
 }

@@ -18,7 +18,6 @@
 #include <functional>
 #include <queue>
 #include <cmath>
-#include <atomic>
 #include <condition_variable>
 
 #include "shader.hpp"
@@ -26,9 +25,6 @@
 #include "window.hpp"
 #include "view_transformation.hpp"
 #include "xform.hpp"
-
-#define LOG_TAG "EGLRenderer"
-#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
 class EGLRenderer {
     private:
@@ -69,20 +65,21 @@ class EGLRenderer {
            }
         };
         
-        EGLDisplay display = EGL_NO_DISPLAY;
-        EGLConfig config = nullptr;
+        EGLDisplay display;
+        JNIEnv *env;
+        EGLConfig config;
         EGLSurface surface = EGL_NO_SURFACE;
         EGLContext context = EGL_NO_CONTEXT;
-        DrawableShader *drawableShader = nullptr;
-        ANativeWindow *window = nullptr;
+        DrawableShader *drawableShader;
+        ANativeWindow *window;
         std::vector<std::unique_ptr<struct RenderableWindow>> renderableWindows;
         std::thread renderingThread;
         ViewTransformation viewTransformation;
         RenderLock renderLock;
         State state = State::NONE;
         std::queue<std::function<void()>> eventQueue;
-        int surfaceWidth = 0;
-        int surfaceHeight = 0;
+        int surfaceWidth;
+        int surfaceHeight;
         bool fullscreen = false;
         bool viewportNeedsUpdate = true;
         float tmpXForm1[6] = {1, 0, 0, 1, 0, 0};
@@ -95,7 +92,7 @@ class EGLRenderer {
         void renderWindows();
         void destroyEGLSurface();
         void renderCursor();
-        void renderDrawable(int textureId, int length, float xform[], bool isFromWindow, bool isRGBA);
+        void renderDrawable(int textureId, int length, float xform[], bool isFromWindow);
         void updateTextureDrawable(int textureId, int width, int height, void *data);
         int allocateTexture(int width, int height);
         int allocateTextureDirect(AHardwareBuffer* hardwareBuffer);
@@ -105,11 +102,11 @@ class EGLRenderer {
         void collectRenderableWindows(Window *window, int x, int y);
     
     public:
-        std::atomic<bool> screenOffsetYRelativeToCursor{false};
-        std::atomic<bool> toggleFullscreen{false};
-        std::atomic<bool> magnifierEnabled{true};
-        std::atomic<float> magnifierZoom{1.0f};
-        std::atomic<bool> cursorVisible{true};
+        bool screenOffsetYRelativeToCursor = false;
+        bool toggleFullscreen = false;
+        bool magnifierEnabled = true;
+        float magnifierZoom = 1.0f;
+        bool cursorVisible = true;
         WindowManager *windowManager;
         CursorManager *cursorManager;
         JNICache *cache;
