@@ -47,7 +47,7 @@ void EGLRenderer::renderingThreadLoop() {
     bool hasSurface = false;
     bool paused = false;
     
-    xServer->env = cache->getEnv();
+    this->env = cache->getEnv();
     
     while (true) {
         std::function<void()> func = nullptr;
@@ -65,7 +65,7 @@ void EGLRenderer::renderingThreadLoop() {
         
         if (state == State::STOP) {
             printf("Received state STOP");
-            cache->detachEnv(xServer->env);
+            cache->detachEnv(env);
             state = State::NONE;
             renderLock.notify();
             return;
@@ -237,8 +237,8 @@ void EGLRenderer::renderWindows() {
 }
 
 void EGLRenderer::renderCursor() {
-    jobject pointWindowObj = xServer->env->CallObjectMethod(xServer->inputDeviceManager, cache->getPointWindow);
-    jint id = xServer->env->GetIntField(pointWindowObj, cache->windowID);
+    jobject pointWindowObj = env->CallObjectMethod(xServer->inputDeviceManager, cache->getPointWindow);
+    jint id = env->GetIntField(pointWindowObj, cache->windowID);
     auto pointWindow = windowManager->getWindow(id);
     auto cursor = (pointWindow != nullptr) ? pointWindow->cursor : nullptr;
     int x = std::clamp(cursorManager->pointer.posX, 0, windowManager->getRootWindow()->width - 1);
@@ -278,7 +278,7 @@ void EGLRenderer::renderDrawable(Drawable *drawable, int x, int y, bool isWindow
     XForm::set(tmpXForm1, x, y, drawable->width, drawable->height);
     XForm::multiply(tmpXForm1, tmpXForm1, tmpXForm2);
     
-    renderDrawable(drawable->textureId, 6, tmpXForm1, isWindow, drawable->format == AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM);
+    renderDrawable(drawable->textureId, 6, tmpXForm1, isWindow);
 }
 
 void EGLRenderer::updateScene() {
@@ -289,7 +289,7 @@ void EGLRenderer::updateScene() {
 void EGLRenderer::collectRenderableWindows(Window *window, int x, int y) {
     if (!window->mapped) return;
     if (window != windowManager->getRootWindow()) {
-        bool viewable = xServer->env->CallBooleanMethod(window->attributes, cache->windowAttributesIsEnabled);
+        bool viewable = env->CallBooleanMethod(window->attributes, cache->windowAttributesIsEnabled);
 
         if (viewable) {
             auto renderableWindow = std::make_unique<struct RenderableWindow>();
@@ -394,13 +394,12 @@ void EGLRenderer::createEGLSurface(ANativeWindow *window) {
     drawableShader = new DrawableShader();
 }
 
-void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool isFromWindow, bool isRGBA) {
+void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool isFromWindow) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textureId);
     glUniform1i(drawableShader->getUniformLoc("texture"), 0);
     glUniform1fv(drawableShader->getUniformLoc("xform"), length, xform);
     glUniform1i(drawableShader->getUniformLoc("is_cursor"), isFromWindow ? 0 : 1);
-    glUniform1i(drawableShader->getUniformLoc("is_rgba"), isRGBA ? 1 : 0);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindTexture(GL_TEXTURE_2D, 0);
 }

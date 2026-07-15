@@ -3,6 +3,13 @@
 #include <jni.h>
 #include <android/native_window_jni.h>
 #include <android/asset_manager_jni.h>
+#include <android/log.h>
+#include <android/surface_control.h>
+
+#define LOG_TAG "EGLRenderer"
+#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+
+#define HAL_PIXEL_FORMAT_BGRA_8888 5
 
 #define LOAD_METHOD_ID(method, env, cls, name, sig) \
     (method) = (env)->GetMethodID((cls), (name), (sig));
@@ -12,7 +19,6 @@
     
 class JNIXServer {
     public:
-        JNIEnv *env;
         jobject windowManager;
         jobject inputDeviceManager;
         jobject xserver;
@@ -63,6 +69,7 @@ class JNICache {
         
         jclass drawableClass;
         jmethodID drawableGetData;
+        jmethodID drawableSetData;
         jfieldID drawableID;
         jfieldID drawableWidth;
         jfieldID drawableHeight;
@@ -120,6 +127,7 @@ class JNICache {
             LOAD_FIELD_ID(windowAttributes, env, windowClass, "attributes", "Lcom/winlator/cmod/xserver/WindowAttributes;");
             
             LOAD_METHOD_ID(drawableGetData, env, drawableClass, "getData", "()Ljava/nio/ByteBuffer;");
+            LOAD_METHOD_ID(drawableSetData, env, drawableClass, "setData", "(Ljava/nio/ByteBuffer;)V");
             LOAD_FIELD_ID(drawableID, env, drawableClass, "id", "I");
             LOAD_FIELD_ID(drawableWidth, env, drawableClass, "width", "S");
             LOAD_FIELD_ID(drawableHeight, env, drawableClass, "height", "S");
