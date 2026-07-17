@@ -880,10 +880,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 }
                 drawerLayout.closeDrawers();
                 break;
-            case R.id.main_menu_vibration:
-                showVibrationDialog();
-                drawerLayout.closeDrawers();
-                break;
             case R.id.main_menu_logs:
                 debugDialog.show();
                 drawerLayout.closeDrawers();
@@ -894,28 +890,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 break;
         }
         return true;
-    }
-
-    private void showVibrationDialog() {
-        if (winHandler == null) return;
-
-        Context context = this;
-        int maxControllers = winHandler.getMaxControllers();
-        boolean[] checkedItems = new boolean[maxControllers];
-        String[] items = new String[maxControllers];
-
-        for (int i = 0; i < maxControllers; i++) {
-            items[i] = getString(R.string.vibration_slot, i + 1);
-            checkedItems[i] = winHandler.isVibrationEnabledForSlot(i);
-        }
-
-        new androidx.appcompat.app.AlertDialog.Builder(context)
-                .setTitle(R.string.vibration)
-                .setMultiChoiceItems(items, checkedItems, (dialog, which, isChecked) -> {
-                    winHandler.setVibrationEnabledForSlot(which, isChecked);
-                })
-                .setPositiveButton(R.string.ok, null)
-                .show();
     }
 
     @Override
@@ -1320,6 +1294,20 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         final CheckBox cbDisableMouse = dialog.findViewById(R.id.CBDisableMouse);
         cbDisableMouse.setChecked(xServer.isMouseDisabled());
 
+        final int[] vibrationSlotIds = {R.id.CBVibrationSlot1, R.id.CBVibrationSlot2, R.id.CBVibrationSlot3, R.id.CBVibrationSlot4};
+        final CheckBox[] cbVibrationSlots = new CheckBox[vibrationSlotIds.length];
+        int maxControllers = winHandler != null ? winHandler.getMaxControllers() : vibrationSlotIds.length;
+        for (int i = 0; i < vibrationSlotIds.length; i++) {
+            CheckBox cb = dialog.findViewById(vibrationSlotIds[i]);
+            cbVibrationSlots[i] = cb;
+            cb.setText(getString(R.string.vibration_slot, i + 1));
+            if (i < maxControllers) {
+                cb.setChecked(winHandler != null && winHandler.isVibrationEnabledForSlot(i));
+            } else {
+                cb.setVisibility(View.GONE);
+            }
+        }
+
         final Runnable updateProfile = () -> {
             int position = sProfile.getSelectedItemPosition();
             if (position > 0) {
@@ -1353,6 +1341,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             editor.apply();
 
             xServer.setMouseDisabled(isMouseDisabled);
+
+            if (winHandler != null) {
+                for (int i = 0; i < cbVibrationSlots.length && i < maxControllers; i++) {
+                    winHandler.setVibrationEnabledForSlot(i, cbVibrationSlots[i].isChecked());
+                }
+            }
 
             if (isTimeoutEnabled) {
                 startTouchscreenTimeout(); // Start the timeout functionality if enabled
