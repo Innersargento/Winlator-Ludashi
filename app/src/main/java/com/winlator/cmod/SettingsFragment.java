@@ -87,10 +87,6 @@ public class SettingsFragment extends Fragment {
     // Disable or enable Xinput Processing
     private CheckBox cbXinputToggle;
 
-    private CheckBox cbEnableBigPictureMode;
-    private CheckBox cbEnableCustomApiKey;
-    private EditText etCustomApiKey;
-
     private CheckBox cbDarkMode;
     boolean isDarkMode;
 
@@ -142,12 +138,6 @@ public class SettingsFragment extends Fragment {
             // Update the UI or activity theme if necessary
             updateTheme(isChecked);
         });
-
-        // Initialize Big Picture Mode Checkbox
-        cbEnableBigPictureMode = view.findViewById(R.id.CBEnableBigPictureMode);
-        cbEnableBigPictureMode.setChecked(preferences.getBoolean("enable_big_picture_mode", false));
-
-        initCustomApiKeySettings(view);
 
         // Initialize the cursor lock checkbox
         cbCursorLock = view.findViewById(R.id.CBCursorLock);
@@ -342,10 +332,6 @@ public class SettingsFragment extends Fragment {
             }
             else if (preferences.contains("wine_debug_channels")) editor.remove("wine_debug_channels");
 
-            // Save Big Picture Mode setting
-            editor.putBoolean("enable_big_picture_mode", ((CheckBox) view.findViewById(R.id.CBEnableBigPictureMode)).isChecked());
-            saveCustomApiKeySettings(editor);
-
             if (editor.commit()) {
                 NavigationView navigationView = getActivity().findViewById(R.id.NavigationView);
                 navigationView.setCheckedItem(R.id.main_menu_containers);
@@ -398,12 +384,6 @@ public class SettingsFragment extends Fragment {
         TextView shortcutSettingsLabel = view.findViewById(R.id.TVShortcutSettings);
         applyFieldSetLabelStyle(shortcutSettingsLabel, isDarkMode);
 
-        TextView bigPictureModeLabel = view.findViewById(R.id.TVBigPictureMode);
-        applyFieldSetLabelStyle(bigPictureModeLabel, isDarkMode);
-
-        TextView tvCustomApiKey = view.findViewById(R.id.TVCustomApiKey);
-        applyFieldSetLabelStyle(tvCustomApiKey, isDarkMode);
-
 //        TextView shortcutSettingsLabel = view.findViewById(R.id.TVShortcutSettings);
 //        applyFieldSetLabelStyle(shortcutSettingsLabel, isDarkMode);
 
@@ -434,45 +414,6 @@ public class SettingsFragment extends Fragment {
             // Apply light mode-specific attributes (original FieldSetLabel)
             textView.setTextColor(Color.parseColor("#bdbdbd")); // Set text color to #bdbdbd
             textView.setBackgroundResource(R.color.window_background_color); // Set light background color
-        }
-    }
-
-    private void initCustomApiKeySettings(View view) {
-        cbEnableCustomApiKey = view.findViewById(R.id.CBEnableCustomApiKey);
-        etCustomApiKey = view.findViewById(R.id.ETCustomApiKey);
-
-        // Load saved preferences
-        boolean isCustomApiKeyEnabled = preferences.getBoolean("enable_custom_api_key", false);
-        String customApiKey = preferences.getString("custom_api_key", "");
-
-        cbEnableCustomApiKey.setChecked(isCustomApiKeyEnabled);
-        etCustomApiKey.setText(customApiKey);
-
-        // Show/hide the EditText based on checkbox state
-        etCustomApiKey.setVisibility(isCustomApiKeyEnabled ? View.VISIBLE : View.GONE);
-
-        cbEnableCustomApiKey.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            etCustomApiKey.setVisibility(isChecked ? View.VISIBLE : View.GONE);
-        });
-
-        // Help button listener to open API documentation
-        view.findViewById(R.id.BTHelpApiKey).setOnClickListener(v -> {
-            String url = "https://www.steamgriddb.com/profile/preferences/api";
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-            startActivity(intent);
-        });
-    }
-
-    private void saveCustomApiKeySettings(SharedPreferences.Editor editor) {
-        // Save custom API key preferences
-        boolean isCustomApiKeyEnabled = cbEnableCustomApiKey.isChecked();
-        editor.putBoolean("enable_custom_api_key", isCustomApiKeyEnabled);
-
-        if (isCustomApiKeyEnabled) {
-            String customApiKey = etCustomApiKey.getText().toString().trim();
-            editor.putString("custom_api_key", customApiKey);
-        } else {
-            editor.remove("custom_api_key");
         }
     }
 
