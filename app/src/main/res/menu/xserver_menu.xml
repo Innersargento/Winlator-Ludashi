@@ -18,10 +18,6 @@
             android:id="@+id/main_menu_disable_mouse"
             android:title="@string/disable_mouse" />
         <item
-            android:icon="@drawable/icon_input_controls"
-            android:id="@+id/main_menu_vibration"
-            android:title="@string/vibration" />
-        <item
             android:icon="@drawable/icon_fullscreen"
             android:id="@+id/main_menu_toggle_fullscreen"
             android:title="@string/toggle_fullscreen" />
