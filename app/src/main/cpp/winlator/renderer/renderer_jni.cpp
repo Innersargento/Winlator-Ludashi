@@ -1,5 +1,5 @@
 #include "egl.hpp"
-#include "cursor.hpp"
+#include "displayx.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -9,6 +9,7 @@ JNIXServer xserver;
 WindowManager windowManager;
 CursorManager cursorManager;
 EGLRenderer renderer;
+DisplayX displayX;
 
 extern "C" jint JNI_OnLoad(JavaVM* vm, void*) {
     JNIEnv* env = nullptr;
@@ -50,7 +51,10 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     drawable->textureId = -1;
     drawable->width = env->GetShortField(drawableObj, cache.drawableWidth);
     drawable->height = env->GetShortField(drawableObj, cache.drawableHeight);
-    drawable->data = nullptr;
+    
+    jobject dataBuf = env->CallObjectMethod(drawableObj, cache.drawableGetData);
+    drawable->data = env->GetDirectBufferAddress(dataBuf);
+    
     drawable->isDirty = false;
     drawable->isDirectContent = false;
     drawable->sizeChanged = false;
@@ -62,7 +66,10 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     rootWindow->cursor = nullptr;
     rootWindow->parent = nullptr;
     rootWindow->mapped = true;
+    rootWindow->control = nullptr;
+    rootWindow->enabled = true;
     rootWindow->inputOutput = true;
+    rootWindow->currentDirectContent = nullptr;
     
     jobject attributes = env->GetObjectField(rootWindowObj, cache.windowAttributes);
     rootWindow->attributes = env->NewGlobalRef(attributes);
@@ -123,7 +130,13 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     renderer.cache = &cache;
     renderer.xServer = &xserver;
     
+    displayX.windowManager = &windowManager;
+    displayX.cursorManager = &cursorManager;
+    displayX.cache = &cache;
+    displayX.xServer = &xserver;
+    
     renderer.start();
+    displayX.start();
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -165,6 +178,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateWindow(JNIEnv *env, jobjec
     window->cursor = nullptr;
     window->mapped = false;
     window->parent = nullptr;
+    window->control = nullptr;
+    window->currentDirectContent = nullptr;
+    window->enabled = true;
     
     jobject attributes = env->GetObjectField(windowObj, cache.windowAttributes);
     window->attributes = env->NewGlobalRef(attributes);
@@ -178,6 +194,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateWindow(JNIEnv *env, jobjec
         parent->children.push_back(window.get());
     }
     
+    if (xserver.isDisplayX())
+        displayX.queueEvent([ptr = window.get()] { displayX.createWindowControl(ptr); });
+    
     windowManager.addWindow(window->id, std::move(window));
 }
 
@@ -187,8 +206,15 @@ Java_com_winlator_cmod_widget_XServerView_nativeMapWindow(JNIEnv *env, jobject t
     if (!window) return;
     
     window->mapped = true;
-    renderer.queueEvent([]{ renderer.updateScene(); });
-    renderer.requestRenderer();
+    
+    if (xserver.isDisplayX()) {
+        window->enabled = env->CallBooleanMethod(window->attributes, cache.windowAttributesIsEnabled);
+        displayX.queueEvent([window] { displayX.mapWindow(window); });
+    }    
+    else { 
+        renderer.queueEvent([]{ renderer.updateScene(); });
+        renderer.requestRenderer();
+    }
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -197,8 +223,13 @@ Java_com_winlator_cmod_widget_XServerView_nativeUnmapWindow(JNIEnv *env, jobject
     if (!window) return;
     
     window->mapped = false;
-    renderer.queueEvent([]{ renderer.updateScene(); });
-    renderer.requestRenderer();
+    
+    if (xserver.isDisplayX()) {
+        displayX.queueEvent([window] { displayX.unmapWindow(window); });
+    } else {   
+        renderer.queueEvent([]{ renderer.updateScene(); });
+        renderer.requestRenderer();
+    }
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -211,6 +242,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeDestroyWindow(JNIEnv *env, jobje
         renderer.queueEvent([textureId] { renderer.destroyTexture(textureId); });
     }    
     
+    if (xserver.isDisplayX())
+        displayX.queueEvent([window] { displayX.destroyWindowControl(window); });
+        
     windowManager.deleteWindow(env, window);
 }
 
@@ -239,6 +273,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateCursor(JNIEnv *env, jobjec
     cursor->visible = env->CallBooleanMethod(cursorObj, cache.cursorIsVisible);
     cursor->cursorObj = env->NewGlobalRef(cursorObj);
     
+    if (xserver.isDisplayX())
+        displayX.queueEvent([ptr = cursor.get()] { displayX.createCursor(ptr); });
+        
     cursorManager.addCursor(cursor->id, std::move(cursor));
 }
 
@@ -252,6 +289,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeFreeCursor(JNIEnv *env, jobject 
         renderer.queueEvent([textureId] { renderer.destroyTexture(textureId); });
     }
     
+   if (xserver.isDisplayX())
+       displayX.queueEvent([cursor] { displayX.destroyCursor(cursor); });
+        
     cursorManager.removeCursor(env, cursor);
 }
 
@@ -271,16 +311,24 @@ Java_com_winlator_cmod_widget_XServerView_nativeBindCursor(JNIEnv *env, jobject 
     window->cursor = cursor;
     for (auto &child : window->children)
         child->cursor = cursor;
-        
-    renderer.requestRenderer();
+    
+    if (!xserver.isDisplayX())    
+        renderer.requestRenderer();
+    else
+        displayX.queueEvent([window] { displayX.updateCursor(window); });
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativePointerMove(JNIEnv *env, jobject thiz, jint posX, jint posY) {
     cursorManager.pointer.posX = posX;
     cursorManager.pointer.posY = posY;
-    renderer.requestRenderer();
+    
+    if (!xserver.isDisplayX())
+        renderer.requestRenderer();
+    else 
+        displayX.requestCursorUpdate();
 }    
+
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeChangeWindowZOrder(JNIEnv *env, jobject thiz, jint stackMode, jint id, jint siblingId) {
@@ -289,9 +337,11 @@ Java_com_winlator_cmod_widget_XServerView_nativeChangeWindowZOrder(JNIEnv *env, 
     
     if (!window) return;
     
-    windowManager.changeZOrder(stackMode, window, sibling);
-    renderer.queueEvent([]{ renderer.updateScene(); });
-    renderer.requestRenderer();
+    if (!xserver.isDisplayX()) {
+        windowManager.changeZOrder(stackMode, window, sibling);
+        renderer.queueEvent([]{ renderer.updateScene(); });
+        renderer.requestRenderer();
+    }
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -311,13 +361,17 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateWindowGeometry(JNIEnv *env
         window->drawable->sizeChanged = true;
     }
     
-    if (resized) {
-        renderer.queueEvent([]{ renderer.updateScene(); });
+    if (xserver.isDisplayX()) {
+        displayX.queueEvent([window, resized] { displayX.changeGeometry(window, resized); });
     } else {
-        renderer.queueEvent([window]{ renderer.updateWindowPosition(window); });
-        renderer.queueEvent([]{ renderer.updateScene(); });
+        if (resized) {
+            renderer.queueEvent([]{ renderer.updateScene(); });
+        } else {
+            renderer.queueEvent([window]{ renderer.updateWindowPosition(window); });
+            renderer.queueEvent([]{ renderer.updateScene(); });
+        }
+        renderer.requestRenderer();
     }
-    renderer.requestRenderer();
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -329,7 +383,11 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateWindowContent(JNIEnv *env,
         window->drawable->data = env->GetDirectBufferAddress(data);
     
     window->drawable->isDirty = true;
-    renderer.requestRenderer();
+    
+    if (xserver.isDisplayX())
+        displayX.requestWindowUpdate(window);
+    else
+        renderer.requestRenderer();
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -340,62 +398,89 @@ Java_com_winlator_cmod_widget_XServerView_nativeReparentWindow(JNIEnv *env, jobj
     if (!window || !parent) return;
     
     windowManager.reparentWindow(window, parent);
+    
+    if (xserver.isDisplayX()) 
+        displayX.queueEvent([window, parent] { displayX.reparentWindow(window, parent); });
 }
 
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeToggleFullscreen(JNIEnv *env, jobject thiz) {
     renderer.toggleFullscreen = true;
-    renderer.requestRenderer();
+    if (!xserver.isDisplayX())
+        renderer.requestRenderer();
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeSetCursorVisible(JNIEnv *env, jobject thiz, jboolean visible) {
     renderer.cursorVisible = visible;
-    renderer.requestRenderer();
+    displayX.cursorVisible = visible;
+    
+    if (!xserver.isDisplayX())
+        renderer.requestRenderer();
+    else
+        displayX.queueEvent([] { displayX.drawRootCursor(); });
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeSetScreenOffsetYRelativeToCursor(JNIEnv *env, jobject thiz, jboolean cond) {
     renderer.screenOffsetYRelativeToCursor = cond;
-    renderer.requestRenderer();
+    if (!xserver.isDisplayX())
+        renderer.requestRenderer();
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeSetMagnifierZoom(JNIEnv *env, jobject thiz, float magnifierZoom) {
     renderer.magnifierZoom = magnifierZoom;
-    renderer.requestRenderer();
+    if (!xserver.isDisplayX())
+        renderer.requestRenderer();
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeCreateSurface(JNIEnv *env, jobject thiz, jobject surface) {
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
-    renderer.createSurface(window);
+    if (xserver.isDisplayX())
+        displayX.createSurface(window);
+    else      
+        renderer.createSurface(window);
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeDestroySurface(JNIEnv *env, jobject thiz) {
-    renderer.destroySurface();
+    if (xserver.isDisplayX())
+        displayX.destroySurface();
+    else     
+        renderer.destroySurface();
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeChangeSurface(JNIEnv *env, jobject thiz, jint width, jint height) {
-    renderer.changeSurface(width, height);
+    if (xserver.isDisplayX())
+        displayX.changeSurface(width, height);
+    else    
+        renderer.changeSurface(width, height);
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativePause(JNIEnv *env, jobject thiz) {
-    renderer.pause();
+    if (!xserver.isDisplayX())
+        renderer.pause();
+    else
+        displayX.pause();     
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeResume(JNIEnv *env, jobject thiz) {
-    renderer.resume();
+    if (!xserver.isDisplayX())
+        renderer.resume();
+    else
+        displayX.resume();       
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeStop(JNIEnv *env, jobject thiz) {
     renderer.stop();
+    displayX.stop();
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -432,7 +517,11 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateDirectContent(JNIEnv *env,
     if (!directContent) return;
     
     window->currentDirectContent = directContent;
-    renderer.requestRenderer();
+    
+    if (xserver.isDisplayX())
+        displayX.requestWindowUpdate(window);
+    else    
+        renderer.requestRenderer();
 }
 
 

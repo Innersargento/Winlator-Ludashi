@@ -57,7 +57,7 @@ void EGLRenderer::renderingThreadLoop() {
         auto lock = renderLock.lock();
         renderLock.wait(lock, [&]{ 
             if (paused) {
-                return (state != State::REQUEST_RENDERER && state != State::NONE) ||!eventQueue.empty();
+                return (state != State::REQUEST_RENDERER && state != State::NONE) || !eventQueue.empty();
             } else {
                 return state != State::NONE || !eventQueue.empty();
             } 

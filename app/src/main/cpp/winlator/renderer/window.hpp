@@ -20,12 +20,14 @@ struct Window {
     std::unique_ptr<struct Drawable> drawable;
     Window *parent;
     Cursor *cursor;
+    bool enabled;
     std::vector<Window *> children;
     jobject attributes;
     jobject windowObj;
     std::unordered_map<int, std::unique_ptr<struct Drawable>> directContents;
     Drawable *currentDirectContent;
-    
+    ASurfaceControl *control;
+        
     bool hasDirectContents() {
         return !directContents.empty();
     }
@@ -76,4 +78,5 @@ class WindowManager {
         Window* getRootWindow();
         void setRootWindow(Window *window); 
         void reparentWindow(Window *window, Window *parent);
+        std::unordered_map<int, std::unique_ptr<struct Window>>& getWindowTree();
 };

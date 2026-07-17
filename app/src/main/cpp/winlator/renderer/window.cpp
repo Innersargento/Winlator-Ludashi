@@ -82,3 +82,7 @@ void WindowManager::setRootWindow(Window *window) {
 Window *WindowManager::getRootWindow() {
     return this->rootWindow;
 }
+
+std::unordered_map<int, std::unique_ptr<struct Window>>& WindowManager::getWindowTree() {
+    return this->windows;
+}
