@@ -589,6 +589,41 @@ void DisplayX::restoreControlState() {
     cursorUpdate = true;
 }
 
+void DisplayX::toggleFullscreen() {
+    auto rootWindow = windowManager->getRootWindow();
+    if (!rootWindow) return;
+    
+    fullscreen = !fullscreen;
+    
+    ARect src{};
+    ARect dst{};
+    
+    if (fullscreen) {
+        src.left = viewTransformation.viewOffsetX;
+        src.top = viewTransformation.viewOffsetY;
+        src.right = viewTransformation.viewOffsetX + viewTransformation.viewWidth;
+        src.bottom = viewTransformation.viewOffsetY + viewTransformation.viewHeight;
+        
+        dst.left = 0;
+        dst.top = 0;
+        dst.right = surfaceWidth;
+        dst.bottom = surfaceHeight;
+    }
+    else {
+        src.left = 0;
+        src.top = 0;
+        src.right = surfaceWidth;
+        src.bottom = surfaceHeight;
+        
+        dst.left = viewTransformation.viewOffsetX;
+        dst.top = viewTransformation.viewOffsetY;
+        dst.right = viewTransformation.viewOffsetX + viewTransformation.viewWidth;
+        dst.bottom = viewTransformation.viewOffsetY + viewTransformation.viewHeight;
+    }
+    
+    ASurfaceTransaction_setGeometry(windowTransaction, rootWindow->control, src, dst, 0);
+    ASurfaceTransaction_apply(windowTransaction);
+}
 /* This is a mock implementation of the complete DisplayX. I will rewrite this once the infrastructure is finished
 class NativeRenderer {
     private:

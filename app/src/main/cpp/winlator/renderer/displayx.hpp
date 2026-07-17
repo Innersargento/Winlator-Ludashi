@@ -90,6 +90,7 @@ class DisplayX {
         bool cursorUpdate = false;
         bool paused = false;
         bool repostCursor = false;
+        bool fullscreen = false;
         
         void renderingThreadLoop();
         static void onFrameCallback64(int64_t frameTimeNanos, void *data);
@@ -133,4 +134,5 @@ class DisplayX {
         void destroyCursor(Cursor *cursor);
         void updateCursor(Window *window);
         void drawRootCursor();
+        void toggleFullscreen();
 };
