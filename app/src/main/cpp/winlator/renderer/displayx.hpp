@@ -24,8 +24,7 @@ class DisplayX {
             RESUME,
             CREATE_SURFACE,
             DESTROY_SURFACE,
-            CHANGE_SURFACE,
-            REQUEST_WINDOW_UPDATE
+            CHANGE_SURFACE
         };
         
         struct DisplayXLock {

@@ -33,6 +33,7 @@ void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
 
 void DisplayX::renderingThreadLoop() {
     bool hasSurface = false;
+    bool surfaceChanged = false;
     bool restoreState = false;
     
     while (true) {
@@ -78,11 +79,13 @@ void DisplayX::renderingThreadLoop() {
         if (state == State::CHANGE_SURFACE) {
             printf("Received state CHANGE_SURFACE");
             resizeRootWindow();
+            surfaceChanged = true;
             state = State::NONE;
             displayxLock.notify();
         }
             
         if (hasSurface && restoreState) {
+            printf("Restoring state after resume");
             restoreControlState();
             restoreState = false;
         }
@@ -90,18 +93,19 @@ void DisplayX::renderingThreadLoop() {
         if (state == State::DESTROY_SURFACE) {
             printf("Received state DESTROY_SURFACE");
             hasSurface = false;
+            surfaceChanged = false;
             destroyRootCursorControl();
             destroyRootWindowControl();
             state = State::NONE;
             displayxLock.notify();
         }
         
-        if (!eventQueue.empty() && hasSurface && !paused) {
+        if (!eventQueue.empty() && hasSurface && surfaceChanged && !paused) {
             func = eventQueue.front();
             eventQueue.pop();
         }
        
-        if (!windowQueue.empty() && hasSurface && !paused) {
+        if (!windowQueue.empty() && hasSurface && surfaceChanged && !paused && !func) {
             window = windowQueue.pop();
         }
         
@@ -109,7 +113,6 @@ void DisplayX::renderingThreadLoop() {
         
         if (func) {
             func();
-            continue;
         }
         
         if (window) {
@@ -117,7 +120,7 @@ void DisplayX::renderingThreadLoop() {
                 updateWindowDirect(window);
             else
                 updateWindow(window);
-        }
+        }    
     }
 }
 
@@ -226,7 +229,7 @@ void DisplayX::createWindowControl(Window *window) {
 }
 
 void DisplayX::destroyWindowControl(Window *window) {
-    if (window->drawable->ahb) {
+    if (window->drawable->ahb && !window->drawable->isDirectContent) {
         AHardwareBuffer_release(window->drawable->ahb);
         window->drawable->ahb = nullptr;
     }
@@ -273,11 +276,14 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
         if (ret != 0) 
             return;
         
+        AHardwareBuffer_acquire(window->drawable->ahb);
+        
         AHardwareBuffer_Desc outDesc{};
         AHardwareBuffer_describe(window->drawable->ahb, &outDesc);
         window->drawable->stride = outDesc.stride;
         
         window->drawable->sizeChanged = false;
+        ASurfaceTransaction_setBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
     }
     
     ASurfaceTransaction_setPosition(windowTransaction, window->control, window->x, window->y);
