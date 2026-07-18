@@ -557,19 +557,31 @@ void DisplayX::resizeRootWindow() {
     
     viewTransformation.update(surfaceWidth, surfaceHeight, rootWindow->width, rootWindow->height);
     
-    ARect src = {
-        .left = 0,
-        .top = 0,
-        .right = surfaceWidth,
-        .bottom = surfaceHeight
-    };
+    ARect src{};
+    ARect dst{};
     
-    ARect dst = {
-        .left = viewTransformation.viewOffsetX,
-        .top = viewTransformation.viewOffsetY,
-        .right = viewTransformation.viewOffsetX + viewTransformation.viewWidth,
-        .bottom = viewTransformation.viewOffsetY + viewTransformation.viewHeight
-    };
+    if (fullscreen) {
+        src.left = viewTransformation.viewOffsetX;
+        src.top = viewTransformation.viewOffsetY;
+        src.right = viewTransformation.viewOffsetX + viewTransformation.viewWidth;
+        src.bottom = viewTransformation.viewOffsetY + viewTransformation.viewHeight;
+        
+        dst.left = 0;
+        dst.top = 0;
+        dst.right = surfaceWidth;
+        dst.bottom = surfaceHeight;
+    }
+    else {
+        src.left = 0;
+        src.top = 0;
+        src.right = surfaceWidth;
+        src.bottom = surfaceHeight;
+        
+        dst.left = viewTransformation.viewOffsetX;
+        dst.top = viewTransformation.viewOffsetY;
+        dst.right = viewTransformation.viewOffsetX + viewTransformation.viewWidth;
+        dst.bottom = viewTransformation.viewOffsetY + viewTransformation.viewHeight;
+    }
     
     ASurfaceTransaction_setGeometry(windowTransaction, rootWindow->control, src, dst, 0);
     ASurfaceTransaction_setBuffer(windowTransaction, rootWindow->control, rootWindow->drawable->ahb, -1);
