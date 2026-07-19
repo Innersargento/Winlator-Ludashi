@@ -28,6 +28,11 @@ void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
         self->cursorUpdate = false;
     }
     
+    auto lock = self->displayxLock.lock();
+    self->state = State::REQUEST_WINDOW_UPDATE;
+    self->displayxLock.notify();
+    lock.unlock();
+    
     AChoreographer_postFrameCallback64(self->choreographer, DisplayX::onFrameCallback64, self);
 }
 
@@ -36,13 +41,14 @@ void DisplayX::renderingThreadLoop() {
     bool surfaceChanged = false;
     bool restoreState = false;
     
+    std::vector<Window *> windows;
+    
     while (true) {
         std::function<void()> func = nullptr;
-        Window *window = nullptr;
         
         auto lock = displayxLock.lock();
         displayxLock.wait(lock, [&]{ 
-            return state != State::NONE || !eventQueue.empty() || !windowQueue.empty();
+            return state != State::NONE || !eventQueue.empty();
         });
         
         if (state == State::STOP) {
@@ -101,12 +107,17 @@ void DisplayX::renderingThreadLoop() {
         }
         
         if (!eventQueue.empty() && hasSurface && surfaceChanged && !paused) {
+            state = State::NONE;
             func = eventQueue.front();
             eventQueue.pop();
         }
        
         if (!windowQueue.empty() && hasSurface && surfaceChanged && !paused && !func) {
-            window = windowQueue.pop();
+            state = State::NONE;
+            while (!windowQueue.empty()) {
+                auto window = windowQueue.pop();
+                windows.push_back(window);
+            }
         }
         
         lock.unlock();
@@ -115,12 +126,16 @@ void DisplayX::renderingThreadLoop() {
             func();
         }
         
-        if (window) {
-            if (window->currentDirectContent) 
-                updateWindowDirect(window);
-            else
-                updateWindow(window);
-        }    
+        for (auto window : windows) {
+            if (window) {
+                if (window->currentDirectContent) 
+                    updateWindowDirect(window);
+                else
+                    updateWindow(window);
+            }
+        }     
+        
+        windows.clear();  
     }
 }
 
@@ -184,8 +199,7 @@ void DisplayX::queueEvent(std::function<void()> func) {
 
 void DisplayX::requestWindowUpdate(Window *window) {
     auto lock = displayxLock.lock();
-    windowQueue.push(window);
-    displayxLock.notify();
+    auto result = windowQueue.push(window);
 }
 
 void DisplayX::requestCursorUpdate() {
@@ -314,6 +328,7 @@ void DisplayX::updateWindow(Window *window) {
     
     ASurfaceTransaction_setPosition(windowTransaction, window->control, window->x, window->y);
     ASurfaceTransaction_setBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
+    ASurfaceTransaction_setEnableBackPressure(windowTransaction, window->control, true);
     ASurfaceTransaction_apply(windowTransaction);
 }
 
@@ -322,9 +337,10 @@ void DisplayX::updateWindowDirect(Window *window) {
     
     auto drawable = window->currentDirectContent;
     if (!drawable) return;
-
+    
     ASurfaceTransaction_setPosition(windowTransaction, window->control, window->x, window->y);
     ASurfaceTransaction_setBuffer(windowTransaction, window->control, drawable->ahb, -1);
+    ASurfaceTransaction_setEnableBackPressure(windowTransaction, window->control, true);
     ASurfaceTransaction_apply(windowTransaction);
 }
 
@@ -394,7 +410,6 @@ void DisplayX::updateCursorPosition() {
     auto cursor = (pointWindow != nullptr) ? pointWindow->cursor : nullptr;
     int x = std::clamp(cursorManager->pointer.posX, 0, windowManager->getRootWindow()->width - 1);
     int y = std::clamp(cursorManager->pointer.posY, 0, windowManager->getRootWindow()->height - 1);
-    
     
     if (cursorVisible || cursor->visible) {
         if (repostCursor) {

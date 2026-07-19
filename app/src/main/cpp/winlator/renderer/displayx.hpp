@@ -24,7 +24,8 @@ class DisplayX {
             RESUME,
             CREATE_SURFACE,
             DESTROY_SURFACE,
-            CHANGE_SURFACE
+            CHANGE_SURFACE,
+            REQUEST_WINDOW_UPDATE
         };
         
         struct DisplayXLock {
@@ -51,9 +52,13 @@ class DisplayX {
                 std::unordered_set<Window *> mSet;
             
             public:
-                void push(Window *window) {
-                    if (mSet.insert(window).second) 
+                bool push(Window *window) {
+                    if (mSet.insert(window).second) {
                         mQueue.push(window);
+                        return true;
+                    }
+                    
+                    return false;
                 }
                 
                 Window *pop() {
