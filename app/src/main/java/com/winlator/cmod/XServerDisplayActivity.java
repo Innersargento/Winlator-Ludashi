@@ -334,6 +334,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         winHandler = new WinHandler(this);
         winHandler.setFakeInputPath(devInputDir.getAbsolutePath());
 
+        // Initialize the WineRequestHandler (clipboard/browser bridge, see WineRequestHandler)
+        wineRequestHandler = new WineRequestHandler(this);
+
         String screenSize = Container.DEFAULT_SCREEN_SIZE;
         containerManager = new ContainerManager(this);
         container = containerManager.getContainerById(getIntent().getIntExtra("container_id", 0));
