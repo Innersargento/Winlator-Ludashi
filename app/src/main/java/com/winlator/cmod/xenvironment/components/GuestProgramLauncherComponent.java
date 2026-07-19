@@ -150,19 +150,11 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         synchronized (lock) {
             if (wineInfo.isArm64EC())
                 extractEmulatorsDlls();
-            else {
+            else
                 extractBox64Files();
-                copyDefaultBox64RCFile();
-            }
             checkDependencies();
             pid = execGuestProgram();
         }
-    }
-
-    private void copyDefaultBox64RCFile() {
-        Context context = environment.getContext();
-        File rootDir = environment.getImageFs().getRootDir();
-        FileUtils.copy(context, "box64/default.box64rc", new File(rootDir, "/usr/etc/config.box64rc"));
     }
 
 
@@ -438,9 +430,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
 
         envVars.putAll(Box64PresetManager.getEnvVars("box64", environment.getContext(), box64Preset));
         envVars.put("BOX64_X11GLX", "1");
-
-        File box64RCFile = new File(environment.getImageFs().getRootDir(), "/usr/etc/config.box64rc");
-        envVars.put("BOX64_RCFILE", box64RCFile.getPath());
+        envVars.put("BOX64_NORCFILES", "1");
     }
 
     public void suspendProcess() {
