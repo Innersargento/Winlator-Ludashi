@@ -465,6 +465,8 @@ void DisplayX::updateCursor(Window *window) {
 }
 
 void DisplayX::updateCursorPosition() {
+    if (!cursorManager->control) return;
+    
     jobject pointWindowObj = env->CallObjectMethod(xServer->inputDeviceManager, cache->getPointWindow);
     jint id = env->GetIntField(pointWindowObj, cache->windowID);
     auto pointWindow = windowManager->getWindow(id);
