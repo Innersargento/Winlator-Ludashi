@@ -51,42 +51,40 @@ void DisplayX::renderingThreadLoop() {
             return state != State::NONE || !eventQueue.empty();
         });
         
-        if (state == State::STOP) {
+        auto currState = state;
+        state = State::NONE;
+        
+        if (currState == State::STOP) {
             printf("Received state STOP");
-            state = State::NONE;
             displayxLock.notify();
             return;
         }
         
-        if (state == State::PAUSE) {
+        if (currState == State::PAUSE) {
             printf("Received state PAUSE");
             paused = true;
-            state = State::NONE;
             displayxLock.notify();
         }
             
-        if (state == State::RESUME) {
+        if (currState == State::RESUME) {
             printf("Received state RESUME");
             paused = false;
             restoreState = true;
-            state = State::NONE;
             displayxLock.notify();
         }
         
-        if (state == State::CREATE_SURFACE) {
+        if (currState == State::CREATE_SURFACE) {
             printf("Received state CREATE_SURFACE");
             createRootWindowControl();
             createRootCursorControl();
             hasSurface = true;
-            state = State::NONE;
             displayxLock.notify();
         }
             
-        if (state == State::CHANGE_SURFACE) {
+        if (currState == State::CHANGE_SURFACE) {
             printf("Received state CHANGE_SURFACE");
             resizeRootWindow();
             surfaceChanged = true;
-            state = State::NONE;
             displayxLock.notify();
         }
             
@@ -96,24 +94,21 @@ void DisplayX::renderingThreadLoop() {
             restoreState = false;
         }
             
-        if (state == State::DESTROY_SURFACE) {
+        if (currState == State::DESTROY_SURFACE) {
             printf("Received state DESTROY_SURFACE");
             hasSurface = false;
             surfaceChanged = false;
             destroyRootCursorControl();
             destroyRootWindowControl();
-            state = State::NONE;
             displayxLock.notify();
         }
         
         if (!eventQueue.empty() && hasSurface && surfaceChanged && !paused) {
-            state = State::NONE;
             func = eventQueue.front();
             eventQueue.pop();
         }
        
         if (!windowQueue.empty() && hasSurface && surfaceChanged && !paused && !func) {
-            state = State::NONE;
             while (!windowQueue.empty()) {
                 auto window = windowQueue.pop();
                 windows.push_back(window);
