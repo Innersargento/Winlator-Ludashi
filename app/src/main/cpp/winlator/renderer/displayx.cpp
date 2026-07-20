@@ -430,7 +430,7 @@ void DisplayX::createCursor(Cursor *cursor) {
 }
 
 void DisplayX::destroyCursor(Cursor *cursor) {
-    if (!cursor->image->ahb) return;
+    if (!cursor || !cursor->image || !cursor->image->ahb) return;
     
     AHardwareBuffer_release(cursor->image->ahb);
     cursor->image->ahb = nullptr;

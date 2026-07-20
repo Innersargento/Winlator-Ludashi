@@ -242,10 +242,16 @@ Java_com_winlator_cmod_widget_XServerView_nativeDestroyWindow(JNIEnv *env, jobje
         renderer.queueEvent([textureId] { renderer.destroyTexture(textureId); });
     }    
     
-    if (xserver.isDisplayX())
+    if (xserver.isDisplayX()) {
         displayX.queueEvent([window] { displayX.destroyWindowControl(window); });
-        
-    windowManager.deleteWindow(env, window);
+        displayX.queueEvent([window] { 
+            JNIEnv* env = cache.getEnv();
+            windowManager.deleteWindow(env, window); 
+        });
+    }    
+    else {
+        windowManager.deleteWindow(env, window);
+    }    
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -289,10 +295,16 @@ Java_com_winlator_cmod_widget_XServerView_nativeFreeCursor(JNIEnv *env, jobject 
         renderer.queueEvent([textureId] { renderer.destroyTexture(textureId); });
     }
     
-   if (xserver.isDisplayX())
-       displayX.queueEvent([cursor] { displayX.destroyCursor(cursor); });
-        
-    cursorManager.removeCursor(env, cursor);
+    if (xserver.isDisplayX()) {
+        displayX.queueEvent([cursor] { displayX.destroyCursor(cursor); });
+        displayX.queueEvent([cursor] { 
+            JNIEnv* env = cache.getEnv();
+            cursorManager.removeCursor(env, cursor); 
+        });
+    }    
+    else { 
+        cursorManager.removeCursor(env, cursor);
+    }
 }
 
 extern "C" JNIEXPORT void JNICALL
