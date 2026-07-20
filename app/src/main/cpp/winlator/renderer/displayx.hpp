@@ -6,6 +6,7 @@
 #include <functional>
 #include <queue>
 #include <cmath>
+#include <dlfcn.h>
 #include <unordered_set>
 #include <condition_variable>
 #include <android/choreographer.h>

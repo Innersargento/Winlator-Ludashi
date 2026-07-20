@@ -1,7 +1,3 @@
-#include <android/hardware_buffer.h>
-#include <android/surface_control.h>
-#include <android/native_window_jni.h>
-#include <android/native_window.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -11,9 +7,21 @@
 #include <string.h>
 #include <thread>
 #include <mutex>
+
+#include <android/api-level.h>
 #include <android/log.h>
+#include <android/hardware_buffer.h>
+#include <android/surface_control.h>
+#include <android/native_window_jni.h>
+#include <android/native_window.h>
 
 #include "displayx.hpp"
+
+using SetPositionFn = void (*)(ASurfaceTransaction*, ASurfaceControl*, int32_t, int32_t);
+using AcquireFn = void (*)(ASurfaceControl*);
+
+static SetPositionFn pSetPosition = nullptr;
+static AcquireFn pAcquire = nullptr;
 
 void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
     auto *self = reinterpret_cast<DisplayX *>(data);
@@ -135,6 +143,10 @@ void DisplayX::renderingThreadLoop() {
 }
 
 void DisplayX::start() {
+    void* lib = dlopen("libandroid.so", RTLD_NOW);
+    pSetPosition = reinterpret_cast<SetPositionFn>(dlsym(lib, "ASurfaceTransaction_setPosition"));
+    pAcquire = reinterpret_cast<AcquireFn>(dlsym(lib, "ASurfaceControl_acquire"));
+        
    displayxThread = std::thread(&DisplayX::renderingThreadLoop, this);
    this->choreographer = AChoreographer_getInstance();
    AChoreographer_postFrameCallback64(this->choreographer, DisplayX::onFrameCallback64, this);
@@ -230,21 +242,37 @@ void DisplayX::createWindowControl(Window *window) {
     window->drawable->stride = outDesc.stride;
         
     window->control = ASurfaceControl_create(window->parent->control, "displayx");
-    ASurfaceControl_acquire(window->control);
+    if (pAcquire)    
+        pAcquire(window->control);
     
     ASurfaceTransaction_setVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
-    ASurfaceTransaction_setPosition(windowTransaction, window->control, window->x, window->y);
+    
+    if (pSetPosition) {
+        pSetPosition(windowTransaction, window->control, window->x, window->y);
+    }
+    else {
+        ARect src{};
+        ARect dst = {
+            .left = window->x,
+            .top = window->y,
+            .right = window->x + window->width,
+            .bottom = window->y + window->height
+        };
+        ASurfaceTransaction_setGeometry(windowTransaction, window->control, src, dst, 0);
+    }  
     ASurfaceTransaction_apply(windowTransaction);
 }
 
 void DisplayX::destroyWindowControl(Window *window) {
-    if (window->drawable->ahb && !window->drawable->isDirectContent) {
+    if (!window) return;
+    
+    if (window->drawable && window->drawable->ahb && !window->drawable->isDirectContent) {
         AHardwareBuffer_release(window->drawable->ahb);
         window->drawable->ahb = nullptr;
     }
     
     if (!window->control) return;
-    
+ 
     ASurfaceControl_release(window->control);
     window->control = nullptr;
 }
@@ -270,7 +298,8 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
     
     if (resized && !window->drawable->isDirectContent) {
         AHardwareBuffer_release(window->drawable->ahb);
-    
+        window->drawable->ahb = nullptr;
+        
         AHardwareBuffer_Desc desc{};
         desc.width = window->width;
         desc.height = window->height;
@@ -295,7 +324,20 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
         ASurfaceTransaction_setBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
     }
     
-    ASurfaceTransaction_setPosition(windowTransaction, window->control, window->x, window->y);
+    if (pSetPosition) {
+        pSetPosition(windowTransaction, window->control, window->x, window->y);
+    }
+    else {
+        ARect src{};
+        ARect dst = {
+            .left = window->x,
+            .top = window->y,
+            .right = window->x + window->width,
+            .bottom = window->y + window->height
+        };
+        ASurfaceTransaction_setGeometry(windowTransaction, window->control, src, dst, 0);
+    }
+    
     ASurfaceTransaction_apply(windowTransaction);
 }
 
@@ -321,9 +363,21 @@ void DisplayX::updateWindow(Window *window) {
     
     window->drawable->isDirty = false;
     
-    ASurfaceTransaction_setPosition(windowTransaction, window->control, window->x, window->y);
+    if (pSetPosition) {
+        pSetPosition(windowTransaction, window->control, window->x, window->y);
+    }
+    else {
+        ARect srcRect{};
+        ARect dstRect = {
+            .left = window->x,
+            .top = window->y,
+            .right = window->x + window->width,
+            .bottom = window->y + window->height
+        };
+        ASurfaceTransaction_setGeometry(windowTransaction, window->control, srcRect, dstRect, 0);
+    }
+    
     ASurfaceTransaction_setBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
-    ASurfaceTransaction_setEnableBackPressure(windowTransaction, window->control, true);
     ASurfaceTransaction_apply(windowTransaction);
 }
 
@@ -333,9 +387,21 @@ void DisplayX::updateWindowDirect(Window *window) {
     auto drawable = window->currentDirectContent;
     if (!drawable) return;
     
-    ASurfaceTransaction_setPosition(windowTransaction, window->control, window->x, window->y);
+    if (pSetPosition) {
+        pSetPosition(windowTransaction, window->control, window->x, window->y);
+    }
+    else { 
+        ARect src{};
+        ARect dst = {
+            .left = window->x,
+            .top = window->y,
+            .right = window->x + window->width,
+            .bottom = window->y + window->height
+        };
+        ASurfaceTransaction_setGeometry(windowTransaction, window->control, src, dst, 0);
+    }
+         
     ASurfaceTransaction_setBuffer(windowTransaction, window->control, drawable->ahb, -1);
-    ASurfaceTransaction_setEnableBackPressure(windowTransaction, window->control, true);
     ASurfaceTransaction_apply(windowTransaction);
 }
 
@@ -403,6 +469,7 @@ void DisplayX::updateCursorPosition() {
     jint id = env->GetIntField(pointWindowObj, cache->windowID);
     auto pointWindow = windowManager->getWindow(id);
     auto cursor = (pointWindow != nullptr) ? pointWindow->cursor : nullptr;
+    auto rootCursor = cursorManager->getRootCursor();
     int x = std::clamp(cursorManager->pointer.posX, 0, windowManager->getRootWindow()->width - 1);
     int y = std::clamp(cursorManager->pointer.posY, 0, windowManager->getRootWindow()->height - 1);
     
@@ -412,12 +479,27 @@ void DisplayX::updateCursorPosition() {
                 ASurfaceTransaction_setBuffer(cursorTransaction, cursorManager->control, cursor->image->ahb, -1);
             }
             else {
-                ASurfaceTransaction_setBuffer(cursorTransaction, cursorManager->control, cursorManager->getRootCursor()->image->ahb, -1);
+                ASurfaceTransaction_setBuffer(cursorTransaction, cursorManager->control, rootCursor->image->ahb, -1);
             }
             auto lock = displayxLock.lock();
             repostCursor = false;
         }
-        ASurfaceTransaction_setPosition(cursorTransaction, cursorManager->control, x, y);
+        
+        if (pSetPosition) {
+            pSetPosition(cursorTransaction, cursorManager->control, x, y);
+        }
+        else {
+            auto& cursorImage = (cursor != nullptr) ? cursor->image : rootCursor->image;
+            ARect src{};
+            ARect dst = {
+                .left = x,
+                .top = y,
+                .right = x + cursorImage->width,
+                .bottom = y + cursorImage->height
+            };
+            ASurfaceTransaction_setGeometry(cursorTransaction, cursorManager->control, src, dst, 0);
+        }
+        
         ASurfaceTransaction_apply(cursorTransaction);
     }
     else {
@@ -434,7 +516,8 @@ void DisplayX::createRootCursorControl() {
     if (!rootCursor || !rootWindow) return;
     
     cursorManager->control = ASurfaceControl_create(rootWindow->control, "displayx");
-    ASurfaceControl_acquire(cursorManager->control);
+    if (pAcquire)
+        pAcquire(cursorManager->control);
     
     AHardwareBuffer_Desc desc{};
     desc.width = rootCursor->image->width;
@@ -513,7 +596,7 @@ void DisplayX::createRootWindowControl() {
     ret = AHardwareBuffer_allocate(&desc, &rootWindow->drawable->ahb);
     if (ret != 0)
         return; 
-    
+
     AHardwareBuffer_acquire(rootWindow->drawable->ahb);
     
     AHardwareBuffer_Desc outDesc{};
@@ -521,8 +604,9 @@ void DisplayX::createRootWindowControl() {
     rootWindow->drawable->stride = outDesc.stride; 
     
     rootWindow->control = ASurfaceControl_createFromWindow(this->native_window, "displayx");
-    ASurfaceControl_acquire(rootWindow->control);
-    
+    if (pAcquire)      
+        pAcquire(rootWindow->control);
+ 
     windowTransaction = ASurfaceTransaction_create();
 }
 
@@ -539,7 +623,7 @@ void DisplayX::destroyRootWindowControl() {
     }
     
     if (!rootWindow->control) return;
-    
+
     ASurfaceControl_release(rootWindow->control);
     rootWindow->control = nullptr;
 }
@@ -556,7 +640,7 @@ void DisplayX::destroyRootCursorControl() {
     }
     
     if (!cursorManager->control) return;
-    
+
     ASurfaceControl_release(cursorManager->control);
     cursorManager->control = nullptr;
 }
@@ -608,7 +692,21 @@ void DisplayX::restoreControlState() {
         
         ASurfaceTransaction_reparent(windowTransaction, window->control, window->parent->control);
         ASurfaceTransaction_setVisibility(windowTransaction, window->control, window->mapped ? ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
-        ASurfaceTransaction_setPosition(windowTransaction, window->control, window->x, window->y);
+        
+        if (pSetPosition) {
+            pSetPosition(windowTransaction, window->control, window->x, window->y);
+        }
+        else {  
+            ARect src{};
+            ARect dst = {
+                .left = window->x,
+                .top = window->y,
+                .right = window->x + window->width,
+                .bottom = window->y + window->height
+            };
+            ASurfaceTransaction_setGeometry(windowTransaction, window->control, src, dst, 0);        
+        }
+        
         ASurfaceTransaction_setBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
         ASurfaceTransaction_apply(windowTransaction);
     }
