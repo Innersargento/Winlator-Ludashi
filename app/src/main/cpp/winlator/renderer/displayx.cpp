@@ -17,11 +17,41 @@
 
 #include "displayx.hpp"
 
-using SetPositionFn = void (*)(ASurfaceTransaction*, ASurfaceControl*, int32_t, int32_t);
-using AcquireFn = void (*)(ASurfaceControl*);
+using PFNASURFACETRANSACTIONSETPOSITION = void (*)(ASurfaceTransaction*, ASurfaceControl*, int32_t, int32_t);
+using PFNASURFACETRANSACTIONSETBUFFER = void (*)(ASurfaceTransaction*, ASurfaceControl*, AHardwareBuffer*, int);
+using PFNASURFACETRANSACTIONSETGEOMETRY = void (*)(ASurfaceTransaction*, ASurfaceControl*, const ARect&, const ARect&, int32_t);
+using PFNASURFACETRANSACTIONSETZORDER = void (*)(ASurfaceTransaction*, ASurfaceControl*, int32_t);
+using PFNASURFACETRANSACTIONSETVISIBILITY = void (*)(ASurfaceTransaction*, ASurfaceControl*, enum ASurfaceTransactionVisibility);
+using PFNASURFACETRANSACTIONREPARENT = void (*)(ASurfaceTransaction*, ASurfaceControl*, ASurfaceControl*);
+using PFNASURFACETRANSACTIONCREATE = ASurfaceTransaction* (*)();
+using PFNASURFACETRANSACTIONDELETE = void (*)(ASurfaceTransaction*);
+using PFNASURFACETRANSACTIONAPPLY = void (*)(ASurfaceTransaction*);
 
-static SetPositionFn pSetPosition = nullptr;
-static AcquireFn pAcquire = nullptr;
+using PFNASURFACECONTROLACQUIRE = void (*)(ASurfaceControl*);
+using PFNASURFACECONTROLRELEASE = void (*)(ASurfaceControl*);
+using PFNASURFACECONTROLCREATE = ASurfaceControl* (*)(ASurfaceControl*, const char*);
+using PFNASURFACECONTROLCREATEFROMWINDOW = ASurfaceControl* (*)(ANativeWindow*, const char*);
+
+using PFNACHOREOGRAPHERGETINSTANCE = AChoreographer* (*)();
+using PFNACHOREOGRAPHERPOSTFRAMECALLBACK64 = void (*)(AChoreographer*, AChoreographer_frameCallback64, void*);
+
+static PFNASURFACETRANSACTIONSETPOSITION pfnASurfaceTransactionSetPosition = nullptr;
+static PFNASURFACETRANSACTIONSETBUFFER pfnASurfaceTransactionSetBuffer = nullptr;
+static PFNASURFACETRANSACTIONSETGEOMETRY pfnASurfaceTransactionSetGeometry = nullptr;
+static PFNASURFACETRANSACTIONSETZORDER pfnASurfaceTransactionSetZOrder = nullptr;
+static PFNASURFACETRANSACTIONSETVISIBILITY pfnASurfaceTransactionSetVisibility = nullptr;
+static PFNASURFACETRANSACTIONREPARENT pfnASurfaceTransactionReparent = nullptr;
+static PFNASURFACETRANSACTIONCREATE pfnASurfaceTransactionCreate = nullptr;
+static PFNASURFACETRANSACTIONDELETE pfnASurfaceTransactionDelete = nullptr;
+static PFNASURFACETRANSACTIONAPPLY pfnASurfaceTransactionApply = nullptr;
+
+static PFNASURFACECONTROLACQUIRE pfnASurfaceControlAcquire = nullptr;
+static PFNASURFACECONTROLRELEASE pfnASurfaceControlRelease = nullptr;
+static PFNASURFACECONTROLCREATE pfnASurfaceControlCreate = nullptr;
+static PFNASURFACECONTROLCREATEFROMWINDOW pfnASurfaceControlCreateFromWindow = nullptr;
+
+static PFNACHOREOGRAPHERGETINSTANCE pfnAChoreographerGetInstance = nullptr;
+static PFNACHOREOGRAPHERPOSTFRAMECALLBACK64 pfnAChoreographerPostFrameCallback64 = nullptr;
 
 void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
     auto *self = reinterpret_cast<DisplayX *>(data);
@@ -41,7 +71,7 @@ void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
     self->displayxLock.notify();
     lock.unlock();
     
-    AChoreographer_postFrameCallback64(self->choreographer, DisplayX::onFrameCallback64, self);
+    pfnAChoreographerPostFrameCallback64(self->choreographer, DisplayX::onFrameCallback64, self);
 }
 
 void DisplayX::renderingThreadLoop() {
@@ -143,13 +173,28 @@ void DisplayX::renderingThreadLoop() {
 }
 
 void DisplayX::start() {
-    void* lib = dlopen("libandroid.so", RTLD_NOW);
-    pSetPosition = reinterpret_cast<SetPositionFn>(dlsym(lib, "ASurfaceTransaction_setPosition"));
-    pAcquire = reinterpret_cast<AcquireFn>(dlsym(lib, "ASurfaceControl_acquire"));
+    void* handle = dlopen("libandroid.so", RTLD_NOW);
+    pfnASurfaceTransactionSetPosition = reinterpret_cast<PFNASURFACETRANSACTIONSETPOSITION>(dlsym(handle,"ASurfaceTransaction_setPosition"));
+    pfnASurfaceTransactionSetBuffer = reinterpret_cast<PFNASURFACETRANSACTIONSETBUFFER>(dlsym(handle,"ASurfaceTransaction_setBuffer"));
+    pfnASurfaceTransactionSetGeometry = reinterpret_cast<PFNASURFACETRANSACTIONSETGEOMETRY>(dlsym(handle,"ASurfaceTransaction_setGeometry"));
+    pfnASurfaceTransactionSetZOrder = reinterpret_cast<PFNASURFACETRANSACTIONSETZORDER>(dlsym(handle,"ASurfaceTransaction_setZOrder"));
+    pfnASurfaceTransactionSetVisibility = reinterpret_cast<PFNASURFACETRANSACTIONSETVISIBILITY>(dlsym(handle,"ASurfaceTransaction_setVisibility"));
+    pfnASurfaceTransactionReparent = reinterpret_cast<PFNASURFACETRANSACTIONREPARENT>(dlsym(handle,"ASurfaceTransaction_reparent"));
+    pfnASurfaceTransactionCreate = reinterpret_cast<PFNASURFACETRANSACTIONCREATE>(dlsym(handle,"ASurfaceTransaction_create"));
+    pfnASurfaceTransactionDelete = reinterpret_cast<PFNASURFACETRANSACTIONDELETE>(dlsym(handle,"ASurfaceTransaction_delete"));
+    pfnASurfaceTransactionApply = reinterpret_cast<PFNASURFACETRANSACTIONAPPLY>(dlsym(handle,"ASurfaceTransaction_apply"));
+
+    pfnASurfaceControlAcquire = reinterpret_cast<PFNASURFACECONTROLACQUIRE>(dlsym(handle,"ASurfaceControl_acquire"));
+    pfnASurfaceControlRelease = reinterpret_cast<PFNASURFACECONTROLRELEASE>(dlsym(handle,"ASurfaceControl_release"));
+    pfnASurfaceControlCreate = reinterpret_cast<PFNASURFACECONTROLCREATE>(dlsym(handle,"ASurfaceControl_create"));
+    pfnASurfaceControlCreateFromWindow = reinterpret_cast<PFNASURFACECONTROLCREATEFROMWINDOW>(dlsym(handle,"ASurfaceControl_createFromWindow"));
+
+    pfnAChoreographerGetInstance = reinterpret_cast<PFNACHOREOGRAPHERGETINSTANCE>(dlsym(handle,"AChoreographer_getInstance"));
+    pfnAChoreographerPostFrameCallback64 = reinterpret_cast<PFNACHOREOGRAPHERPOSTFRAMECALLBACK64>(dlsym(handle,"AChoreographer_postFrameCallback64"));
         
    displayxThread = std::thread(&DisplayX::renderingThreadLoop, this);
-   this->choreographer = AChoreographer_getInstance();
-   AChoreographer_postFrameCallback64(this->choreographer, DisplayX::onFrameCallback64, this);
+   this->choreographer = pfnAChoreographerGetInstance();
+   pfnAChoreographerPostFrameCallback64(this->choreographer, DisplayX::onFrameCallback64, this);
 }
 
 void DisplayX::stop() {
@@ -241,14 +286,14 @@ void DisplayX::createWindowControl(Window *window) {
     AHardwareBuffer_describe(window->drawable->ahb, &outDesc);
     window->drawable->stride = outDesc.stride;
         
-    window->control = ASurfaceControl_create(window->parent->control, "displayx");
-    if (pAcquire)    
-        pAcquire(window->control);
+    window->control = pfnASurfaceControlCreate(window->parent->control, "displayx");
+    if (pfnASurfaceControlAcquire)    
+        pfnASurfaceControlAcquire(window->control);
     
-    ASurfaceTransaction_setVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
+    pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
     
-    if (pSetPosition) {
-        pSetPosition(windowTransaction, window->control, window->x, window->y);
+    if (pfnASurfaceTransactionSetPosition) {
+        pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
     }
     else {
         ARect src{};
@@ -258,9 +303,9 @@ void DisplayX::createWindowControl(Window *window) {
             .right = window->x + window->width,
             .bottom = window->y + window->height
         };
-        ASurfaceTransaction_setGeometry(windowTransaction, window->control, src, dst, 0);
+        pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, src, dst, 0);
     }  
-    ASurfaceTransaction_apply(windowTransaction);
+    pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::destroyWindowControl(Window *window) {
@@ -273,22 +318,22 @@ void DisplayX::destroyWindowControl(Window *window) {
     
     if (!window->control) return;
  
-    ASurfaceControl_release(window->control);
+    pfnASurfaceControlRelease(window->control);
     window->control = nullptr;
 }
 
 void DisplayX::mapWindow(Window *window) {
     if (!window->control) return;
     
-    ASurfaceTransaction_setVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_SHOW);
-    ASurfaceTransaction_apply(windowTransaction);
+    pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_SHOW);
+    pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::unmapWindow(Window *window) {
     if (!window->control) return;
     
-    ASurfaceTransaction_setVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
-    ASurfaceTransaction_apply(windowTransaction);
+    pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
+    pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::changeGeometry(Window *window, bool resized) {
@@ -321,11 +366,11 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
         window->drawable->stride = outDesc.stride;
         
         window->drawable->sizeChanged = false;
-        ASurfaceTransaction_setBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
+        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
     }
     
-    if (pSetPosition) {
-        pSetPosition(windowTransaction, window->control, window->x, window->y);
+    if (pfnASurfaceTransactionSetPosition) {
+        pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
     }
     else {
         ARect src{};
@@ -335,10 +380,10 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
             .right = window->x + window->width,
             .bottom = window->y + window->height
         };
-        ASurfaceTransaction_setGeometry(windowTransaction, window->control, src, dst, 0);
+        pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, src, dst, 0);
     }
     
-    ASurfaceTransaction_apply(windowTransaction);
+    pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::updateWindow(Window *window) {
@@ -363,8 +408,8 @@ void DisplayX::updateWindow(Window *window) {
     
     window->drawable->isDirty = false;
     
-    if (pSetPosition) {
-        pSetPosition(windowTransaction, window->control, window->x, window->y);
+    if (pfnASurfaceTransactionSetPosition) {
+        pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
     }
     else {
         ARect srcRect{};
@@ -374,11 +419,11 @@ void DisplayX::updateWindow(Window *window) {
             .right = window->x + window->width,
             .bottom = window->y + window->height
         };
-        ASurfaceTransaction_setGeometry(windowTransaction, window->control, srcRect, dstRect, 0);
+        pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, srcRect, dstRect, 0);
     }
     
-    ASurfaceTransaction_setBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
-    ASurfaceTransaction_apply(windowTransaction);
+    pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
+    pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::updateWindowDirect(Window *window) {
@@ -387,8 +432,8 @@ void DisplayX::updateWindowDirect(Window *window) {
     auto drawable = window->currentDirectContent;
     if (!drawable) return;
     
-    if (pSetPosition) {
-        pSetPosition(windowTransaction, window->control, window->x, window->y);
+    if (pfnASurfaceTransactionSetPosition) {
+        pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
     }
     else { 
         ARect src{};
@@ -398,11 +443,11 @@ void DisplayX::updateWindowDirect(Window *window) {
             .right = window->x + window->width,
             .bottom = window->y + window->height
         };
-        ASurfaceTransaction_setGeometry(windowTransaction, window->control, src, dst, 0);
+        pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, src, dst, 0);
     }
          
-    ASurfaceTransaction_setBuffer(windowTransaction, window->control, drawable->ahb, -1);
-    ASurfaceTransaction_apply(windowTransaction);
+    pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, drawable->ahb, -1);
+    pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::createCursor(Cursor *cursor) {
@@ -459,9 +504,9 @@ void DisplayX::updateCursor(Window *window) {
     
     cursor->image->isDirty = false;
     
-    ASurfaceTransaction_setBuffer(cursorTransaction, cursorManager->control, cursor->image->ahb, -1);
-    ASurfaceTransaction_setVisibility(cursorTransaction, cursorManager->control, (cursor->visible && cursorVisible) ?  ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
-    ASurfaceTransaction_apply(cursorTransaction);
+    pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, cursor->image->ahb, -1);
+    pfnASurfaceTransactionSetVisibility(cursorTransaction, cursorManager->control, (cursor->visible && cursorVisible) ?  ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
+    pfnASurfaceTransactionApply(cursorTransaction);
 }
 
 void DisplayX::updateCursorPosition() {
@@ -475,20 +520,20 @@ void DisplayX::updateCursorPosition() {
     int x = std::clamp(cursorManager->pointer.posX, 0, windowManager->getRootWindow()->width - 1);
     int y = std::clamp(cursorManager->pointer.posY, 0, windowManager->getRootWindow()->height - 1);
     
-    if (cursorVisible || cursor->visible) {
+    if (cursorVisible || (cursor && cursor->visible)) {
         if (repostCursor) {
             if (cursor != nullptr) {
-                ASurfaceTransaction_setBuffer(cursorTransaction, cursorManager->control, cursor->image->ahb, -1);
+                pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, cursor->image->ahb, -1);
             }
             else {
-                ASurfaceTransaction_setBuffer(cursorTransaction, cursorManager->control, rootCursor->image->ahb, -1);
+                pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, rootCursor->image->ahb, -1);
             }
             auto lock = displayxLock.lock();
             repostCursor = false;
         }
         
-        if (pSetPosition) {
-            pSetPosition(cursorTransaction, cursorManager->control, x, y);
+        if (pfnASurfaceTransactionSetPosition) {
+            pfnASurfaceTransactionSetPosition(cursorTransaction, cursorManager->control, x, y);
         }
         else {
             auto& cursorImage = (cursor != nullptr) ? cursor->image : rootCursor->image;
@@ -499,14 +544,14 @@ void DisplayX::updateCursorPosition() {
                 .right = x + cursorImage->width,
                 .bottom = y + cursorImage->height
             };
-            ASurfaceTransaction_setGeometry(cursorTransaction, cursorManager->control, src, dst, 0);
+            pfnASurfaceTransactionSetGeometry(cursorTransaction, cursorManager->control, src, dst, 0);
         }
         
-        ASurfaceTransaction_apply(cursorTransaction);
+        pfnASurfaceTransactionApply(cursorTransaction);
     }
     else {
-        ASurfaceTransaction_setVisibility(cursorTransaction, cursorManager->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
-        ASurfaceTransaction_apply(cursorTransaction);
+        pfnASurfaceTransactionSetVisibility(cursorTransaction, cursorManager->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
+        pfnASurfaceTransactionApply(cursorTransaction);
     }
 }
 
@@ -517,9 +562,9 @@ void DisplayX::createRootCursorControl() {
     auto rootWindow = windowManager->getRootWindow();
     if (!rootCursor || !rootWindow) return;
     
-    cursorManager->control = ASurfaceControl_create(rootWindow->control, "displayx");
-    if (pAcquire)
-        pAcquire(cursorManager->control);
+    cursorManager->control = pfnASurfaceControlCreate(rootWindow->control, "displayx");
+    if (pfnASurfaceControlAcquire)
+        pfnASurfaceControlAcquire(cursorManager->control);
     
     AHardwareBuffer_Desc desc{};
     desc.width = rootCursor->image->width;
@@ -558,7 +603,7 @@ void DisplayX::createRootCursorControl() {
     
     rootCursor->image->isDirty = false;
     
-    cursorTransaction = ASurfaceTransaction_create();
+    cursorTransaction = pfnASurfaceTransactionCreate();
 }
 
 void DisplayX::drawRootCursor() {
@@ -567,16 +612,16 @@ void DisplayX::drawRootCursor() {
     auto rootCursor = cursorManager->getRootCursor();
     if (!cursorManager) return;
     
-    ASurfaceTransaction_setBuffer(cursorTransaction, cursorManager->control, rootCursor->image->ahb, -1);
-    ASurfaceTransaction_setZOrder(cursorTransaction, cursorManager->control, INT32_MAX);
-    ASurfaceTransaction_apply(cursorTransaction);
+    pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, rootCursor->image->ahb, -1);
+    pfnASurfaceTransactionSetZOrder(cursorTransaction, cursorManager->control, INT32_MAX);
+    pfnASurfaceTransactionApply(cursorTransaction);
 }
 
 void DisplayX::reparentWindow(Window *window, Window *parent) {
     if (!window->control) return;
     
-    ASurfaceTransaction_reparent(windowTransaction, window->control, parent->control);
-    ASurfaceTransaction_apply(windowTransaction);
+    pfnASurfaceTransactionReparent(windowTransaction, window->control, parent->control);
+    pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::createRootWindowControl() {
@@ -605,16 +650,16 @@ void DisplayX::createRootWindowControl() {
     AHardwareBuffer_describe(rootWindow->drawable->ahb, &outDesc);
     rootWindow->drawable->stride = outDesc.stride; 
     
-    rootWindow->control = ASurfaceControl_createFromWindow(this->native_window, "displayx");
-    if (pAcquire)      
-        pAcquire(rootWindow->control);
+    rootWindow->control = pfnASurfaceControlCreateFromWindow(this->native_window, "displayx");
+    if (pfnASurfaceControlAcquire)      
+        pfnASurfaceControlAcquire(rootWindow->control);
  
-    windowTransaction = ASurfaceTransaction_create();
+    windowTransaction = pfnASurfaceTransactionCreate();
 }
 
 void DisplayX::destroyRootWindowControl() {
     this->native_window = nullptr;
-    ASurfaceTransaction_delete(windowTransaction);
+    pfnASurfaceTransactionDelete(windowTransaction);
     
     auto rootWindow = windowManager->getRootWindow();
     if (!rootWindow) return;
@@ -626,12 +671,12 @@ void DisplayX::destroyRootWindowControl() {
     
     if (!rootWindow->control) return;
 
-    ASurfaceControl_release(rootWindow->control);
+    pfnASurfaceControlRelease(rootWindow->control);
     rootWindow->control = nullptr;
 }
 
 void DisplayX::destroyRootCursorControl() {
-    ASurfaceTransaction_delete(cursorTransaction);
+    pfnASurfaceTransactionDelete(cursorTransaction);
     
     auto rootCursor = cursorManager->getRootCursor();
     if (!rootCursor) return;
@@ -643,7 +688,7 @@ void DisplayX::destroyRootCursorControl() {
     
     if (!cursorManager->control) return;
 
-    ASurfaceControl_release(cursorManager->control);
+    pfnASurfaceControlRelease(cursorManager->control);
     cursorManager->control = nullptr;
 }
 
@@ -679,9 +724,9 @@ void DisplayX::resizeRootWindow() {
         dst.bottom = viewTransformation.viewOffsetY + viewTransformation.viewHeight;
     }
     
-    ASurfaceTransaction_setGeometry(windowTransaction, rootWindow->control, src, dst, 0);
-    ASurfaceTransaction_setBuffer(windowTransaction, rootWindow->control, rootWindow->drawable->ahb, -1);
-    ASurfaceTransaction_apply(windowTransaction);
+    pfnASurfaceTransactionSetGeometry(windowTransaction, rootWindow->control, src, dst, 0);
+    pfnASurfaceTransactionSetBuffer(windowTransaction, rootWindow->control, rootWindow->drawable->ahb, -1);
+    pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::restoreControlState() {
@@ -692,11 +737,11 @@ void DisplayX::restoreControlState() {
         if (window == windowManager->getRootWindow()) continue;
         if (!window->control || !window->parent->control) continue;
         
-        ASurfaceTransaction_reparent(windowTransaction, window->control, window->parent->control);
-        ASurfaceTransaction_setVisibility(windowTransaction, window->control, window->mapped ? ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
+        pfnASurfaceTransactionReparent(windowTransaction, window->control, window->parent->control);
+        pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, window->mapped ? ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
         
-        if (pSetPosition) {
-            pSetPosition(windowTransaction, window->control, window->x, window->y);
+        if (pfnASurfaceTransactionSetPosition) {
+            pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
         }
         else {  
             ARect src{};
@@ -706,11 +751,11 @@ void DisplayX::restoreControlState() {
                 .right = window->x + window->width,
                 .bottom = window->y + window->height
             };
-            ASurfaceTransaction_setGeometry(windowTransaction, window->control, src, dst, 0);        
+            pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, src, dst, 0);        
         }
         
-        ASurfaceTransaction_setBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
-        ASurfaceTransaction_apply(windowTransaction);
+        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
+        pfnASurfaceTransactionApply(windowTransaction);
     }
     
     repostCursor = true;
@@ -749,8 +794,8 @@ void DisplayX::toggleFullscreen() {
         dst.bottom = viewTransformation.viewOffsetY + viewTransformation.viewHeight;
     }
     
-    ASurfaceTransaction_setGeometry(windowTransaction, rootWindow->control, src, dst, 0);
-    ASurfaceTransaction_apply(windowTransaction);
+    pfnASurfaceTransactionSetGeometry(windowTransaction, rootWindow->control, src, dst, 0);
+    pfnASurfaceTransactionApply(windowTransaction);
 }
 /* This is a mock implementation of the complete DisplayX. I will rewrite this once the infrastructure is finished
 class NativeRenderer {

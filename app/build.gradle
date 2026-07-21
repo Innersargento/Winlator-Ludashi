@@ -124,9 +124,9 @@ android {
 
     defaultConfig {
         applicationId "com.winlator.cmod"
-        minSdkVersion 29
+        minSdkVersion 28
         // We’re preserving Winlator’s request to keep targetSdkVersion at 28
-        targetSdkVersion 34
+        targetSdkVersion 28
 
         versionCode 20
         versionName "7.1.4x-cmod"
