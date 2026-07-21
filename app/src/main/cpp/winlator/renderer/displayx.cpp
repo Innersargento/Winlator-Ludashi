@@ -90,10 +90,10 @@ void DisplayX::renderingThreadLoop() {
         });
         
         auto currState = state;
-        state = State::NONE;
         
         if (currState == State::STOP) {
             printf("Received state STOP");
+            state = State::NONE;
             displayxLock.notify();
             return;
         }
@@ -101,6 +101,7 @@ void DisplayX::renderingThreadLoop() {
         if (currState == State::PAUSE) {
             printf("Received state PAUSE");
             paused = true;
+            state = State::NONE;
             displayxLock.notify();
         }
             
@@ -108,6 +109,7 @@ void DisplayX::renderingThreadLoop() {
             printf("Received state RESUME");
             paused = false;
             restoreState = true;
+            state = State::NONE;
             displayxLock.notify();
         }
         
@@ -116,6 +118,7 @@ void DisplayX::renderingThreadLoop() {
             createRootWindowControl();
             createRootCursorControl();
             hasSurface = true;
+            state = State::NONE;
             displayxLock.notify();
         }
             
@@ -123,6 +126,7 @@ void DisplayX::renderingThreadLoop() {
             printf("Received state CHANGE_SURFACE");
             resizeRootWindow();
             surfaceChanged = true;
+            state = State::NONE;
             displayxLock.notify();
         }
             
@@ -138,6 +142,7 @@ void DisplayX::renderingThreadLoop() {
             surfaceChanged = false;
             destroyRootCursorControl();
             destroyRootWindowControl();
+            state = State::NONE;
             displayxLock.notify();
         }
         
@@ -147,6 +152,7 @@ void DisplayX::renderingThreadLoop() {
         }
        
         if (!windowQueue.empty() && hasSurface && surfaceChanged && !paused && !func) {
+            state = State::NONE;
             while (!windowQueue.empty()) {
                 auto window = windowQueue.pop();
                 windows.push_back(window);
