@@ -15,9 +15,9 @@ public class Pixmap extends XResource {
     public Bitmap toBitmap(Pixmap maskPixmap) {
         ByteBuffer maskData = maskPixmap != null ? maskPixmap.drawable.getData() : null;
         Bitmap bitmap = Bitmap.createBitmap(drawable.width, drawable.height, Bitmap.Config.ARGB_8888);
-        toBitmap(drawable.getData(), maskData, bitmap);
+        toBitmap(drawable.getStride(), drawable.getData(), maskData, bitmap);
         return bitmap;
     }
 
-    private static native void toBitmap(ByteBuffer colorData, ByteBuffer maskData, Bitmap bitmap);
+    private static native void toBitmap(short stride, ByteBuffer colorData, ByteBuffer maskData, Bitmap bitmap);
 }

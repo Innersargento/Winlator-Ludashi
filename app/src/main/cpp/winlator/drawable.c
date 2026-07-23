@@ -235,7 +235,8 @@ Java_com_winlator_cmod_xserver_Drawable_drawAlphaMaskedBitmap(JNIEnv *env, jclas
                                                          jbyte foreBlue, jbyte backRed,
                                                          jbyte backGreen, jbyte backBlue,
                                                          jobject srcData, jobject maskData,
-                                                         jobject dstData) {
+                                                         jshort width, jshort height,
+                                                         jshort stride, jobject dstData) {
     int *srcDataAddr = (*env)->GetDirectBufferAddress(env, srcData);
     int *maskDataAddr = (*env)->GetDirectBufferAddress(env, maskData);
     int *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
@@ -248,14 +249,19 @@ Java_com_winlator_cmod_xserver_Drawable_drawAlphaMaskedBitmap(JNIEnv *env, jclas
     int foreColor = packColor(foreRed, foreGreen, foreBlue);
     int backColor = packColor(backRed, backGreen, backBlue);
 
-    jlong dstLength = (*env)->GetDirectBufferCapacity(env, dstData) / 4;
-    for (int i = 0; i < dstLength; i++) {
-        dstDataAddr[i] = maskDataAddr[i] == WHITE ? (srcDataAddr[i] == WHITE ? foreColor : backColor) | 0xff000000 : 0x00000000;
+    for (int16_t y = 0; y < height; y++) {
+        int rowStart = y * stride;
+        int srcStart = y * width;
+        for (int16_t x = 0; x < width; x++) {
+            int srcIdx = x + srcStart;
+            int dstIdx = x + rowStart;
+            dstDataAddr[dstIdx] = maskDataAddr[srcIdx] == WHITE ? (srcDataAddr[srcIdx] == WHITE ? foreColor : backColor) | 0xff000000 : 0x00000000;
+        }
     }
 }
 
 JNIEXPORT void JNICALL
-Java_com_winlator_cmod_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, jobject colorData,
+Java_com_winlator_cmod_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, jshort stride, jobject colorData,
                                           jobject maskData, jobject bitmap) {
     char *colorDataAddr = (*env)->GetDirectBufferAddress(env, colorData);
     char *maskDataAddr = maskData ? (*env)->GetDirectBufferAddress(env, maskData) : NULL;
@@ -276,12 +282,18 @@ Java_com_winlator_cmod_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, jobject 
         printf("Error: Failed to lock bitmap pixels in toBitmap\n");
         return;
     }
-
-    for (int i = 0, size = info.width * info.height * 4; i < size; i += 4) {
-        pixels[i+2] = colorDataAddr[i+0];
-        pixels[i+1] = colorDataAddr[i+1];
-        pixels[i+0] = colorDataAddr[i+2];
-        pixels[i+3] = maskDataAddr ? maskDataAddr[i+0] : colorDataAddr[i+3];
+    
+    for (int16_t y = 0; y < info.height; y++) {
+        int srcRowLength = y * stride;
+        int dstRowLength = y * info.width;
+        for (int16_t x = 0; x < info.width; x++) {
+            int srcIdx = (x + srcRowLength) * 4;
+            int dstIdx = (x + dstRowLength) * 4;
+            pixels[dstIdx + 2] = colorDataAddr[srcIdx + 0];
+            pixels[dstIdx + 1] = colorDataAddr[srcIdx + 1];
+            pixels[dstIdx + 0] = colorDataAddr[srcIdx + 2];
+            pixels[dstIdx + 3] = maskDataAddr ? maskDataAddr[dstIdx + 0] : colorDataAddr[srcIdx + 3];
+        }
     }
 
     AndroidBitmap_unlockPixels(env, bitmap);

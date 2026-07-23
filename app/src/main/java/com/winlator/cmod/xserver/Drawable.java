@@ -55,7 +55,7 @@ public class Drawable extends XResource {
         this.data = data;
     }
 
-    private short getStride() {
+    public short getStride() {
         return gpuImage != null ? gpuImage.getStride() : width;
     }
 
@@ -166,7 +166,7 @@ public class Drawable extends XResource {
     }
 
     public void drawAlphaMaskedBitmap(byte foreRed, byte foreGreen, byte foreBlue, byte backRed, byte backGreen, byte backBlue, Drawable srcDrawable, Drawable maskDrawable) {
-        drawAlphaMaskedBitmap(foreRed, foreGreen, foreBlue, backRed, backGreen, backBlue, srcDrawable.data, maskDrawable.data, this.data);
+        drawAlphaMaskedBitmap(foreRed, foreGreen, foreBlue, backRed, backGreen, backBlue, srcDrawable.data, maskDrawable.data, this.width, this.height, this.getStride(), this.data);
         this.data.rewind();
 
         if (onDrawListener != null) onDrawListener.run();
@@ -179,7 +179,7 @@ public class Drawable extends XResource {
 
     private static native void drawBitmap(short width, short height, ByteBuffer srcData, short stride, ByteBuffer dstData);
 
-    private static native void drawAlphaMaskedBitmap(byte foreRed, byte foreGreen, byte foreBlue, byte backRed, byte backGreen, byte backBlue, ByteBuffer srcData, ByteBuffer maskData, ByteBuffer dstData);
+    private static native void drawAlphaMaskedBitmap(byte foreRed, byte foreGreen, byte foreBlue, byte backRed, byte backGreen, byte backBlue, ByteBuffer srcData, ByteBuffer maskData, short width, short height, short stride, ByteBuffer dstData);
 
     private static native void copyArea(short srcX, short srcY, short dstX, short dstY, short width, short height, short srcStride, short dstStride, ByteBuffer srcData, ByteBuffer dstData);
 
