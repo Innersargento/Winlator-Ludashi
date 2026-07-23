@@ -54,6 +54,8 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     
     jobject dataBuf = env->CallObjectMethod(drawableObj, cache.drawableGetData);
     drawable->data = env->GetDirectBufferAddress(dataBuf);
+    drawable->ahb = (AHardwareBuffer *)env->GetLongField(drawableObj, cache.drawableAHB);
+    drawable->stride = env->GetShortField(drawableObj, cache.drawableStride);
     
     drawable->isDirty = false;
     drawable->isDirectContent = false;
@@ -103,6 +105,8 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     cursorDrawable->width = w;
     cursorDrawable->height = h;
     cursorDrawable->data = cursorData;
+    cursorDrawable->ahb = nullptr;
+    cursorDrawable->stride = 0;
     cursorDrawable->isDirty = true;
     cursorDrawable->sizeChanged = false;
     cursorDrawable->drawableObj = nullptr;
@@ -166,6 +170,8 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateWindow(JNIEnv *env, jobjec
         drawable->width = env->GetShortField(drawableObj, cache.drawableWidth);
         drawable->height = env->GetShortField(drawableObj, cache.drawableHeight);
         drawable->data = nullptr;
+        drawable->ahb = (AHardwareBuffer *)env->GetLongField(drawableObj, cache.drawableAHB);
+        drawable->stride = env->GetShortField(drawableObj, cache.drawableStride);
         drawable->format = 5;
         drawable->isDirty = false;
         drawable->isDirectContent = false;
@@ -262,6 +268,8 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateCursor(JNIEnv *env, jobjec
     drawable->width = env->GetShortField(drawableObj, cache.drawableWidth);
     drawable->height = env->GetShortField(drawableObj, cache.drawableHeight);
     drawable->data = nullptr;
+    drawable->ahb = (AHardwareBuffer *)env->GetLongField(drawableObj, cache.drawableAHB);
+    drawable->stride = env->GetShortField(drawableObj, cache.drawableStride);
     drawable->format = 5;
     drawable->isDirectContent = false;
     drawable->isDirty = false;
@@ -367,9 +375,15 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateWindowGeometry(JNIEnv *env
     window->y = y;
     
     if (resized && window->inputOutput) {
+        env->DeleteGlobalRef(window->drawable->drawableObj);
+        jobject drawableObj = env->CallObjectMethod(window->windowObj, cache.windowGetContent);
+        window->drawable->drawableObj = env->NewGlobalRef(drawableObj);
+        env->DeleteLocalRef(drawableObj);
         window->drawable->data = nullptr;
         window->drawable->width = width;
         window->drawable->height = height;
+        window->drawable->ahb = (AHardwareBuffer *)env->GetLongField(window->drawable->drawableObj, cache.drawableAHB);
+        window->drawable->stride = env->GetShortField(window->drawable->drawableObj, cache.drawableStride);
         window->drawable->sizeChanged = true;
     }
     

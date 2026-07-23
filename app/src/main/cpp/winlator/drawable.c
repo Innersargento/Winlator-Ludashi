@@ -4,17 +4,20 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <math.h>
+
+#include <android/hardware_buffer.h>
 #include <android/bitmap.h>
 #include <android/log.h>
 
 #define WHITE 0xffffff
 #define BLACK 0x000000
-#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "System.out", __VA_ARGS__);
+#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "Drawable", __VA_ARGS__);
+#define HAL_PIXEL_FORMAT_BGRA_8888 5
 
 enum GCFunction {GCF_CLEAR, GCF_AND, GCF_AND_REVERSE, GCF_COPY, GCF_AND_INVERTED, GCF_NO_OP, GCF_XOR, GCF_OR, GCF_NOR, GCF_EQUIV, GCF_INVERT, GCF_OR_REVERSE, GCF_COPY_INVERTED, GCF_OR_INVERTED, GCF_NAND, GCF_SET};
 
 static int packColor(int8_t r, int8_t g, int8_t b) {
-    return ((r & 0xff00) << 8) | (g & 0xff00) | (b >> 8);
+    return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
 }
 
 static void unpackColor(int color, uint8_t *rgba) {
@@ -74,7 +77,7 @@ static int setPixelOp(int srcColor, int dstColor, enum GCFunction gcFunction) {
 
 JNIEXPORT void JNICALL
 Java_com_winlator_cmod_xserver_Drawable_drawBitmap(JNIEnv *env, jclass obj,
-                                              jshort width, jshort height, jobject srcData,
+                                              jshort width, jshort height, jobject srcData, jshort dstStride,
                                               jobject dstData) {
     uint8_t *srcDataAddr = (*env)->GetDirectBufferAddress(env, srcData);
     int *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
@@ -86,8 +89,9 @@ Java_com_winlator_cmod_xserver_Drawable_drawBitmap(JNIEnv *env, jclass obj,
 
     int stride = getBitmapBytePad(width);
     for (int16_t y = 0, x; y < height; y++) {
+        int *dst = dstDataAddr + (y * dstStride);
         for (x = 0; x < width; x++) {
-            *dstDataAddr++ = getBit(srcDataAddr, x) ? WHITE : BLACK;
+            dst[x] = getBit(srcDataAddr, x) ? WHITE : BLACK;
         }
         srcDataAddr += stride;
     }
@@ -107,17 +111,9 @@ Java_com_winlator_cmod_xserver_Drawable_copyArea(JNIEnv *env, jclass obj, jshort
         return;
     }
 
-    jlong srcLength = (*env)->GetDirectBufferCapacity(env, srcData);
-    jlong dstLength = (*env)->GetDirectBufferCapacity(env, dstData);
-
-    if (srcX != 0 || srcY != 0 || dstX != 0 || dstY != 0 || srcLength != dstLength) {
-        int copyAmount = width * 4;
-        for (int16_t y = 0; y < height; y++) {
-            memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4,
-                   srcDataAddr + (srcX + (y + srcY) * srcStride) * 4, copyAmount);
-        }
-    } else {
-        memcpy(dstDataAddr, srcDataAddr, dstLength);
+    int copyAmount = width * 4;
+    for (int16_t y = 0; y < height; y++) {
+        memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4, srcDataAddr + (srcX + (y + srcY) * srcStride) * 4, copyAmount);
     }
 }
 
@@ -318,4 +314,53 @@ Java_com_winlator_cmod_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, jobject 
     }
 
     AndroidBitmap_unlockPixels(env, bitmap);
+}
+
+JNIEXPORT jobject JNICALL
+Java_com_winlator_cmod_xserver_Drawable_allocate(JNIEnv *env, jclass obj, jint width, jint height) {
+    int ret;
+    void *address;
+    AHardwareBuffer *hardwareBuffer;
+    
+    AHardwareBuffer_Desc desc = {};
+    desc.width = width;
+    desc.height = height;
+    desc.format = HAL_PIXEL_FORMAT_BGRA_8888;
+    desc.layers = 1;
+    desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
+                 AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
+    
+    ret = AHardwareBuffer_allocate(&desc, &hardwareBuffer);
+    if (ret != 0) {
+        printf("Failed to allocate hardwareBuffer");
+        return NULL;
+    }
+    
+    AHardwareBuffer_Desc outDesc;
+    AHardwareBuffer_describe(hardwareBuffer, &outDesc);
+    
+    void *address;
+    
+    jlong size = width * height * 4;
+    address = malloc(size);
+    jobject buffer = (*env)->NewDirectByteBuffer(env, address, size);
+    if (buffer == NULL) {
+        printf("Failed to allocate bytebuffer");
+        AHardwareBuffer_unlock(hardwareBuffer, NULL);
+        return NULL;
+    }
+    
+    jclass cls = (*env)->GetObjectClass(env, obj);
+    if (!cls) {
+        printf("Failed to find Drawable class");
+        return NULL;
+    }    
+        
+    jfieldID backingAHBField = (*env)->GetFieldID(env, cls, "backingAHB", "J");
+    (*env)->SetLongField(env, obj, backingAHBField, (jlong)hardwareBuffer);
+    
+    jfieldID strideField = (*env)->GetFieldID(env, cls, "stride", "S");
+    (*env)->SetShortField(env, obj, strideField, outDesc.stride);
+    
+    return buffer;
 }

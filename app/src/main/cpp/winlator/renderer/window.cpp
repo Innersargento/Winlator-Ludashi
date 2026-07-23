@@ -56,6 +56,7 @@ void WindowManager::deleteWindow(JNIEnv *env, Window *window) {
     window->currentDirectContent = nullptr;
     window->children.clear();
     window->directContents.clear();
+    window->drawable = nullptr;
     
     {
         auto lock = windowLock.lock();

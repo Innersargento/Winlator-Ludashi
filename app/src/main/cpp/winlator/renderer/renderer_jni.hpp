@@ -71,6 +71,8 @@ class JNICache {
         jmethodID drawableGetData;
         jmethodID drawableSetData;
         jfieldID drawableID;
+        jfieldID drawableAHB;
+        jfieldID drawableStride;
         jfieldID drawableWidth;
         jfieldID drawableHeight;
         
@@ -131,6 +133,8 @@ class JNICache {
             LOAD_FIELD_ID(drawableID, env, drawableClass, "id", "I");
             LOAD_FIELD_ID(drawableWidth, env, drawableClass, "width", "S");
             LOAD_FIELD_ID(drawableHeight, env, drawableClass, "height", "S");
+            LOAD_FIELD_ID(drawableAHB, env, drawableClass, "backingAHB", "J");
+            LOAD_FIELD_ID(drawableStride, env, drawableClass, "stride", "S");
             
             LOAD_METHOD_ID(cursorIsVisible, env, cursorClass, "isVisible", "()Z");
             LOAD_FIELD_ID(cursorID, env, cursorClass, "id", "I");

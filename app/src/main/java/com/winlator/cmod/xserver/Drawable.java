@@ -11,6 +11,8 @@ import java.nio.ByteOrder;
 
 public class Drawable extends XResource {
     public final short width;
+    public short stride;
+    public long backingAHB;
     public final short height;
     public final Visual visual;
     private ByteBuffer data;
@@ -28,7 +30,7 @@ public class Drawable extends XResource {
         this.width = (short)width;
         this.height = (short)height;
         this.visual = visual;
-        this.data = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.LITTLE_ENDIAN);
+        this.data = allocate(width, height);
         if (this.data == null) {
             throw new IllegalStateException("Drawable.data initialized as null!");
         }
@@ -81,7 +83,7 @@ public class Drawable extends XResource {
 
     public void drawImage(short srcX, short srcY, short dstX, short dstY, short width, short height, byte depth, ByteBuffer data, short totalWidth, short totalHeight) {
         if (depth == 1) {
-            drawBitmap(width, height, data, this.data);
+            drawBitmap(width, height, data, this.getStride(), this.data);
         }
         else if (depth == 24 || depth == 32) {
             dstX = (short)Mathf.clamp(dstX, 0, this.width-1);
@@ -181,7 +183,7 @@ public class Drawable extends XResource {
     }
     
 
-    private static native void drawBitmap(short width, short height, ByteBuffer srcData, ByteBuffer dstData);
+    private static native void drawBitmap(short width, short height, ByteBuffer srcData, short stride, ByteBuffer dstData);
 
     private static native void drawAlphaMaskedBitmap(byte foreRed, byte foreGreen, byte foreBlue, byte backRed, byte backGreen, byte backBlue, ByteBuffer srcData, ByteBuffer maskData, ByteBuffer dstData);
 
@@ -194,4 +196,6 @@ public class Drawable extends XResource {
     private static native void drawLine(short x0, short y0, short x1, short y1, int color, short lineWidth, short stride, ByteBuffer data);
 
     private static native void fromBitmap(Bitmap bitmap, ByteBuffer data);
+    
+    private native ByteBuffer allocate(int width, int height);
 }

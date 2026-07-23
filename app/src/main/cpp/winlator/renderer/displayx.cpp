@@ -269,28 +269,6 @@ void DisplayX::requestCursorUpdate() {
 
 void DisplayX::createWindowControl(Window *window) {
     if (!window->parent || !window->inputOutput) return;
-    
-    int ret;
-    
-    AHardwareBuffer_Desc desc{};
-    desc.width = window->width;
-    desc.height = window->height;
-    desc.format = HAL_PIXEL_FORMAT_BGRA_8888;
-    desc.layers = 1;
-    desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
-                 AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
-                 AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY |
-                 AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
-                 
-    ret = AHardwareBuffer_allocate(&desc, &window->drawable->ahb);
-    if (ret != 0)
-        return; 
-    
-    AHardwareBuffer_acquire(window->drawable->ahb);
-    
-    AHardwareBuffer_Desc outDesc{};
-    AHardwareBuffer_describe(window->drawable->ahb, &outDesc);
-    window->drawable->stride = outDesc.stride;
         
     window->control = pfnASurfaceControlCreate(window->parent->control, "displayx");
     if (pfnASurfaceControlAcquire)    
@@ -316,12 +294,6 @@ void DisplayX::createWindowControl(Window *window) {
 
 void DisplayX::destroyWindowControl(Window *window) {
     if (!window) return;
-    
-    if (window->drawable && window->drawable->ahb && !window->drawable->isDirectContent) {
-        AHardwareBuffer_release(window->drawable->ahb);
-        window->drawable->ahb = nullptr;
-    }
-    
     if (!window->control) return;
  
     pfnASurfaceControlRelease(window->control);
@@ -347,30 +319,7 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
     
     int ret;
     
-    if (resized && !window->drawable->isDirectContent) {
-        AHardwareBuffer_release(window->drawable->ahb);
-        window->drawable->ahb = nullptr;
-        
-        AHardwareBuffer_Desc desc{};
-        desc.width = window->width;
-        desc.height = window->height;
-        desc.format = HAL_PIXEL_FORMAT_BGRA_8888;
-        desc.layers = 1;
-        desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
-                 AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
-                 AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY |
-                 AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
-                 
-        ret = AHardwareBuffer_allocate(&desc, &window->drawable->ahb);
-        if (ret != 0) 
-            return;
-        
-        AHardwareBuffer_acquire(window->drawable->ahb);
-        
-        AHardwareBuffer_Desc outDesc{};
-        AHardwareBuffer_describe(window->drawable->ahb, &outDesc);
-        window->drawable->stride = outDesc.stride;
-        
+    if (resized) {
         window->drawable->sizeChanged = false;
         pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
     }
@@ -457,34 +406,9 @@ void DisplayX::updateWindowDirect(Window *window) {
 }
 
 void DisplayX::createCursor(Cursor *cursor) {
-    int ret;
-    
-    AHardwareBuffer_Desc desc{};
-    desc.width = cursor->image->width;
-    desc.height = cursor->image->height;
-    desc.format = HAL_PIXEL_FORMAT_BGRA_8888;
-    desc.layers = 1;
-    desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
-                AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
-                 AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY |
-                 AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
-                 
-    ret = AHardwareBuffer_allocate(&desc, &cursor->image->ahb);
-    if (ret != 0) 
-        return;
-    
-    AHardwareBuffer_acquire(cursor->image->ahb);
-        
-    AHardwareBuffer_Desc outDesc{};
-    AHardwareBuffer_describe(cursor->image->ahb, &outDesc);
-    cursor->image->stride = outDesc.stride;
 }
 
 void DisplayX::destroyCursor(Cursor *cursor) {
-    if (!cursor || !cursor->image || !cursor->image->ahb) return;
-    
-    AHardwareBuffer_release(cursor->image->ahb);
-    cursor->image->ahb = nullptr;
 }
 
 void DisplayX::updateCursor(Window *window) {
@@ -636,26 +560,6 @@ void DisplayX::createRootWindowControl() {
     auto rootWindow = windowManager->getRootWindow();
     if (!rootWindow) return;
     
-    AHardwareBuffer_Desc desc{};
-    desc.width = rootWindow->width;
-    desc.height = rootWindow->height;
-    desc.format = HAL_PIXEL_FORMAT_BGRA_8888;
-    desc.layers = 1;
-    desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
-                 AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
-                 AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY |
-                 AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
-                 
-    ret = AHardwareBuffer_allocate(&desc, &rootWindow->drawable->ahb);
-    if (ret != 0)
-        return; 
-
-    AHardwareBuffer_acquire(rootWindow->drawable->ahb);
-    
-    AHardwareBuffer_Desc outDesc{};
-    AHardwareBuffer_describe(rootWindow->drawable->ahb, &outDesc);
-    rootWindow->drawable->stride = outDesc.stride; 
-    
     rootWindow->control = pfnASurfaceControlCreateFromWindow(this->native_window, "displayx");
     if (pfnASurfaceControlAcquire)      
         pfnASurfaceControlAcquire(rootWindow->control);
@@ -669,12 +573,6 @@ void DisplayX::destroyRootWindowControl() {
     
     auto rootWindow = windowManager->getRootWindow();
     if (!rootWindow) return;
-    
-    if (rootWindow->drawable->ahb) {
-        AHardwareBuffer_release(rootWindow->drawable->ahb);
-        rootWindow->drawable->ahb = nullptr;
-    }
-    
     if (!rootWindow->control) return;
 
     pfnASurfaceControlRelease(rootWindow->control);
