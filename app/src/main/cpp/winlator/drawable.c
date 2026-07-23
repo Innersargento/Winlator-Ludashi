@@ -255,35 +255,6 @@ Java_com_winlator_cmod_xserver_Drawable_drawAlphaMaskedBitmap(JNIEnv *env, jclas
 }
 
 JNIEXPORT void JNICALL
-Java_com_winlator_cmod_xserver_Drawable_fromBitmap(JNIEnv *env, jclass obj, jobject bitmap,
-                                              jobject data) {
-    char *dataAddr = (*env)->GetDirectBufferAddress(env, data);
-
-    if (!dataAddr) {
-        printf("Error: NULL buffer address in fromBitmap\n");
-        return;
-    }
-
-    AndroidBitmapInfo info;
-    uint8_t *pixels;
-
-    if (AndroidBitmap_getInfo(env, bitmap, &info) < 0) {
-        printf("Error: Failed to get bitmap info in fromBitmap\n");
-        return;
-    }
-    if (AndroidBitmap_lockPixels(env, bitmap, (void**)&pixels) < 0) {
-        printf("Error: Failed to lock bitmap pixels in fromBitmap\n");
-        return;
-    }
-
-    for (int i = 0, size = info.width * info.height * 4; i < size; i++) {
-        memcpy(dataAddr + i, pixels + i, 4);
-    }
-
-    AndroidBitmap_unlockPixels(env, bitmap);
-}
-
-JNIEXPORT void JNICALL
 Java_com_winlator_cmod_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, jobject colorData,
                                           jobject maskData, jobject bitmap) {
     char *colorDataAddr = (*env)->GetDirectBufferAddress(env, colorData);
@@ -338,8 +309,6 @@ Java_com_winlator_cmod_xserver_Drawable_allocate(JNIEnv *env, jclass obj, jint w
     
     AHardwareBuffer_Desc outDesc;
     AHardwareBuffer_describe(hardwareBuffer, &outDesc);
-    
-    void *address;
     
     jlong size = width * height * 4;
     address = malloc(size);

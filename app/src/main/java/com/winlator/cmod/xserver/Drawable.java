@@ -35,13 +35,7 @@ public class Drawable extends XResource {
             throw new IllegalStateException("Drawable.data initialized as null!");
         }
     }
-
-    public static Drawable fromBitmap(Bitmap bitmap) {
-        Drawable drawable = new Drawable(0, bitmap.getWidth(), bitmap.getHeight(), null);
-        fromBitmap(bitmap, drawable.data);
-        return drawable;
-    }
-
+    
     public void setGPUImage(GPUImage texture) {
         this.gpuImage = texture;
     }
@@ -194,8 +188,6 @@ public class Drawable extends XResource {
     private static native void fillRect(short x, short y, short width, short height, int color, short stride, ByteBuffer data);
 
     private static native void drawLine(short x0, short y0, short x1, short y1, int color, short lineWidth, short stride, ByteBuffer data);
-
-    private static native void fromBitmap(Bitmap bitmap, ByteBuffer data);
     
     private native ByteBuffer allocate(int width, int height);
 }
