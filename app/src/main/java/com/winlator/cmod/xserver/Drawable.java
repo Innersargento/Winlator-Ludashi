@@ -48,13 +48,6 @@ public class Drawable extends XResource {
         return data;
     }
 
-    public void setData(ByteBuffer data) {
-        if (data == null) {
-            throw new IllegalArgumentException("Attempting to set Drawable.data to null!");
-        }
-        this.data = data;
-    }
-
     public short getStride() {
         return gpuImage != null ? gpuImage.getStride() : width;
     }

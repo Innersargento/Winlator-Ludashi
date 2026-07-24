@@ -69,7 +69,6 @@ class JNICache {
         
         jclass drawableClass;
         jmethodID drawableGetData;
-        jmethodID drawableSetData;
         jfieldID drawableID;
         jfieldID drawableAHB;
         jfieldID drawableStride;
@@ -129,7 +128,6 @@ class JNICache {
             LOAD_FIELD_ID(windowAttributes, env, windowClass, "attributes", "Lcom/winlator/cmod/xserver/WindowAttributes;");
             
             LOAD_METHOD_ID(drawableGetData, env, drawableClass, "getData", "()Ljava/nio/ByteBuffer;");
-            LOAD_METHOD_ID(drawableSetData, env, drawableClass, "setData", "(Ljava/nio/ByteBuffer;)V");
             LOAD_FIELD_ID(drawableID, env, drawableClass, "id", "I");
             LOAD_FIELD_ID(drawableWidth, env, drawableClass, "width", "S");
             LOAD_FIELD_ID(drawableHeight, env, drawableClass, "height", "S");
