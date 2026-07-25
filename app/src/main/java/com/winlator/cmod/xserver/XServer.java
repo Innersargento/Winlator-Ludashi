@@ -70,6 +70,10 @@ public class XServer {
     public void setDisplayDriver(String displayDriver) {
         this.displayDriver = displayDriver;
     }
+    
+    public boolean isDisplayX() {
+        return this.displayDriver.toLowerCase().equals("displayx");
+    }
 
     public boolean isRelativeMouseMovement() {
         return relativeMouseMovement;

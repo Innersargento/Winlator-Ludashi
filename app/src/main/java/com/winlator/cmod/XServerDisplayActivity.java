@@ -904,6 +904,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 drawerLayout.closeDrawers();
                 break;
             case R.id.main_menu_magnifier:
+                if (xServer.isDisplayX()) {
+                    AppUtils.showToast(this, R.string.magnifier_not_available);
+                    drawerLayout.closeDrawers();
+                    break;
+                }
+                
                 if (magnifierView == null) {
                     FrameLayout container = findViewById(R.id.FLXServerDisplay);
                     magnifierView = new MagnifierView(this);
