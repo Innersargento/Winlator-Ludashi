@@ -22,6 +22,7 @@ using PFNASURFACETRANSACTIONSETBUFFER = void (*)(ASurfaceTransaction*, ASurfaceC
 using PFNASURFACETRANSACTIONSETGEOMETRY = void (*)(ASurfaceTransaction*, ASurfaceControl*, const ARect&, const ARect&, int32_t);
 using PFNASURFACETRANSACTIONSETZORDER = void (*)(ASurfaceTransaction*, ASurfaceControl*, int32_t);
 using PFNASURFACETRANSACTIONSETVISIBILITY = void (*)(ASurfaceTransaction*, ASurfaceControl*, enum ASurfaceTransactionVisibility);
+using PFNASURFACETRANSACTIONSETBUFFERALPHA = void (*)(ASurfaceTransaction*, ASurfaceControl*, float);
 using PFNASURFACETRANSACTIONREPARENT = void (*)(ASurfaceTransaction*, ASurfaceControl*, ASurfaceControl*);
 using PFNASURFACETRANSACTIONCREATE = ASurfaceTransaction* (*)();
 using PFNASURFACETRANSACTIONDELETE = void (*)(ASurfaceTransaction*);
@@ -40,6 +41,7 @@ static PFNASURFACETRANSACTIONSETBUFFER pfnASurfaceTransactionSetBuffer = nullptr
 static PFNASURFACETRANSACTIONSETGEOMETRY pfnASurfaceTransactionSetGeometry = nullptr;
 static PFNASURFACETRANSACTIONSETZORDER pfnASurfaceTransactionSetZOrder = nullptr;
 static PFNASURFACETRANSACTIONSETVISIBILITY pfnASurfaceTransactionSetVisibility = nullptr;
+static PFNASURFACETRANSACTIONSETBUFFERALPHA pfnASurfaceTransactionSetBufferAlpha = nullptr;
 static PFNASURFACETRANSACTIONREPARENT pfnASurfaceTransactionReparent = nullptr;
 static PFNASURFACETRANSACTIONCREATE pfnASurfaceTransactionCreate = nullptr;
 static PFNASURFACETRANSACTIONDELETE pfnASurfaceTransactionDelete = nullptr;
@@ -186,6 +188,7 @@ void DisplayX::start() {
     pfnASurfaceTransactionSetZOrder = reinterpret_cast<PFNASURFACETRANSACTIONSETZORDER>(dlsym(handle,"ASurfaceTransaction_setZOrder"));
     pfnASurfaceTransactionSetVisibility = reinterpret_cast<PFNASURFACETRANSACTIONSETVISIBILITY>(dlsym(handle,"ASurfaceTransaction_setVisibility"));
     pfnASurfaceTransactionReparent = reinterpret_cast<PFNASURFACETRANSACTIONREPARENT>(dlsym(handle,"ASurfaceTransaction_reparent"));
+    pfnASurfaceTransactionSetBufferAlpha = reinterpret_cast<PFNASURFACETRANSACTIONSETBUFFERALPHA>(dlsym(handle, "ASurfaceTransaction_setBufferAlpha"));
     pfnASurfaceTransactionCreate = reinterpret_cast<PFNASURFACETRANSACTIONCREATE>(dlsym(handle,"ASurfaceTransaction_create"));
     pfnASurfaceTransactionDelete = reinterpret_cast<PFNASURFACETRANSACTIONDELETE>(dlsym(handle,"ASurfaceTransaction_delete"));
     pfnASurfaceTransactionApply = reinterpret_cast<PFNASURFACETRANSACTIONAPPLY>(dlsym(handle,"ASurfaceTransaction_apply"));
@@ -303,6 +306,9 @@ void DisplayX::destroyWindowControl(Window *window) {
 void DisplayX::mapWindow(Window *window) {
     if (!window->control) return;
     
+    if (!strcmp(window->className.c_str(), windowManager->getUnviewableWMClass().c_str()))
+        window->enabled = false;
+    
     pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_SHOW);
     pfnASurfaceTransactionApply(windowTransaction);
 }
@@ -342,26 +348,7 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
 }
 
 void DisplayX::updateWindow(Window *window) {
-    if (!window->enabled) return;
-    
-    uint8_t *dst;
-    int ret;
-    uint8_t *src;
-    
-    ret = AHardwareBuffer_lock(window->drawable->ahb, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN | 
-        AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, nullptr, reinterpret_cast<void **>(&dst));
-    if (ret != 0)    
-        return;
-        
-    src = reinterpret_cast<uint8_t *>(window->drawable->data);
-    
-    for (int y = 0; y < window->drawable->height; ++y) {
-        memcpy(dst + y * window->drawable->stride * 4, src + y * window->drawable->width * 4, window->drawable->width * 4);
-    }
-    
-    AHardwareBuffer_unlock(window->drawable->ahb, nullptr);
-    
-    window->drawable->isDirty = false;
+    if (!window->control) return;
     
     if (pfnASurfaceTransactionSetPosition) {
         pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
@@ -377,12 +364,15 @@ void DisplayX::updateWindow(Window *window) {
         pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, srcRect, dstRect, 0);
     }
     
-    pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
+    if (!window->enabled)
+        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, nullptr, -1);
+    else
+        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
     pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::updateWindowDirect(Window *window) {
-    if (!window->enabled) return;
+    if (!window->control) return;
     
     auto drawable = window->currentDirectContent;
     if (!drawable) return;
@@ -401,14 +391,11 @@ void DisplayX::updateWindowDirect(Window *window) {
         pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, src, dst, 0);
     }
          
-    pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, drawable->ahb, -1);
+    if (!window->enabled)
+        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, nullptr, -1);
+    else
+        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, drawable->ahb, -1);
     pfnASurfaceTransactionApply(windowTransaction);
-}
-
-void DisplayX::createCursor(Cursor *cursor) {
-}
-
-void DisplayX::destroyCursor(Cursor *cursor) {
 }
 
 void DisplayX::updateCursor(Window *window) {
@@ -416,24 +403,7 @@ void DisplayX::updateCursor(Window *window) {
     
     auto cursor = window->cursor;
     if (!cursor) return;
-    
-    uint8_t *dst, *src;
-        
-    ret = AHardwareBuffer_lock(cursor->image->ahb, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN | 
-        AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, nullptr, reinterpret_cast<void **>(&dst));
-    if (ret != 0)    
-        return;
-        
-    src = reinterpret_cast<uint8_t *>(cursor->image->data);
-    
-    for (int y = 0; y < cursor->image->height; ++y) {
-        memcpy(dst + y * cursor->image->stride * 4, src + y * cursor->image->width * 4, cursor->image->width * 4);
-    }
-    
-    AHardwareBuffer_unlock(cursor->image->ahb, nullptr);
-    
-    cursor->image->isDirty = false;
-    
+   
     pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, cursor->image->ahb, -1);
     pfnASurfaceTransactionSetVisibility(cursorTransaction, cursorManager->control, (cursor->visible && cursorVisible) ?  ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
     pfnASurfaceTransactionApply(cursorTransaction);

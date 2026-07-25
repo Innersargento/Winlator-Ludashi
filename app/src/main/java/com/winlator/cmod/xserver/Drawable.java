@@ -15,7 +15,6 @@ public class Drawable extends XResource {
     public long backingAHB;
     public final short height;
     public final Visual visual;
-    private ByteBuffer data;
     private GPUImage gpuImage = null;
     private Runnable onDrawListener;
     private Callback<Drawable> onDestroyListener;
@@ -30,9 +29,9 @@ public class Drawable extends XResource {
         this.width = (short)width;
         this.height = (short)height;
         this.visual = visual;
-        this.data = allocate(width, height);
-        if (this.data == null) {
-            throw new IllegalStateException("Drawable.data initialized as null!");
+        this.backingAHB = allocate(width, height);
+        if (this.backingAHB == 0) {
+            throw new IllegalStateException("Drawable data initialized as null!");
         }
     }
     
@@ -44,12 +43,8 @@ public class Drawable extends XResource {
         return this.gpuImage;
     }
 
-    public ByteBuffer getData() {
-        return data;
-    }
-
     public short getStride() {
-        return gpuImage != null ? gpuImage.getStride() : width;
+        return gpuImage != null ? gpuImage.getStride() : stride;
     }
 
     public Runnable getOnDrawListener() {
@@ -70,7 +65,7 @@ public class Drawable extends XResource {
 
     public void drawImage(short srcX, short srcY, short dstX, short dstY, short width, short height, byte depth, ByteBuffer data, short totalWidth, short totalHeight) {
         if (depth == 1) {
-            drawBitmap(width, height, data, this.getStride(), this.data);
+            drawBitmap(width, height, data, this.getStride(), backingAHB);
         }
         else if (depth == 24 || depth == 32) {
             dstX = (short)Mathf.clamp(dstX, 0, this.width-1);
@@ -78,10 +73,9 @@ public class Drawable extends XResource {
             if ((dstX + width) > this.width) width = (short)((this.width - dstX));
             if ((dstY + height) > this.height) height = (short)((this.height - dstY));
 
-            copyArea(srcX, srcY, dstX, dstY, width, height, totalWidth, this.getStride(), data, this.data);
+            copyArea1(srcX, srcY, dstX, dstY, width, height, totalWidth, this.getStride(), data, backingAHB);
         }
 
-        this.data.rewind();
         data.rewind();
 
         if (onDrawListener != null) onDrawListener.run();
@@ -95,9 +89,8 @@ public class Drawable extends XResource {
         if ((x + width) > this.width) width = (short)(this.width - x);
         if ((y + height) > this.height) height = (short)(this.height - y);
 
-        copyArea(x, y, (short)0, (short)0, width, height, this.getStride(), width, this.data, dstData);
+        copyArea2(x, y, (short)0, (short)0, width, height, this.getStride(), width, backingAHB, dstData);
 
-        this.data.rewind();
         dstData.rewind();
         return dstData;
     }
@@ -113,13 +106,9 @@ public class Drawable extends XResource {
         if ((dstY + height) > this.height) height = (short)(this.height - dstY);
 
         if (gcFunction == GraphicsContext.Function.COPY) {
-            copyArea(srcX, srcY, dstX, dstY, width, height, drawable.getStride(), this.getStride(), drawable.data, this.data);
+            copyArea3(srcX, srcY, dstX, dstY, width, height, drawable.getStride(), this.getStride(), drawable.backingAHB, this.backingAHB);
         }
-        else copyAreaOp(srcX, srcY, dstX, dstY, width, height, drawable.getStride(), this.getStride(), drawable.data, this.data, gcFunction.ordinal());
-
-        this.data.rewind();
-        drawable.data.rewind();
-
+        else copyAreaOp(srcX, srcY, dstX, dstY, width, height, drawable.getStride(), this.getStride(), drawable.backingAHB, this.backingAHB, gcFunction.ordinal());
         if (onDrawListener != null) onDrawListener.run();
     }
 
@@ -133,8 +122,7 @@ public class Drawable extends XResource {
         if ((x + width) > this.width) width = (short)((this.width - x));
         if ((y + height) > this.height) height = (short)((this.height - y));
 
-        fillRect((short)x, (short)y, (short)width, (short)height, color, this.getStride(), this.data);
-        this.data.rewind();
+        fillRect((short)x, (short)y, (short)width, (short)height, color, this.getStride(), this.backingAHB);
 
         if (onDrawListener != null) onDrawListener.run();
     }
@@ -151,16 +139,14 @@ public class Drawable extends XResource {
         x1 = Mathf.clamp(x1, 0, width-lineWidth);
         y1 = Mathf.clamp(y1, 0, height-lineWidth);
 
-        drawLine((short)x0, (short)y0, (short)x1, (short)y1, color, (short)lineWidth, this.getStride(), this.data);
+        drawLine((short)x0, (short)y0, (short)x1, (short)y1, color, (short)lineWidth, this.getStride(), this.backingAHB);
 
-        this.data.rewind();
 
         if (onDrawListener != null) onDrawListener.run();
     }
 
     public void drawAlphaMaskedBitmap(byte foreRed, byte foreGreen, byte foreBlue, byte backRed, byte backGreen, byte backBlue, Drawable srcDrawable, Drawable maskDrawable) {
-        drawAlphaMaskedBitmap(foreRed, foreGreen, foreBlue, backRed, backGreen, backBlue, srcDrawable.data, maskDrawable.data, this.width, this.height, this.getStride(), this.data);
-        this.data.rewind();
+        drawAlphaMaskedBitmap(foreRed, foreGreen, foreBlue, backRed, backGreen, backBlue, srcDrawable.backingAHB, srcDrawable.getStride(), maskDrawable.backingAHB, maskDrawable.getStride(), this.width, this.height, this.getStride(), this.backingAHB);
 
         if (onDrawListener != null) onDrawListener.run();
     }
@@ -170,17 +156,25 @@ public class Drawable extends XResource {
     }
     
 
-    private static native void drawBitmap(short width, short height, ByteBuffer srcData, short stride, ByteBuffer dstData);
+    private static native void drawBitmap(short width, short height, ByteBuffer srcData, short stride, long dstAHB);
 
-    private static native void drawAlphaMaskedBitmap(byte foreRed, byte foreGreen, byte foreBlue, byte backRed, byte backGreen, byte backBlue, ByteBuffer srcData, ByteBuffer maskData, short width, short height, short stride, ByteBuffer dstData);
+    private static native void drawAlphaMaskedBitmap(byte foreRed, byte foreGreen, byte foreBlue, byte backRed, byte backGreen, byte backBlue, long srcAHB, short srcStride, long maskAHB, short maskStride, short width, short height, short stride, long dstAHB);
 
-    private static native void copyArea(short srcX, short srcY, short dstX, short dstY, short width, short height, short srcStride, short dstStride, ByteBuffer srcData, ByteBuffer dstData);
-
-    private static native void copyAreaOp(short srcX, short srcY, short dstX, short dstY, short width, short height, short srcStride, short dstStride, ByteBuffer srcData, ByteBuffer dstData, int gcFunction);
-
-    private static native void fillRect(short x, short y, short width, short height, int color, short stride, ByteBuffer data);
-
-    private static native void drawLine(short x0, short y0, short x1, short y1, int color, short lineWidth, short stride, ByteBuffer data);
+    private static native void copyArea1(short srcX, short srcY, short dstX, short dstY, short width, short height, short srcStride, short dstStride, ByteBuffer srcData, long dstAHB);
     
-    private native ByteBuffer allocate(int width, int height);
+    private static native void copyArea2(short srcX, short srcY, short dstX, short dstY, short width, short height, short srcStride, short dstStride, long srcAHB, ByteBuffer dstData);
+    
+    private static native void copyArea3(short srcX, short srcY, short dstX, short dstY, short width, short height, short srcStride, short dstStride, long srcAHB, long dstAHB);
+
+    private static native void copyAreaOp(short srcX, short srcY, short dstX, short dstY, short width, short height, short srcStride, short dstStride, long srcAHB, long dstAHB, int gcFunction);
+
+    private static native void fillRect(short x, short y, short width, short height, int color, short stride, long dstAHB);
+
+    private static native void drawLine(short x0, short y0, short x1, short y1, int color, short lineWidth, short stride, long dstAHB);
+    
+    private native long allocate(int width, int height);
+
+    public native ByteBuffer lockBuffer(long ahb);
+
+    public native void unlockBuffer(long ahb);
 }

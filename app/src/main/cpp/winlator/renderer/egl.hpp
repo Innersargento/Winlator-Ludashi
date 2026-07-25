@@ -31,7 +31,6 @@ class EGLRenderer {
         struct RenderableWindow {
             int rootX;
             int rootY;
-            Drawable *content;
             Window *window;
         };
         

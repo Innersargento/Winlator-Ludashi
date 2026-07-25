@@ -135,8 +135,6 @@ class DisplayX {
         void updateWindow(Window *window);
         void updateWindowDirect(Window *window);
         void reparentWindow(Window *window, Window *parent);
-        void createCursor(Cursor *cursor);
-        void destroyCursor(Cursor *cursor);
         void updateCursor(Window *window);
         void drawRootCursor();
         void toggleFullscreen();

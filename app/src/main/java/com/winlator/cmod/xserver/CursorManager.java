@@ -40,7 +40,7 @@ public class CursorManager extends XResourceManager {
     }
 
     private static boolean isEmptyMaskImage(Drawable maskImage) {
-        IntBuffer maskData = maskImage.getData().asIntBuffer();
+        IntBuffer maskData = maskImage.lockBuffer(maskImage.backingAHB).asIntBuffer();
         boolean result = true;
         for (int i = 0; i < maskData.capacity(); i++) {
             if (maskData.get(i) != 0x000000) {
@@ -48,6 +48,7 @@ public class CursorManager extends XResourceManager {
                 break;
             }
         }
+        maskImage.unlockBuffer(maskImage.backingAHB);
         return result;
     }
 

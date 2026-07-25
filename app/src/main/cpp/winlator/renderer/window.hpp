@@ -17,6 +17,7 @@ struct Window {
     std::string className;
     bool mapped;
     bool inputOutput;
+    bool hasContent;
     std::unique_ptr<struct Drawable> drawable;
     Window *parent;
     Cursor *cursor;
@@ -65,6 +66,7 @@ class WindowManager {
     private:
         std::unordered_map<int, std::unique_ptr<struct Window>> windows;
         Window *rootWindow = nullptr;
+        std::string unviewableWMClass;
     
     public:
         WindowLock windowLock;
@@ -74,9 +76,11 @@ class WindowManager {
         void disableAllDescendants(Window *window);
         Window *getWindow(int id);
         void addWindow(int id, std::unique_ptr<struct Window> window);
-        void deleteWindow(JNIEnv *env, Window *window);
+        void deleteWindow(Window *window);
         Window* getRootWindow();
         void setRootWindow(Window *window); 
         void reparentWindow(Window *window, Window *parent);
+        void setUnviewableWMClass(std::string className);
+        std::string getUnviewableWMClass();
         std::unordered_map<int, std::unique_ptr<struct Window>>& getWindowTree();
 };

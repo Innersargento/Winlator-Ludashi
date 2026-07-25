@@ -41,7 +41,7 @@ Window* WindowManager::getWindow(int id) {
     return it->second.get();
 }
 
-void WindowManager::deleteWindow(JNIEnv *env, Window *window) {
+void WindowManager::deleteWindow(Window *window) {
     for (auto& child : window->children)
         child->parent = nullptr;
         
@@ -86,4 +86,12 @@ Window *WindowManager::getRootWindow() {
 
 std::unordered_map<int, std::unique_ptr<struct Window>>& WindowManager::getWindowTree() {
     return this->windows;
+}
+
+void WindowManager::setUnviewableWMClass(std::string className) {
+    this->unviewableWMClass = className;
+}
+
+std::string WindowManager::getUnviewableWMClass() {
+    return this->unviewableWMClass;
 }

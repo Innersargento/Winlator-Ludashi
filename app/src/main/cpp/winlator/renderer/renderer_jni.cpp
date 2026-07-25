@@ -38,12 +38,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     rootWindow->height = env->CallShortMethod(rootWindowObj, cache.windowGetHeight);
     rootWindow->x = env->CallShortMethod(rootWindowObj, cache.windowGetX);
     rootWindow->y = env->CallShortMethod(rootWindowObj, cache.windowGetY);
-    
-    jstring className = (jstring)env->CallObjectMethod(rootWindowObj, cache.windowGetClassName);
-    const char *chars = env->GetStringUTFChars(className, nullptr);
-    std::string str(chars);
-    env->ReleaseStringUTFChars(className, chars);
-    rootWindow->className = str;
+    rootWindow->className = "";
     
     auto drawable = std::make_unique<struct Drawable>();
     jobject drawableObj = env->CallObjectMethod(rootWindowObj, cache.windowGetContent);
@@ -51,12 +46,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     drawable->textureId = -1;
     drawable->width = env->GetShortField(drawableObj, cache.drawableWidth);
     drawable->height = env->GetShortField(drawableObj, cache.drawableHeight);
-    
-    jobject dataBuf = env->CallObjectMethod(drawableObj, cache.drawableGetData);
-    drawable->data = env->GetDirectBufferAddress(dataBuf);
     drawable->ahb = (AHardwareBuffer *)env->GetLongField(drawableObj, cache.drawableAHB);
     drawable->stride = env->GetShortField(drawableObj, cache.drawableStride);
-    
+    drawable->data = nullptr;
     drawable->isDirty = false;
     drawable->isDirectContent = false;
     drawable->sizeChanged = false;
@@ -151,12 +143,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateWindow(JNIEnv *env, jobjec
     window->height = env->CallShortMethod(windowObj, cache.windowGetHeight);
     window->x = env->CallShortMethod(windowObj, cache.windowGetX);
     window->y = env->CallShortMethod(windowObj, cache.windowGetY);
-    
-    jstring className = (jstring)env->CallObjectMethod(windowObj, cache.windowGetClassName);
-    const char *chars = env->GetStringUTFChars(className, nullptr);
-    std::string str(chars);
-    env->ReleaseStringUTFChars(className, chars);
-    window->className = str;
+    window->className = "";
     
     bool isInputOutput = env->CallBooleanMethod(windowObj, cache.windowIsInputOutput);
     window->inputOutput = isInputOutput;
@@ -200,8 +187,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateWindow(JNIEnv *env, jobjec
         parent->children.push_back(window.get());
     }
     
-    if (xserver.isDisplayX())
+    if (xserver.isDisplayX()) {
         displayX.queueEvent([ptr = window.get()] { displayX.createWindowControl(ptr); });
+    }
     
     windowManager.addWindow(window->id, std::move(window));
 }
@@ -214,7 +202,6 @@ Java_com_winlator_cmod_widget_XServerView_nativeMapWindow(JNIEnv *env, jobject t
     window->mapped = true;
     
     if (xserver.isDisplayX()) {
-        window->enabled = env->CallBooleanMethod(window->attributes, cache.windowAttributesIsEnabled);
         displayX.queueEvent([window] { displayX.mapWindow(window); });
     }    
     else { 
@@ -249,14 +236,16 @@ Java_com_winlator_cmod_widget_XServerView_nativeDestroyWindow(JNIEnv *env, jobje
     }    
     
     if (xserver.isDisplayX()) {
-        displayX.queueEvent([window] { displayX.destroyWindowControl(window); });
         displayX.queueEvent([window] { 
-            JNIEnv* env = cache.getEnv();
-            windowManager.deleteWindow(env, window); 
+            displayX.destroyWindowControl(window);
+            windowManager.deleteWindow(window); 
         });
     }    
     else {
-        windowManager.deleteWindow(env, window);
+        renderer.queueEvent([window] { 
+            windowManager.deleteWindow(window);
+            renderer.updateScene(); 
+        });
     }    
 }
 
@@ -286,10 +275,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateCursor(JNIEnv *env, jobjec
     cursor->hotspotY = env->GetIntField(cursorObj, cache.cursorHotspotY);
     cursor->visible = env->CallBooleanMethod(cursorObj, cache.cursorIsVisible);
     cursor->cursorObj = env->NewGlobalRef(cursorObj);
-    
-    if (xserver.isDisplayX())
-        displayX.queueEvent([ptr = cursor.get()] { displayX.createCursor(ptr); });
-        
+   
     cursorManager.addCursor(cursor->id, std::move(cursor));
 }
 
@@ -303,30 +289,17 @@ Java_com_winlator_cmod_widget_XServerView_nativeFreeCursor(JNIEnv *env, jobject 
         renderer.queueEvent([textureId] { renderer.destroyTexture(textureId); });
     }
     
-    if (xserver.isDisplayX()) {
-        displayX.queueEvent([cursor] { displayX.destroyCursor(cursor); });
-        displayX.queueEvent([cursor] { 
-            JNIEnv* env = cache.getEnv();
-            cursorManager.removeCursor(env, cursor); 
-        });
-    }    
-    else { 
-        cursorManager.removeCursor(env, cursor);
-    }
+    cursorManager.removeCursor(env, cursor);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_widget_XServerView_nativeBindCursor(JNIEnv *env, jobject thiz, jint windowId, jint cursorId, jboolean visible, jobject data) {
+Java_com_winlator_cmod_widget_XServerView_nativeBindCursor(JNIEnv *env, jobject thiz, jint windowId, jint cursorId, jboolean visible) {
     auto window = windowManager.getWindow(windowId);
     if (!window) return;
     auto cursor = cursorManager.getCursor(cursorId);
     if (!cursor) return;
-    
-    if (cursor->image->data == nullptr)
-        cursor->image->data = env->GetDirectBufferAddress(data);
       
     cursor->visible = visible;
-    cursor->image->isDirty = true;   
     
     window->cursor = cursor;
     for (auto &child : window->children)
@@ -401,14 +374,11 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateWindowGeometry(JNIEnv *env
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_widget_XServerView_nativeUpdateWindowContent(JNIEnv *env, jobject thiz, jint id, jobject data) {
+Java_com_winlator_cmod_widget_XServerView_nativeUpdateWindowContent(JNIEnv *env, jobject thiz, jint id) {
     auto window = windowManager.getWindow(id);
     if (!window) return;
     
-    if (window->drawable->data == nullptr)
-        window->drawable->data = env->GetDirectBufferAddress(data);
-    
-    window->drawable->isDirty = true;
+    window->hasContent = true;
     
     if (xserver.isDisplayX())
         displayX.requestWindowUpdate(window);
@@ -463,6 +433,25 @@ Java_com_winlator_cmod_widget_XServerView_nativeSetMagnifierZoom(JNIEnv *env, jo
     renderer.magnifierZoom = magnifierZoom;
     if (!xserver.isDisplayX())
         renderer.requestRenderer();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_winlator_cmod_widget_XServerView_nativeSetUnviewableWMClass(JNIEnv *env, jobject thiz, jstring unviewableWMName) {
+    const char *chars = env->GetStringUTFChars(unviewableWMName, nullptr);
+    std::string str(chars);
+    env->ReleaseStringUTFChars(unviewableWMName, chars);
+    windowManager.setUnviewableWMClass(str);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_winlator_cmod_widget_XServerView_nativeSetWindowClassName(JNIEnv *env, jobject thiz, jint id, jstring className) {
+    auto window = windowManager.getWindow(id);
+    if (!window) return;
+    
+    const char *chars = env->GetStringUTFChars(className, nullptr);
+    std::string str(chars);
+    env->ReleaseStringUTFChars(className, chars);
+    window->className = str;
 }
 
 extern "C" JNIEXPORT void JNICALL

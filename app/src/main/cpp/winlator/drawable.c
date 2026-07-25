@@ -77,13 +77,22 @@ static int setPixelOp(int srcColor, int dstColor, enum GCFunction gcFunction) {
 
 JNIEXPORT void JNICALL
 Java_com_winlator_cmod_xserver_Drawable_drawBitmap(JNIEnv *env, jclass obj,
-                                              jshort width, jshort height, jobject srcData, jshort dstStride,
-                                              jobject dstData) {
+                                              jshort width, jshort height, 
+                                              jobject srcData, jshort dstStride,
+                                              jlong dstData) {
+    int *dstDataAddr;
+    int ret;
+    
+    AHardwareBuffer *hardwareBuffer = (AHardwareBuffer *)dstData;
+    ret = AHardwareBuffer_lock(hardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, NULL, (void **)&dstDataAddr);
+    if (ret != 0)    
+        return;
+                                                  
     uint8_t *srcDataAddr = (*env)->GetDirectBufferAddress(env, srcData);
-    int *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
 
     if (!srcDataAddr || !dstDataAddr) {
         printf("Error: NULL buffer address in drawBitmap\n");
+        AHardwareBuffer_unlock(hardwareBuffer, NULL);
         return;
     }
 
@@ -95,19 +104,29 @@ Java_com_winlator_cmod_xserver_Drawable_drawBitmap(JNIEnv *env, jclass obj,
         }
         srcDataAddr += stride;
     }
+    
+    AHardwareBuffer_unlock(hardwareBuffer, NULL);
 }
 
 JNIEXPORT void JNICALL
-Java_com_winlator_cmod_xserver_Drawable_copyArea(JNIEnv *env, jclass obj, jshort srcX,
+Java_com_winlator_cmod_xserver_Drawable_copyArea1(JNIEnv *env, jclass obj, jshort srcX,
                                             jshort srcY, jshort dstX, jshort dstY,
-                                            jshort width, jshort height, jshort srcStride,
-                                            jshort dstStride, jobject srcData,
-                                            jobject dstData) {
+                                            jshort width, jshort height, 
+                                            jshort srcStride, jshort dstStride, 
+                                            jobject srcData, jlong dstData) {
+    int ret;
+    uint8_t *dstDataAddr;
+    
+    AHardwareBuffer *hardwareBuffer = (AHardwareBuffer *)dstData;
+    ret = AHardwareBuffer_lock(hardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, NULL, (void **)&dstDataAddr);
+    if (ret != 0)    
+        return;
+                                                
     uint8_t *srcDataAddr = (*env)->GetDirectBufferAddress(env, srcData);
-    uint8_t *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
 
     if (!srcDataAddr || !dstDataAddr) {
         printf("Error: NULL buffer address in copyArea\n");
+        AHardwareBuffer_unlock(hardwareBuffer, NULL);
         return;
     }
 
@@ -115,19 +134,100 @@ Java_com_winlator_cmod_xserver_Drawable_copyArea(JNIEnv *env, jclass obj, jshort
     for (int16_t y = 0; y < height; y++) {
         memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4, srcDataAddr + (srcX + (y + srcY) * srcStride) * 4, copyAmount);
     }
+    
+    AHardwareBuffer_unlock(hardwareBuffer, NULL);
+}
+
+JNIEXPORT void JNICALL
+Java_com_winlator_cmod_xserver_Drawable_copyArea2(JNIEnv *env, jclass obj, jshort srcX,
+                                            jshort srcY, jshort dstX, jshort dstY,
+                                            jshort width, jshort height, jshort srcStride,
+                                            jshort dstStride, jlong srcData,
+                                            jobject dstData) {
+    int ret;                                            
+    uint8_t *srcDataAddr;
+    
+    AHardwareBuffer *hardwareBuffer = (AHardwareBuffer *)srcData;
+    ret = AHardwareBuffer_lock(hardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, (void **)&srcDataAddr);
+    if (ret != 0)    
+        return;
+        
+    uint8_t *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
+
+    if (!srcDataAddr || !dstDataAddr) {
+        printf("Error: NULL buffer address in copyArea\n");
+        AHardwareBuffer_unlock(hardwareBuffer, NULL);
+        return;
+    }
+
+    int copyAmount = width * 4;
+    for (int16_t y = 0; y < height; y++) {
+        memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4, srcDataAddr + (srcX + (y + srcY) * srcStride) * 4, copyAmount);
+    }
+    
+    AHardwareBuffer_unlock(hardwareBuffer, NULL);
+}
+
+JNIEXPORT void JNICALL
+Java_com_winlator_cmod_xserver_Drawable_copyArea3(JNIEnv *env, jclass obj, jshort srcX,
+                                            jshort srcY, jshort dstX, jshort dstY,
+                                            jshort width, jshort height, jshort srcStride,
+                                            jshort dstStride, jlong srcData,
+                                            jlong dstData) {
+    int ret;                                            
+    uint8_t *srcDataAddr;
+    uint8_t *dstDataAddr;
+    
+    AHardwareBuffer *srcHardwareBuffer = (AHardwareBuffer *)srcData;
+    ret = AHardwareBuffer_lock(srcHardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, (void **)&srcDataAddr);
+    if (ret != 0)    
+        return;
+    
+    AHardwareBuffer *dstHardwareBuffer = (AHardwareBuffer *)dstData;
+    ret = AHardwareBuffer_lock(dstHardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, NULL, (void **)&dstDataAddr);
+    if (ret != 0)    
+        return;    
+
+    if (!srcDataAddr || !dstDataAddr) {
+        printf("Error: NULL buffer address in copyArea\n");
+        AHardwareBuffer_unlock(dstHardwareBuffer, NULL);
+        AHardwareBuffer_unlock(srcHardwareBuffer, NULL);
+        return;
+    }
+
+    int copyAmount = width * 4;
+    for (int16_t y = 0; y < height; y++) {
+        memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4, srcDataAddr + (srcX + (y + srcY) * srcStride) * 4, copyAmount);
+    }
+    
+    AHardwareBuffer_unlock(dstHardwareBuffer, NULL);
+    AHardwareBuffer_unlock(srcHardwareBuffer, NULL);
 }
 
 JNIEXPORT void JNICALL
 Java_com_winlator_cmod_xserver_Drawable_copyAreaOp(JNIEnv *env, jclass obj, jshort srcX,
                                               jshort srcY, jshort dstX, jshort dstY,
                                               jshort width, jshort height, jshort srcStride,
-                                              jshort dstStride, jobject srcData,
-                                              jobject dstData, int gcFunction) {
-    uint8_t *srcDataAddr = (*env)->GetDirectBufferAddress(env, srcData);
-    uint8_t *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
+                                              jshort dstStride, jlong srcData,
+                                              jlong dstData, int gcFunction) {
+    int ret;                                              
+    uint8_t *srcDataAddr;
+    uint8_t *dstDataAddr;
+    
+    AHardwareBuffer *srcHardwareBuffer = (AHardwareBuffer *)srcData;
+    ret = AHardwareBuffer_lock(srcHardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, (void **)&srcDataAddr);
+    if (ret != 0)    
+        return;
+    
+    AHardwareBuffer *dstHardwareBuffer = (AHardwareBuffer *)dstData;
+    ret = AHardwareBuffer_lock(dstHardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, NULL, (void **)&dstDataAddr);
+    if (ret != 0)    
+        return;    
 
     if (!srcDataAddr || !dstDataAddr) {
         printf("Error: NULL buffer address in copyAreaOp\n");
+        AHardwareBuffer_unlock(dstHardwareBuffer, NULL);
+        AHardwareBuffer_unlock(srcHardwareBuffer, NULL);
         return;
     }
 
@@ -145,16 +245,26 @@ Java_com_winlator_cmod_xserver_Drawable_copyAreaOp(JNIEnv *env, jclass obj, jsho
             dstDataAddr[j+2] = dstColor & 0xff;
         }
     }
+    
+    AHardwareBuffer_unlock(dstHardwareBuffer, NULL);
+    AHardwareBuffer_unlock(srcHardwareBuffer, NULL);
 }
 
 JNIEXPORT void JNICALL
 Java_com_winlator_cmod_xserver_Drawable_fillRect(JNIEnv *env, jclass obj, jshort x, jshort y,
                                             jshort width, jshort height, jint color, jshort stride,
-                                            jobject data) {
-    uint8_t *dataAddr = (*env)->GetDirectBufferAddress(env, data);
+                                            jlong data) {
+    int ret;                                            
+    uint8_t *dataAddr;
+     
+    AHardwareBuffer *hardwareBuffer = (AHardwareBuffer *)data;
+    ret = AHardwareBuffer_lock(hardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, NULL, (void **)&dataAddr);
+    if (ret != 0)    
+        return;
 
     if (!dataAddr) {
         printf("Error: NULL buffer address in fillRect\n");
+        AHardwareBuffer_unlock(hardwareBuffer, NULL);
         return;
     }
 
@@ -176,16 +286,25 @@ Java_com_winlator_cmod_xserver_Drawable_fillRect(JNIEnv *env, jclass obj, jshort
     }
 
     free(row);
+    AHardwareBuffer_unlock(hardwareBuffer, NULL);
 }
 
 JNIEXPORT void JNICALL
 Java_com_winlator_cmod_xserver_Drawable_drawLine(JNIEnv *env, jclass obj, jshort x0, jshort y0,
                                             jshort x1, jshort y1, jint color, jshort lineWidth,
-                                            jshort stride, jobject data) {
-    uint8_t *dataAddr = (*env)->GetDirectBufferAddress(env, data);
+                                            jshort stride, jlong data) {
+    int ret;                                            
+    uint8_t *dataAddr;
+    
+    AHardwareBuffer *hardwareBuffer = (AHardwareBuffer *)data;
+    ret = AHardwareBuffer_lock(hardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, NULL, (void **)&dataAddr);
+    if (ret != 0)    
+        return;
+
 
     if (!dataAddr) {
         printf("Error: NULL buffer address in drawLine\n");
+        AHardwareBuffer_unlock(hardwareBuffer, NULL);
         return;
     }
 
@@ -227,6 +346,7 @@ Java_com_winlator_cmod_xserver_Drawable_drawLine(JNIEnv *env, jclass obj, jshort
     }
 
     free(row);
+    AHardwareBuffer_unlock(hardwareBuffer, NULL);
 }
 
 JNIEXPORT void JNICALL
@@ -234,15 +354,35 @@ Java_com_winlator_cmod_xserver_Drawable_drawAlphaMaskedBitmap(JNIEnv *env, jclas
                                                          jbyte foreRed, jbyte foreGreen,
                                                          jbyte foreBlue, jbyte backRed,
                                                          jbyte backGreen, jbyte backBlue,
-                                                         jobject srcData, jobject maskData,
+                                                         jlong srcData, jshort srcStride,
+                                                         jlong maskData, jshort maskStride,
                                                          jshort width, jshort height,
-                                                         jshort stride, jobject dstData) {
-    int *srcDataAddr = (*env)->GetDirectBufferAddress(env, srcData);
-    int *maskDataAddr = (*env)->GetDirectBufferAddress(env, maskData);
-    int *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
-
+                                                         jshort stride, jlong dstData) {
+    int ret;                                                         
+    int *srcDataAddr;
+    int *maskDataAddr;
+    int *dstDataAddr;
+    
+    AHardwareBuffer *srcHardwareBuffer = (AHardwareBuffer *)srcData;
+    ret = AHardwareBuffer_lock(srcHardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, (void **)&srcDataAddr);
+    if (ret != 0)    
+        return;
+        
+    AHardwareBuffer *maskHardwareBuffer = (AHardwareBuffer *)maskData;
+    ret = AHardwareBuffer_lock(maskHardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, (void **)&maskDataAddr);
+    if (ret != 0)    
+        return;    
+    
+    AHardwareBuffer *dstHardwareBuffer = (AHardwareBuffer *)dstData;
+    ret = AHardwareBuffer_lock(dstHardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, NULL, (void **)&dstDataAddr);
+    if (ret != 0)    
+        return;    
+        
     if (!srcDataAddr || !maskDataAddr || !dstDataAddr) {
         printf("Error: NULL buffer address in drawAlphaMaskedBitmap\n");
+        AHardwareBuffer_unlock(dstHardwareBuffer, NULL);
+        AHardwareBuffer_unlock(maskHardwareBuffer, NULL);
+        AHardwareBuffer_unlock(srcHardwareBuffer, NULL);
         return;
     }
 
@@ -251,25 +391,50 @@ Java_com_winlator_cmod_xserver_Drawable_drawAlphaMaskedBitmap(JNIEnv *env, jclas
 
     for (int16_t y = 0; y < height; y++) {
         int rowStart = y * stride;
-        int srcStart = y * width;
+        int srcStart = y * srcStride;
+        int maskStart = y * maskStride;
         for (int16_t x = 0; x < width; x++) {
             int srcIdx = x + srcStart;
             int dstIdx = x + rowStart;
-            dstDataAddr[dstIdx] = maskDataAddr[srcIdx] == WHITE ? (srcDataAddr[srcIdx] == WHITE ? foreColor : backColor) | 0xff000000 : 0x00000000;
+            int maskIdx = x + maskStart;
+            dstDataAddr[dstIdx] = maskDataAddr[maskIdx] == WHITE ? (srcDataAddr[srcIdx] == WHITE ? foreColor : backColor) | 0xff000000 : 0x00000000;
         }
     }
+    
+    AHardwareBuffer_unlock(dstHardwareBuffer, NULL);
+    AHardwareBuffer_unlock(maskHardwareBuffer, NULL);
+    AHardwareBuffer_unlock(srcHardwareBuffer, NULL);
 }
 
 JNIEXPORT void JNICALL
-Java_com_winlator_cmod_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, jshort stride, jobject colorData,
-                                          jobject maskData, jobject bitmap) {
-    char *colorDataAddr = (*env)->GetDirectBufferAddress(env, colorData);
-    char *maskDataAddr = maskData ? (*env)->GetDirectBufferAddress(env, maskData) : NULL;
-
+Java_com_winlator_cmod_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, 
+                                               jshort colorStride, long colorData,
+                                               jshort maskStride, long maskData, 
+                                               jobject bitmap) {
+    int ret;                                          
+    char *colorDataAddr;
+    char *maskDataAddr;
+    
+    AHardwareBuffer *colorHardwareBuffer = (AHardwareBuffer *)colorData;
+    ret = AHardwareBuffer_lock(colorHardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, (void **)&colorDataAddr);
+    if (ret != 0)    
+        return;
+        
     if (!colorDataAddr) {
         printf("Error: NULL color data address in toBitmap\n");
+        AHardwareBuffer_unlock(colorHardwareBuffer, NULL);
         return;
+    }   
+        
+    AHardwareBuffer *maskHardwareBuffer = (AHardwareBuffer *)maskData;
+    if (maskHardwareBuffer != 0) {
+        ret = AHardwareBuffer_lock(maskHardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, (void **)&maskDataAddr);
+        if (ret != 0)    
+            return;    
     }
+    else {
+        maskDataAddr = NULL;
+    }        
 
     AndroidBitmapInfo info;
     uint8_t *pixels;
@@ -284,25 +449,29 @@ Java_com_winlator_cmod_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, jshort s
     }
     
     for (int16_t y = 0; y < info.height; y++) {
-        int srcRowLength = y * stride;
-        int dstRowLength = y * info.width;
+        int srcStart = y * colorStride;
+        int dstStart = y * info.width;
+        int maskStart = y * maskStride;
         for (int16_t x = 0; x < info.width; x++) {
-            int srcIdx = (x + srcRowLength) * 4;
-            int dstIdx = (x + dstRowLength) * 4;
+            int srcIdx = (x + srcStart) * 4;
+            int dstIdx = (x + dstStart) * 4;
+            int maskIdx = (x + maskStart) * 4;
             pixels[dstIdx + 2] = colorDataAddr[srcIdx + 0];
             pixels[dstIdx + 1] = colorDataAddr[srcIdx + 1];
             pixels[dstIdx + 0] = colorDataAddr[srcIdx + 2];
-            pixels[dstIdx + 3] = maskDataAddr ? maskDataAddr[dstIdx + 0] : colorDataAddr[srcIdx + 3];
+            pixels[dstIdx + 3] = maskDataAddr ? maskDataAddr[maskIdx + 0] : colorDataAddr[srcIdx + 3];
         }
     }
 
     AndroidBitmap_unlockPixels(env, bitmap);
+    AHardwareBuffer_unlock(colorHardwareBuffer, NULL);
+    if (maskHardwareBuffer != 0)
+        AHardwareBuffer_unlock(maskHardwareBuffer, NULL);
 }
 
-JNIEXPORT jobject JNICALL
+JNIEXPORT jlong JNICALL
 Java_com_winlator_cmod_xserver_Drawable_allocate(JNIEnv *env, jclass obj, jint width, jint height) {
     int ret;
-    void *address;
     AHardwareBuffer *hardwareBuffer;
     
     AHardwareBuffer_Desc desc = {};
@@ -311,37 +480,68 @@ Java_com_winlator_cmod_xserver_Drawable_allocate(JNIEnv *env, jclass obj, jint w
     desc.format = HAL_PIXEL_FORMAT_BGRA_8888;
     desc.layers = 1;
     desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
+                 AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
                  AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
     
     ret = AHardwareBuffer_allocate(&desc, &hardwareBuffer);
     if (ret != 0) {
         printf("Failed to allocate hardwareBuffer");
-        return NULL;
+        return 0;
     }
     
     AHardwareBuffer_Desc outDesc;
     AHardwareBuffer_describe(hardwareBuffer, &outDesc);
     
-    jlong size = width * height * 4;
-    address = malloc(size);
-    jobject buffer = (*env)->NewDirectByteBuffer(env, address, size);
-    if (buffer == NULL) {
-        printf("Failed to allocate bytebuffer");
-        AHardwareBuffer_unlock(hardwareBuffer, NULL);
-        return NULL;
-    }
+    void *addr;
+    AHardwareBuffer_lock(hardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1,  NULL, &addr);
+    
+    memset(addr, 0, outDesc.stride * outDesc.height * 4);
+    
+    AHardwareBuffer_unlock(hardwareBuffer, NULL);
     
     jclass cls = (*env)->GetObjectClass(env, obj);
     if (!cls) {
         printf("Failed to find Drawable class");
-        return NULL;
+        return 0;
     }    
-        
-    jfieldID backingAHBField = (*env)->GetFieldID(env, cls, "backingAHB", "J");
-    (*env)->SetLongField(env, obj, backingAHBField, (jlong)hardwareBuffer);
     
     jfieldID strideField = (*env)->GetFieldID(env, cls, "stride", "S");
     (*env)->SetShortField(env, obj, strideField, outDesc.stride);
     
+    return (jlong)hardwareBuffer;
+}
+
+JNIEXPORT jobject JNICALL
+Java_com_winlator_cmod_xserver_Drawable_lockBuffer(JNIEnv *env, jclass obj, jlong ahb) {
+    int ret;
+    void *addr;
+    
+    AHardwareBuffer *hardwareBuffer = (AHardwareBuffer *)ahb;
+    if (!ahb)
+        return NULL;
+    
+    AHardwareBuffer_Desc outDesc;
+    AHardwareBuffer_describe(hardwareBuffer, &outDesc);
+    
+    ret = AHardwareBuffer_lock(hardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN | 
+        AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, (void **)&addr);
+    if (ret != 0)    
+        return NULL;
+        
+    jlong size = outDesc.stride * outDesc.height * 4;
+    jobject buffer = (*env)->NewDirectByteBuffer(env, addr, size);
+    
     return buffer;
+}
+
+JNIEXPORT void JNICALL
+Java_com_winlator_cmod_xserver_Drawable_unlockBuffer(JNIEnv *env, jclass obj, jlong ahb) {
+    int ret;
+    void *addr;
+    
+    AHardwareBuffer *hardwareBuffer = (AHardwareBuffer *)ahb;
+    if (!ahb)
+        return;
+    
+    AHardwareBuffer_unlock(hardwareBuffer, NULL);
 }
