@@ -131,8 +131,10 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     displayX.cache = &cache;
     displayX.xServer = &xserver;
     
-    renderer.start();
-    displayX.start();
+    if (xserver.isDisplayX())
+        displayX.start();
+    else    
+        renderer.start();
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -497,8 +499,10 @@ Java_com_winlator_cmod_widget_XServerView_nativeResume(JNIEnv *env, jobject thiz
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeStop(JNIEnv *env, jobject thiz) {
-    renderer.stop();
-    displayX.stop();
+    if (!xserver.isDisplayX())
+        renderer.stop();
+    else    
+        displayX.stop();
 }
 
 extern "C" JNIEXPORT void JNICALL
