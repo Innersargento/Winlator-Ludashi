@@ -44,11 +44,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
             this.content = pixmap;
         }
     }
-    
-    private final Callback<Drawable> onDestroyDrawableListener = (drawable) -> {
-        ByteBuffer data = drawable.getData();
-        SysVSharedMemory.unmapSHMSegment(data, data.capacity());
-    };
 
     private static abstract class ClientOpcodes {
         private static final byte QUERY_VERSION = 0;
@@ -129,7 +124,7 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         if (pixmap != null) throw new BadIdChoice(pixmapId);
 
         int fd = inputStream.getAncillaryFd();
-        pixmapFromFd(client, pixmapId, width, height, stride, 0, depth, fd, size);
+        pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd, window);
     }
 
     private void pixmapFromBuffers(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
@@ -160,16 +155,8 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         if (pixmap != null) throw new BadIdChoice(pixmapId);
         
         int fd = inputStream.getAncillaryFd();
-        long size = (long)stride * height;
 
-        if (modifiers == 1255) {
-            Log.d("Dri3", "Creating pixmap from AHardwareBuffer");
-            pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd, window);
-        }
-        else if (modifiers == 1274) {
-            Log.d("Dri3", "Creating pixmap from dmabuf filedescriptor"); 
-            pixmapFromFd(client, pixmapId, width, height, stride, offset, depth, fd, size);
-        }    
+        pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd, window);
     }
     
     private void pixmapFromHardwareBuffer(XClient client, int pixmapId, short width, short height, byte depth, int fd, Window window) throws IOException, XRequestError {
@@ -178,7 +165,7 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
             Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, width, height, depth);
             drawable.setGPUImage(gpuImage);
             drawable.setOnDrawListener(() -> client.xServer.windowManager.triggerOnUpdateWindowContentDirect(window, drawable));
-            client.xServer.getXServerView().nativeAddDirectContent(window.id, drawable, gpuImage);
+            client.xServer.getXServerView().nativeAddDirectContent(window.id, drawable);
             Pixmap pixmap = client.xServer.pixmapManager.createPixmap(drawable);
             client.registerAsOwnerOfResource(pixmap);
             
@@ -188,24 +175,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         finally {
             XConnectorEpoll.closeFd(fd);
         }   
-    }
-
-    private void pixmapFromFd(XClient client, int pixmapId, short width, short height, int stride, int offset, byte depth, int fd, long size)  throws IOException, XRequestError {
-        try {
-            ByteBuffer buffer = SysVSharedMemory.mapSHMSegment(fd, size, offset, true);
-            if (buffer == null) throw new BadAlloc();
-            
-            short totalWidth = (short)(stride / 4);
-            Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, totalWidth, height, depth);
-            drawable.setData(buffer);
-            drawable.setGPUImage(null);
-            drawable.setOnDestroyListener(onDestroyDrawableListener);
-            Pixmap pixmap = client.xServer.pixmapManager.createPixmap(drawable);
-            client.registerAsOwnerOfResource(pixmap);
-        }
-        finally {
-            XConnectorEpoll.closeFd(fd);
-        }
     }
 
     @Override

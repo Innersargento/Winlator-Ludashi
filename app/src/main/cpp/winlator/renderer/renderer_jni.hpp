@@ -22,8 +22,13 @@ class JNIXServer {
         jobject windowManager;
         jobject inputDeviceManager;
         jobject xserver;
+        std::string displayDriver;
         
         JNIXServer() {}
+        
+        bool isDisplayX() {
+            return displayDriver == "displayx";
+        }
 };
 
 class JNICache {
@@ -31,6 +36,7 @@ class JNICache {
         JavaVM *vm;
         
         jclass xserverClass;
+        jmethodID getDisplayDriver;
         jfieldID windowManager;
         jfieldID inputDeviceManager;
         
@@ -62,11 +68,12 @@ class JNICache {
         jmethodID windowAttributesIsEnabled;
         
         jclass drawableClass;
-        jmethodID drawableGetData;
-        jmethodID drawableSetData;
         jfieldID drawableID;
+        jfieldID drawableAHB;
+        jfieldID drawableStride;
         jfieldID drawableWidth;
         jfieldID drawableHeight;
+        jfieldID drawableFormat;
         
         jclass gpuImageClass;
         jmethodID gpuImageGetStride;
@@ -85,8 +92,8 @@ class JNICache {
         }
         
         void detachEnv(JNIEnv *env) {
-            (void)env;
             vm->DetachCurrentThread();
+            delete env;
         }
         
         void init (JavaVM *vm, JNIEnv *env) {
@@ -100,6 +107,8 @@ class JNICache {
             jclass drawableClass = env->FindClass("com/winlator/cmod/xserver/Drawable");
             jclass cursorClass = env->FindClass("com/winlator/cmod/xserver/Cursor");
             jclass gpuImageClass = env->FindClass("com/winlator/cmod/renderer/GPUImage");
+            
+            LOAD_METHOD_ID(getDisplayDriver, env, xServerClass, "getDisplayDriver", "()Ljava/lang/String;");
             
             LOAD_FIELD_ID(inputDeviceManager, env, xServerClass, "inputDeviceManager", "Lcom/winlator/cmod/xserver/InputDeviceManager;");
             LOAD_METHOD_ID(getPointWindow, env, inputDeviceManagerClass, "getPointWindow", "()Lcom/winlator/cmod/xserver/Window;");
@@ -118,11 +127,12 @@ class JNICache {
             LOAD_FIELD_ID(windowID, env, windowClass, "id", "I");
             LOAD_FIELD_ID(windowAttributes, env, windowClass, "attributes", "Lcom/winlator/cmod/xserver/WindowAttributes;");
             
-            LOAD_METHOD_ID(drawableGetData, env, drawableClass, "getData", "()Ljava/nio/ByteBuffer;");
-            LOAD_METHOD_ID(drawableSetData, env, drawableClass, "setData", "(Ljava/nio/ByteBuffer;)V");
             LOAD_FIELD_ID(drawableID, env, drawableClass, "id", "I");
             LOAD_FIELD_ID(drawableWidth, env, drawableClass, "width", "S");
             LOAD_FIELD_ID(drawableHeight, env, drawableClass, "height", "S");
+            LOAD_FIELD_ID(drawableAHB, env, drawableClass, "backingAHB", "J");
+            LOAD_FIELD_ID(drawableStride, env, drawableClass, "stride", "S");
+            LOAD_FIELD_ID(drawableFormat, env, drawableClass, "format", "I");
             
             LOAD_METHOD_ID(cursorIsVisible, env, cursorClass, "isVisible", "()Z");
             LOAD_FIELD_ID(cursorID, env, cursorClass, "id", "I");

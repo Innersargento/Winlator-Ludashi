@@ -48,6 +48,7 @@ void EGLRenderer::renderingThreadLoop() {
     bool paused = false;
     
     this->env = cache->getEnv();
+    init();
     
     while (true) {
         std::function<void()> func = nullptr;
@@ -57,7 +58,7 @@ void EGLRenderer::renderingThreadLoop() {
         auto lock = renderLock.lock();
         renderLock.wait(lock, [&]{ 
             if (paused) {
-                return (state != State::REQUEST_RENDERER && state != State::NONE) ||!eventQueue.empty();
+                return (state != State::REQUEST_RENDERER && state != State::NONE) || !eventQueue.empty();
             } else {
                 return state != State::NONE || !eventQueue.empty();
             } 
@@ -117,7 +118,6 @@ void EGLRenderer::renderingThreadLoop() {
             }
             
             if (state == State::REQUEST_RENDERER && hasSurface && !paused) {
-                if (context == EGL_NO_CONTEXT) init();
                 if (surface == EGL_NO_SURFACE) createEGLSurface = true;
                 requestRender = true;
                 state = State::NONE;
@@ -229,10 +229,15 @@ void EGLRenderer::renderWindows() {
     for (const auto& renderableWindow : renderableWindows) {
         if (renderableWindow == nullptr) continue;
         
-        if (renderableWindow->window->hasDirectContents())
-            renderDrawable(renderableWindow->window->currentDirectContent, renderableWindow->rootX, renderableWindow->rootY, true);
+        auto window = renderableWindow->window;
+        if (!window) continue;
+        if (!window->hasContent && !window->hasDirectContents()) continue;
+        
+            
+        if (window->hasDirectContents())
+            renderDrawable(window->currentDirectContent, renderableWindow->rootX, renderableWindow->rootY, true);
         else
-            renderDrawable(renderableWindow->content, renderableWindow->rootX, renderableWindow->rootY, true);
+            renderDrawable(window->drawable.get(), renderableWindow->rootX, renderableWindow->rootY, true);
     }
 }
 
@@ -254,23 +259,23 @@ void EGLRenderer::renderCursor() {
 }
 
 void EGLRenderer::renderDrawable(Drawable *drawable, int x, int y, bool isWindow) {
-    if (drawable == nullptr || (drawable->data == nullptr && !drawable->isDirectContent)) return;
+    if (drawable == nullptr) return;
     
     if (drawable->textureId < 0) {
-        if (drawable->isDirectContent) 
+        if (drawable->data == nullptr) 
             drawable->textureId = allocateTextureDirect(drawable->ahb);
-        else    
+        else
             drawable->textureId = allocateTexture(drawable->width, drawable->height);
     }    
     else if (drawable->sizeChanged) {
-        if (drawable->isDirectContent) 
+        if (drawable->data == nullptr) 
             drawable->textureId = allocateTextureDirect(drawable->ahb);
         else    
             reallocateTexture(drawable->textureId, drawable->width, drawable->height);
         drawable->sizeChanged = false;
     }
         
-    if (drawable->isDirty && !drawable->isDirectContent) {
+    if (drawable->isDirty) {
         updateTextureDrawable(drawable->textureId, drawable->width, drawable->height, drawable->data);
         drawable->isDirty = false;
     }    
@@ -288,6 +293,8 @@ void EGLRenderer::updateScene() {
 
 void EGLRenderer::collectRenderableWindows(Window *window, int x, int y) {
     if (!window->mapped) return;
+    if (!window->inputOutput) return;
+    
     if (window != windowManager->getRootWindow()) {
         bool viewable = env->CallBooleanMethod(window->attributes, cache->windowAttributesIsEnabled);
 
@@ -295,7 +302,6 @@ void EGLRenderer::collectRenderableWindows(Window *window, int x, int y) {
             auto renderableWindow = std::make_unique<struct RenderableWindow>();
             renderableWindow->rootX = x;
             renderableWindow->rootY = y;
-            renderableWindow->content = window->drawable.get();
             renderableWindow->window = window;
             renderableWindows.push_back(std::move(renderableWindow));
         }    
@@ -364,6 +370,8 @@ void EGLRenderer::init() {
         printf("Failed to create egl context");
         return;
     }
+    
+    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context);
 }
 
 void EGLRenderer::createEGLSurface(ANativeWindow *window) {

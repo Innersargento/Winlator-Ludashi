@@ -26,6 +26,8 @@ class CursorManager {
         
     public: 
         Pointer pointer{0, 0};
+        ASurfaceControl *control;
+        
         void setRootCursor(std::unique_ptr<struct Cursor> cursor);
         Cursor *getRootCursor();
         void addCursor(int id, std::unique_ptr<struct Cursor> cursor);

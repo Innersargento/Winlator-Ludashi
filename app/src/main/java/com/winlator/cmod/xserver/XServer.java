@@ -35,6 +35,7 @@ public class XServer {
     public final InputDeviceManager inputDeviceManager;
     public final GrabManager grabManager;
     public final CursorLocker cursorLocker;
+    private String displayDriver;
     private SHMSegmentManager shmSegmentManager;
     private WinHandler winHandler;
     private final EnumMap<Lockable, ReentrantLock> locks = new EnumMap<>(Lockable.class);
@@ -42,6 +43,7 @@ public class XServer {
     private boolean simulateTouchScreen = false;
     private boolean disableMouse = false;
     private boolean isGrabbed = false;
+    private int surfaceFormat = Drawable.HAL_PIXEL_FORMAT_BGRA_8888;
     private XServerView xServerView;
     private XClient grabbingClient = null;
 
@@ -60,6 +62,26 @@ public class XServer {
 
         DesktopHelper.attachTo(this);
         setupExtensions();
+    }
+    
+    public String getDisplayDriver() {
+        return this.displayDriver;
+    }
+    
+    public void setDisplayDriver(String displayDriver) {
+        this.displayDriver = displayDriver;
+    }
+    
+    public void setSurfaceFormat(int surfaceFormat) {
+        this.surfaceFormat = surfaceFormat;
+    }
+    
+    public int getSurfaceFormat() {
+        return this.surfaceFormat;
+    }
+    
+    public boolean isDisplayX() {
+        return this.displayDriver.toLowerCase().equals("displayx");
     }
 
     public boolean isRelativeMouseMovement() {
