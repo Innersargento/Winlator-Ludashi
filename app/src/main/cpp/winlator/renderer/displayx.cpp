@@ -350,20 +350,6 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
 void DisplayX::updateWindow(Window *window) {
     if (!window->control) return;
     
-    if (pfnASurfaceTransactionSetPosition) {
-        pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
-    }
-    else {
-        ARect srcRect{};
-        ARect dstRect = {
-            .left = window->x,
-            .top = window->y,
-            .right = window->x + window->width,
-            .bottom = window->y + window->height
-        };
-        pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, srcRect, dstRect, 0);
-    }
-    
     if (!window->enabled)
         pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, nullptr, -1);
     else
@@ -376,20 +362,6 @@ void DisplayX::updateWindowDirect(Window *window) {
     
     auto drawable = window->currentDirectContent;
     if (!drawable) return;
-    
-    if (pfnASurfaceTransactionSetPosition) {
-        pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
-    }
-    else { 
-        ARect src{};
-        ARect dst = {
-            .left = window->x,
-            .top = window->y,
-            .right = window->x + window->width,
-            .bottom = window->y + window->height
-        };
-        pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, src, dst, 0);
-    }
          
     if (!window->enabled)
         pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, nullptr, -1);
