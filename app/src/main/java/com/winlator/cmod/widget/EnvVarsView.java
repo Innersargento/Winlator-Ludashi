@@ -42,7 +42,7 @@ public class EnvVarsView extends FrameLayout {
         {"PULSE_LATENCY_MSEC", "NUMBER"},
         {"WINE_DO_NOT_CREATE_DXGI_DEVICE_MANAGER", "CHECKBOX", "0", "1"},
         {"WINE_NEW_MEDIASOURCE", "CHECKBOX", "0", "1"},
-        {"GALLIUM_HUD", "SELECT_MULTIPLE", "simple", "fps", "frametime"},
+        {"GALLIUM_HUD", "SELECT_MULTIPLE", "simple", "fps", "frametime", "cpu", "main-thread-busy", "API-thread-busy", "primitives-generated", "samples-passed", "cpu0", "cpu1", "cpu2", "cpu3", "cpu4", "cpu5", "cpu6", "cpu7"},
         {"WINE_LARGE_ADDRESS_AWARE", "CHECKBOX", "0", "1"},
         {"WINEDLLOVERRIDES", "TEXT"}
     };
