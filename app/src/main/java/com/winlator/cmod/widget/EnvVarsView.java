@@ -28,8 +28,9 @@ import java.util.Arrays;
 
 public class EnvVarsView extends FrameLayout {
     public static final String[][] knownEnvVars = {
-        {"ZINK_DESCRIPTORS", "SELECT", "auto", "lazy", "cached", "notemplates"},
-        {"ZINK_DEBUG", "SELECT_MULTIPLE", "nir", "spirv", "tgsi", "validation", "sync", "compact", "noreorder"},
+        {"ZINK_DESCRIPTORS", "SELECT", "auto", "lazy", "db"},
+        {"ZINK_DEBUG", "SELECT_MULTIPLE", "compact", "gpl", "noshobj", "optimal_keys", "noopt", "rp", "norp", "nobgc", "noreorder", "sync", "flushsync", "validation", "nir", "spirv", "tgsi", "shaderdb", "map", "mem", "quiet"},
+        {"ZINK_INLINE_UNIFORMS", "CHECKBOX", "false", "true"},
         {"MESA_SHADER_CACHE_DISABLE", "CHECKBOX", "false", "true"},
         {"mesa_glthread", "CHECKBOX", "false", "true"},
         {"WINEESYNC", "CHECKBOX", "0", "1"},
