@@ -470,14 +470,14 @@ Java_com_winlator_cmod_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj,
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_winlator_cmod_xserver_Drawable_allocate(JNIEnv *env, jclass obj, jint width, jint height, jint format) {
+Java_com_winlator_cmod_xserver_Drawable_allocate(JNIEnv *env, jclass obj, jint width, jint height) {
     int ret;
     AHardwareBuffer *hardwareBuffer;
     
     AHardwareBuffer_Desc desc = {};
     desc.width = width;
     desc.height = height;
-    desc.format = format;
+    desc.format = HAL_PIXEL_FORMAT_BGRA_8888;
     desc.layers = 1;
     desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
                  AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |

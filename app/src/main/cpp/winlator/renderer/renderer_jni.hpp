@@ -73,7 +73,6 @@ class JNICache {
         jfieldID drawableStride;
         jfieldID drawableWidth;
         jfieldID drawableHeight;
-        jfieldID drawableFormat;
         
         jclass gpuImageClass;
         jmethodID gpuImageGetStride;
@@ -132,7 +131,6 @@ class JNICache {
             LOAD_FIELD_ID(drawableHeight, env, drawableClass, "height", "S");
             LOAD_FIELD_ID(drawableAHB, env, drawableClass, "backingAHB", "J");
             LOAD_FIELD_ID(drawableStride, env, drawableClass, "stride", "S");
-            LOAD_FIELD_ID(drawableFormat, env, drawableClass, "format", "I");
             
             LOAD_METHOD_ID(cursorIsVisible, env, cursorClass, "isVisible", "()Z");
             LOAD_FIELD_ID(cursorID, env, cursorClass, "id", "I");

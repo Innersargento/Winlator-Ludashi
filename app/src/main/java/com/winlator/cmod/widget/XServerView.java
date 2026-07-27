@@ -267,7 +267,7 @@ public class XServerView extends SurfaceView implements SurfaceHolder.Callback, 
     @FastNative
     public native void nativeStop();
     @FastNative
-    public native void nativeAddDirectContent(int windowId, Drawable drawable);
+    public native void nativeAddDirectContent(int windowId, Drawable drawable, GPUImage gpuImage);
     @FastNative
     public native void nativeUpdateDirectContent(int windowId, int drawableId);
     @FastNative
