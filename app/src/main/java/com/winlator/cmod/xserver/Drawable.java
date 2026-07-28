@@ -2,6 +2,7 @@ package com.winlator.cmod.xserver;
 
 import android.graphics.Bitmap;
 
+import android.hardware.HardwareBuffer;
 import com.winlator.cmod.core.Callback;
 import com.winlator.cmod.math.Mathf;
 import com.winlator.cmod.renderer.GPUImage;
@@ -10,11 +11,15 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 public class Drawable extends XResource {
+    public static final int HAL_PIXEL_FORMAT_BGRA_8888 = 5;
+    
     public final short width;
     public short stride;
     public long backingAHB;
     public final short height;
     public final Visual visual;
+    public int format = HAL_PIXEL_FORMAT_BGRA_8888;
+    
     private GPUImage gpuImage = null;
     private Runnable onDrawListener;
     private Callback<Drawable> onDestroyListener;
@@ -24,12 +29,13 @@ public class Drawable extends XResource {
         System.loadLibrary("winlator");
     }
 
-    public Drawable(int id, int width, int height, Visual visual) {
+    public Drawable(int id, int width, int height, Visual visual, int format) {
         super(id);
         this.width = (short)width;
         this.height = (short)height;
         this.visual = visual;
-        this.backingAHB = allocate(width, height);
+        this.format = format;
+        this.backingAHB = allocate(width, height, format);
         if (this.backingAHB == 0) {
             throw new IllegalStateException("Drawable data initialized as null!");
         }
@@ -37,6 +43,8 @@ public class Drawable extends XResource {
     
     public void setGPUImage(GPUImage texture) {
         this.gpuImage = texture;
+        this.backingAHB = gpuImage.hardwareBufferPtr;
+        this.format = gpuImage.format;
     }
     
     public GPUImage getGPUImage() {
@@ -172,7 +180,7 @@ public class Drawable extends XResource {
 
     private static native void drawLine(short x0, short y0, short x1, short y1, int color, short lineWidth, short stride, long dstAHB);
     
-    private native long allocate(int width, int height);
+    private native long allocate(int width, int height, int format);
 
     public native ByteBuffer lockBuffer(long ahb);
 

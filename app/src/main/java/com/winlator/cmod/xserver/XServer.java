@@ -43,6 +43,7 @@ public class XServer {
     private boolean simulateTouchScreen = false;
     private boolean disableMouse = false;
     private boolean isGrabbed = false;
+    private int surfaceFormat = Drawable.HAL_PIXEL_FORMAT_BGRA_8888;
     private XServerView xServerView;
     private XClient grabbingClient = null;
 
@@ -69,6 +70,14 @@ public class XServer {
     
     public void setDisplayDriver(String displayDriver) {
         this.displayDriver = displayDriver;
+    }
+    
+    public void setSurfaceFormat(int surfaceFormat) {
+        this.surfaceFormat = surfaceFormat;
+    }
+    
+    public int getSurfaceFormat() {
+        return this.surfaceFormat;
     }
     
     public boolean isDisplayX() {

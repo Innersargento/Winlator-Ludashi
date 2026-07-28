@@ -12,10 +12,13 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.hardware.HardwareBuffer;
+
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -481,6 +484,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         xServer = new XServer(new ScreenInfo(screenSize));
         xServer.setWinHandler(winHandler);
         xServer.setDisplayDriver(displayDriver);
+        if (xServer.isDisplayX())
+            xServer.setSurfaceFormat(HardwareBuffer.RGBA_8888);
 
         boolean[] winStarted = {false};
 
@@ -1577,6 +1582,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         String bcnEmulationCache = graphicsDriverConfig.get("bcnEmulationCache");
         envVars.put("WRAPPER_USE_BCN_CACHE", bcnEmulationCache);
+        
+        if (xServer.isDisplayX())
+            envVars.put("WRAPPER_SURFACE_FORMAT", "rgba8");
 
         if (!vkbasaltConfig.isEmpty()) {
             envVars.put("ENABLE_VKBASALT", "1");
