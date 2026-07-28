@@ -501,11 +501,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         preloaderDialog.show(R.string.starting_up);
 
         inputControlsManager = new InputControlsManager(this);
-        xServer = new XServer(new ScreenInfo(screenSize));
+        xServer = new XServer(new ScreenInfo(screenSize), displayDriver);
         xServer.setWinHandler(winHandler);
-        xServer.setDisplayDriver(displayDriver);
-        if (xServer.isDisplayX())
-            xServer.setSurfaceFormat(HardwareBuffer.RGBA_8888);
 
         boolean[] winStarted = {false};
 
