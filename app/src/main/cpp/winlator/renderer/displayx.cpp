@@ -438,43 +438,6 @@ void DisplayX::createRootCursorControl() {
     if (pfnASurfaceControlAcquire)
         pfnASurfaceControlAcquire(cursorManager->control);
     
-    AHardwareBuffer_Desc desc{};
-    desc.width = rootCursor->image->width;
-    desc.height = rootCursor->image->height;
-    desc.format = HAL_PIXEL_FORMAT_BGRA_8888;
-    desc.layers = 1;
-    desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
-                 AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
-                 AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY |
-                 AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
-                 
-    ret = AHardwareBuffer_allocate(&desc, &rootCursor->image->ahb);
-    if (ret != 0)
-        return; 
-    
-    AHardwareBuffer_acquire(rootCursor->image->ahb);
-        
-    AHardwareBuffer_Desc outDesc{};
-    AHardwareBuffer_describe(rootCursor->image->ahb, &outDesc);
-    rootCursor->image->stride = outDesc.stride;     
-        
-    uint8_t *dst, *src;
-        
-    ret = AHardwareBuffer_lock(rootCursor->image->ahb, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN | 
-        AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, nullptr, reinterpret_cast<void **>(&dst));
-    if (ret != 0)    
-        return;
-        
-    src = reinterpret_cast<uint8_t *>(rootCursor->image->data);
-    
-    for (int y = 0; y < rootCursor->image->height; ++y) {
-        memcpy(dst + y * rootCursor->image->stride * 4, src + y * rootCursor->image->width * 4, rootCursor->image->width * 4);
-    }
-    
-    AHardwareBuffer_unlock(rootCursor->image->ahb, nullptr);
-    
-    rootCursor->image->isDirty = false;
-    
     cursorTransaction = pfnASurfaceTransactionCreate();
 }
 

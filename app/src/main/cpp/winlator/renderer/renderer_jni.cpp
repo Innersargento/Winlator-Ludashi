@@ -85,7 +85,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     off_t len = AAsset_getLength(cursorAsset);
     const unsigned char *data = static_cast<const unsigned char *>(AAsset_getBuffer(cursorAsset));
     
-    int w, h, c;
+    int w, h, c, ret;
     unsigned char *cursorData = stbi_load_from_memory(data, len, &w, &h, &c, 4);
     
     AAsset_close(cursorAsset);
@@ -94,15 +94,45 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     cursorDrawable->id = -1;
     cursorDrawable->textureId = -1;
     cursorDrawable->isDirectContent = false;
-    cursorDrawable->format = HAL_PIXEL_FORMAT_BGRA_8888;
+    cursorDrawable->format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
     cursorDrawable->width = w;
     cursorDrawable->height = h;
-    cursorDrawable->data = cursorData;
-    cursorDrawable->ahb = nullptr;
-    cursorDrawable->stride = 0;
-    cursorDrawable->isDirty = true;
+    cursorDrawable->data = nullptr;
+    cursorDrawable->isDirty = false;
     cursorDrawable->sizeChanged = false;
     cursorDrawable->drawableObj = nullptr;
+    
+    AHardwareBuffer_Desc desc{};
+    desc.width = w;
+    desc.height = h;
+    desc.format = cursorDrawable->format;
+    desc.layers = 1;
+    desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
+                 AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
+                 AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY |
+                 AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
+                 
+    ret = AHardwareBuffer_allocate(&desc, &cursorDrawable->ahb);
+    if (ret != 0)
+        return; 
+        
+    AHardwareBuffer_Desc outDesc{};
+    AHardwareBuffer_describe(cursorDrawable->ahb, &outDesc);
+    cursorDrawable->stride = outDesc.stride;
+        
+    uint8_t *dst, *src;
+        
+    ret = AHardwareBuffer_lock(cursorDrawable->ahb, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, nullptr, reinterpret_cast<void **>(&dst));
+    if (ret != 0)    
+        return;
+        
+    src = reinterpret_cast<uint8_t *>(cursorData);
+    
+    for (int y = 0; y < h; ++y) {
+        memcpy(dst + y * cursorDrawable->stride * 4, src + y * cursorDrawable->width * 4, cursorDrawable->width * 4);
+    }
+    
+    AHardwareBuffer_unlock(cursorDrawable->ahb, nullptr);
     
     auto rootCursor = std::make_unique<struct Cursor>();
     rootCursor->id = cursorDrawable->id;
