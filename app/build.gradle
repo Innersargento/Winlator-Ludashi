@@ -65,47 +65,66 @@ tasks.register("downloadImageFS") {
     }
 }
 
-// Only Proton 10.0-4 arm64ec ships now. The 9.0 pair (x86_64 and arm64ec) was dropped, and
-// leaving them here would be worse than dead code: this task recreates whatever is missing from
-// assets/, and Gradle packs everything in assets/ into the APK -- so the old builds would keep
-// paying for two Protons nothing references.
+// Only Proton 10.0-4 x86_64 ships now. The 9.0 pair (x86_64 and arm64ec) and the 10.0-4 arm64ec
+// build were dropped, and leaving them here would be worse than dead code: this task recreates
+// whatever is missing from assets/, and Gradle packs everything in assets/ into the APK -- so the
+// old builds would keep paying for Protons nothing references.
 //
-// The prefix (proton-10.0-4-arm64ec_container_pattern.tzst) is committed to the repo, not
-// downloaded, so it is deliberately absent from this task.
+// The tarball is too large for a single git object, so it is uploaded to a GitHub release split
+// into fixed-size parts and reassembled here, the same way imagefs.txz is. The prefix
+// (proton-10.0-4-x86_64_container_pattern.tzst) is small enough to be committed to the repo, so it
+// is deliberately absent from this task.
 tasks.register("downloadProton") {
     def assetDir = new File(project.rootDir, ["app","src","main","assets"].join(File.separator))
-    File proton = new File(assetDir, "proton-10.0-4-arm64ec.txz")
+    File proton = new File(assetDir, "proton-10.0-4-x86_64.txz")
+    String protonBaseURL = "https://github.com/Innersargento/Winlator-Ludashi/releases/download/proton-10.0-4-x86_64"
+    String protonSHA256Sum = protonBaseURL + "/proton-10.0-4-x86_64.txz.sha256sum"
+    int parts = 2
 
-    // TODO: point these at the GitHub release once it is published. Until then a local copy of
-    // the tarball in assets/ is enough to build; a clone without it will fail with the message
-    // below rather than silently producing an APK whose first boot cannot install Wine.
-    String protonUrl = ""
-    String protonSHA256Sum = ""
+    def assemble = {
+        FileOutputStream outputStream = new FileOutputStream(proton)
+        for (int i = 0; i < parts; i++) {
+            File partFile = new File(assetDir, String.format("proton-10.0-4-x86_64.txz.%02d", i))
+            String partURL = String.format("%s/proton-10.0-4-x86_64.txz.%02d", protonBaseURL, i)
+            new URL(partURL).withInputStream { p ->
+                partFile.withOutputStream { it << p }
+                outputStream << partFile.bytes
+            }
+            partFile.delete()
+        }
+        outputStream.close()
+    }
 
     doLast {
-        if (protonUrl.isEmpty()) {
+        if (!proton.exists()) {
+            println("Proton 10.0-4 x86_64 was not present, downloading...\n")
+            assemble()
+        }
+
+        String remoteChecksum
+        try {
+            remoteChecksum = new URL(protonSHA256Sum).text.split("\\s+")[0].trim()
+        }
+        catch (IOException e) {
+            // The release may not be published yet, or the machine may be offline. A local copy is
+            // enough to build, so only turn this into a hard failure when there is nothing to fall
+            // back on.
             if (proton.exists()) {
-                println("Proton 10.0-4 ARM64EC: no release URL configured yet, using the local copy in assets/.\n")
+                println("Proton 10.0-4 x86_64: could not reach ${protonSHA256Sum} (${e.message}), using the local copy in assets/.\n")
                 return
             }
             throw new GradleException(
-                "assets/proton-10.0-4-arm64ec.txz is missing and no release URL is configured.\n" +
-                "Set protonUrl/protonSHA256Sum in app/build.gradle, or copy the tarball into assets/ by hand.")
+                "assets/proton-10.0-4-x86_64.txz is missing and ${protonSHA256Sum} is unreachable (${e.message}).\n" +
+                "Publish the release, fix protonBaseURL in app/build.gradle, or copy the tarball into assets/ by hand.")
         }
 
-        if (!proton.exists()) {
-            println("Proton 10.0-4 ARM64EC was not present, downloading...\n")
-            new URL(protonUrl).withInputStream { i -> proton.withOutputStream { it << i } }
-        }
-
-        String remoteChecksum = new URL(protonSHA256Sum).text.split("\\s+")[0].trim()
         byte[] data = Files.readAllBytes(proton.toPath())
         byte[] hash = MessageDigest.getInstance("SHA-256").digest(data)
         String localChecksum = String.format("%064x", new BigInteger(1, hash))
 
         if (remoteChecksum != localChecksum) {
-            println("The version of Proton 10.0-4 ARM64EC present locally is older than remote or hasn't been downloaded properly, redownloading...\n")
-            new URL(protonUrl).withInputStream { i -> proton.withOutputStream { it << i } }
+            println("The version of Proton 10.0-4 x86_64 present locally is older than remote or hasn't been downloaded properly, redownloading...\n")
+            assemble()
         }
     }
 }
