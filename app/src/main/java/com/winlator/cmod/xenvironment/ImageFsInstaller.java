@@ -27,7 +27,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class ImageFsInstaller {
-    public static final byte LATEST_VERSION = 21;
+    // 22: dropped Proton 9.0 (x86_64 and arm64ec) for a single Proton 10.0-4 arm64ec. Existing
+    // installs must re-extract, or opt/ keeps a 9.0 tree that nothing points at any more.
+    public static final byte LATEST_VERSION = 22;
     
     public abstract interface onInstallationFinish {
         public void call();
