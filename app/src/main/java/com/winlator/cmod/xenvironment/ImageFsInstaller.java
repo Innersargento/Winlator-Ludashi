@@ -29,8 +29,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public abstract class ImageFsInstaller {
     // 22: dropped Proton 9.0 (x86_64 and arm64ec) for a single Proton 10.0-4 arm64ec. Existing
     // installs must re-extract, or opt/ keeps a 9.0 tree that nothing points at any more.
-    // 23: swapped that arm64ec build for Proton 10.0-4 x86_64. Same reason -- opt/ still holds the
-    // arm64ec tree, and MAIN_WINE_VERSION no longer points at it.
     public static final byte LATEST_VERSION = 23;
     
     public abstract interface onInstallationFinish {

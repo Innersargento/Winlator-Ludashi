@@ -65,15 +65,6 @@ tasks.register("downloadImageFS") {
     }
 }
 
-// Only Proton 10.0-4 x86_64 ships now. The 9.0 pair (x86_64 and arm64ec) and the 10.0-4 arm64ec
-// build were dropped, and leaving them here would be worse than dead code: this task recreates
-// whatever is missing from assets/, and Gradle packs everything in assets/ into the APK -- so the
-// old builds would keep paying for Protons nothing references.
-//
-// The tarball is too large for a single git object, so it is uploaded to a GitHub release split
-// into fixed-size parts and reassembled here, the same way imagefs.txz is. The prefix
-// (proton-10.0-4-x86_64_container_pattern.tzst) is small enough to be committed to the repo, so it
-// is deliberately absent from this task.
 tasks.register("downloadProton") {
     def assetDir = new File(project.rootDir, ["app","src","main","assets"].join(File.separator))
     File proton = new File(assetDir, "proton-10.0-4-x86_64.txz")
@@ -106,9 +97,6 @@ tasks.register("downloadProton") {
             remoteChecksum = new URL(protonSHA256Sum).text.split("\\s+")[0].trim()
         }
         catch (IOException e) {
-            // The release may not be published yet, or the machine may be offline. A local copy is
-            // enough to build, so only turn this into a hard failure when there is nothing to fall
-            // back on.
             if (proton.exists()) {
                 println("Proton 10.0-4 x86_64: could not reach ${protonSHA256Sum} (${e.message}), using the local copy in assets/.\n")
                 return

@@ -9,7 +9,5 @@
 .cxx
 app/src/main/assets/imagefs.txz
 app/src/main/assets/proton-10.0-4-x86_64.txz
-# Part files downloaded and reassembled by the downloadProton task; they are deleted as soon as
-# the full tarball is written, but a failed build can leave them behind.
 app/src/main/assets/proton-10.0-4-x86_64.txz.[0-9][0-9]
 
