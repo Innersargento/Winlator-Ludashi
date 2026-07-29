@@ -32,6 +32,8 @@ public class EnvVarsView extends FrameLayout {
         {"ZINK_DEBUG", "SELECT_MULTIPLE", "compact", "gpl", "noshobj", "optimal_keys", "noopt", "rp", "norp", "nobgc", "noreorder", "sync", "flushsync", "validation", "nir", "spirv", "tgsi", "shaderdb", "map", "mem", "quiet"},
         {"ZINK_INLINE_UNIFORMS", "CHECKBOX", "false", "true"},
         {"MESA_SHADER_CACHE_DISABLE", "CHECKBOX", "false", "true"},
+        {"MESA_SHADER_CACHE_MAX_SIZE", "TEXT"},
+        {"MESA_NO_ERROR", "CHECKBOX", "0", "1"},
         {"mesa_glthread", "CHECKBOX", "false", "true"},
         {"WINEESYNC", "CHECKBOX", "0", "1"},
         {"TU_DEBUG", "SELECT_MULTIPLE", "forcecb", "nocb", "startup", "nir", "nobin", "sysmem", "gmem", "forcebin", "layout", "noubwc", "nomultipos", "nolrz", "nolrzfc", "perf", "perfc", "flushall", "syncdraw", "push_consts_per_stage", "rast_order", "unaligned_store", "log_skip_gmem_ops", "dynamic", "bos", "3d_load", "fdm", "noconform", "rd"},
