@@ -12,6 +12,7 @@ import com.winlator.cmod.xconnector.XStreamLock;
 import com.winlator.cmod.xserver.Bitmask;
 import com.winlator.cmod.xserver.Drawable;
 import com.winlator.cmod.xserver.Pixmap;
+import com.winlator.cmod.xserver.PresentPathStats;
 import com.winlator.cmod.xserver.Window;
 import com.winlator.cmod.xserver.XClient;
 import com.winlator.cmod.xserver.XLock;
@@ -41,6 +42,7 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         private static final byte QUERY_VERSION = 0;
         private static final byte PRESENT_PIXMAP = 1;
         private static final byte SELECT_INPUT = 3;
+        private static final byte QUERY_CAPABILITIES = 4;
     }
 
     private static class Event {
@@ -102,14 +104,36 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
     private static void queryVersion(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         inputStream.skip(8);
 
+        // Must be >= 1.2, together with DRI3 >= 1.2: Mesa's x11_dri3_has_multibuffer() requires
+        // both before it will use the DRI3 path at all.
+        Log.i("Present", "QueryVersion -- replying 1.2");
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
             outputStream.writeByte((byte)0);
             outputStream.writeShort(client.getSequenceNumber());
             outputStream.writeInt(0);
             outputStream.writeInt(1);
-            outputStream.writeInt(0);
+            outputStream.writeInt(2);
             outputStream.writePad(16);
+        }
+    }
+
+    /**
+     * Reporting no capabilities keeps clients on plain FIFO presentation. Advertising ASYNC would
+     * invite tear-free-less immediate flips that {@link #presentPixmap} cannot honour yet: it
+     * ignores target_msc entirely and fabricates its MSC from wall clock.
+     */
+    private static void queryCapabilities(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        inputStream.readInt();  // target
+        Log.d("Present", "QueryCapabilities -> 0");
+
+        try (XStreamLock lock = outputStream.lock()) {
+            outputStream.writeByte(RESPONSE_CODE_SUCCESS);
+            outputStream.writeByte((byte)0);
+            outputStream.writeShort(client.getSequenceNumber());
+            outputStream.writeInt(0);
+            outputStream.writeInt(0);   // capabilities
+            outputStream.writePad(20);
         }
     }
 
@@ -133,6 +157,8 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         long ust = System.nanoTime() / 1000;
         long msc = ust / FAKE_INTERVAL;
 
+        if (PresentPathStats.ENABLED) PresentPathStats.onPresent();
+
         pixmap.drawable.updateDirect();
         sendIdleNotify(window, pixmap, serial, idleFence);
         sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
@@ -145,6 +171,9 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
 
         Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
+
+        Log.d("Present", "SelectInput eid=0x" + Integer.toHexString(eventId)
+                + " window=0x" + Integer.toHexString(windowId) + " mask=0x" + Integer.toHexString(mask.getBits()));
 
         synchronized (events) {
             Event event = events.get(eventId);
@@ -200,7 +229,11 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
                     selectInput(client, inputStream, outputStream);
                 }
                 break;
+            case ClientOpcodes.QUERY_CAPABILITIES:
+                queryCapabilities(client, inputStream, outputStream);
+                break;
             default:
+                Log.e("Present", "unhandled Present opcode " + opcode);
                 throw new BadImplementation();
         }
     }
