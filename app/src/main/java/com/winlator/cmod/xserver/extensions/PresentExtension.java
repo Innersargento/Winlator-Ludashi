@@ -106,7 +106,6 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
 
         // Must be >= 1.2, together with DRI3 >= 1.2: Mesa's x11_dri3_has_multibuffer() requires
         // both before it will use the DRI3 path at all.
-        Log.i("Present", "QueryVersion -- replying 1.2");
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
             outputStream.writeByte((byte)0);
@@ -125,7 +124,6 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
      */
     private static void queryCapabilities(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         inputStream.readInt();  // target
-        Log.d("Present", "QueryCapabilities -> 0");
 
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
@@ -172,8 +170,6 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
 
-        Log.d("Present", "SelectInput eid=0x" + Integer.toHexString(eventId)
-                + " window=0x" + Integer.toHexString(windowId) + " mask=0x" + Integer.toHexString(mask.getBits()));
 
         synchronized (events) {
             Event event = events.get(eventId);

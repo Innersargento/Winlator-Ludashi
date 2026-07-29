@@ -19,8 +19,14 @@ public final class PresentPathStats {
     private static final String TAG = "PresentPath";
     private static final long REPORT_INTERVAL_NS = 1_000_000_000L;
 
-    /** Set to false to compile the counters out of the hot paths. */
-    public static final boolean ENABLED = true;
+    /**
+     * Set to false to compile the counters out of the hot paths. Off by default: this is the
+     * instrument that answered where the pixels go -- readback through the CPU, or zero-copy
+     * through the AHardwareBuffer swapchain -- so flip it back on to check that a change did
+     * not quietly put the readback back. Every call site is guarded by this flag, so with it
+     * false nothing is counted and nothing is logged.
+     */
+    public static final boolean ENABLED = false;
 
     private static final AtomicLong shmPutImages = new AtomicLong();
     private static final AtomicLong shmBytes = new AtomicLong();

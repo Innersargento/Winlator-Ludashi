@@ -87,7 +87,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         // use zink. We answer 1.0 historically even though PixmapFromBuffers -- the request that
         // *defines* DRI3 1.2 -- has been implemented here all along, so the version was the only
         // thing standing in the way.
-        Log.i("Dri3", "QueryVersion -- replying 1.2");
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
             outputStream.writeByte((byte)0);
@@ -106,7 +105,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
      */
     private void getSupportedModifiers(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         inputStream.readInt();  // window
-        Log.d("Dri3", "GetSupportedModifiers -> none (implicit modifiers only)");
 
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
@@ -155,7 +153,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         // SCM_RIGHTS gave the client its own descriptor; drop ours.
         if (fd >= 0) {
             XConnectorEpoll.closeFd(fd);
-            Log.i("Dri3", "Open(drawable=0x" + Integer.toHexString(drawableId) + ") -> nfd=1");
         }
     }
 
@@ -180,26 +177,17 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
     }
 
     private void pixmapFromBuffers(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
-        Log.d("Dri3", "Received pixmap from buffers");
         int pixmapId = inputStream.readInt();
-        Log.d("Dri3", "Read pixmap id " + pixmapId);
         int windowId = inputStream.readInt();
-        Log.d("Dri3", "Read window id " + windowId);
         inputStream.skip(4);
         short width = inputStream.readShort();
-        Log.d("Dri3", "Read width " + width);
         short height = inputStream.readShort();
-        Log.d("Dri3", "Read height " + height);
         int stride = inputStream.readInt();
-        Log.d("Dri3", "Read stride " + stride);
         int offset = inputStream.readInt();
-        Log.d("Dri3", "Read offset " + offset);
         inputStream.skip(24);
         byte depth = inputStream.readByte();
-        Log.d("Dri3", "Read depth " + depth);
         inputStream.skip(3);
         long modifiers = inputStream.readLong();
-        Log.d("Dri3", "Read modifiers " + modifiers);
         
         Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
@@ -215,11 +203,8 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         // The client segfaults inside glXMakeCurrent right after these imports, so this is the last
         // thing the server does before the crash window. Naming each step tells us whether the AHB
         // import itself is what goes wrong.
-        Log.i("Dri3", "importing AHB: pixmap=0x" + Integer.toHexString(pixmapId)
-                + " " + width + "x" + height + " depth=" + depth + " fd=" + fd);
         try {
             GPUImage gpuImage = new GPUImage(fd);
-            Log.i("Dri3", "  GPUImage created for pixmap=0x" + Integer.toHexString(pixmapId));
             Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, width, height, depth);
             drawable.setGPUImage(gpuImage);
             drawable.setOnDrawListener(() -> client.xServer.windowManager.triggerOnUpdateWindowContentDirect(window, drawable));
@@ -231,7 +216,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
             directContents.put(pixmap.id, directContent);
 
             if (PresentPathStats.ENABLED) PresentPathStats.onDri3Import();
-            Log.i("Dri3", "  direct content registered for pixmap=0x" + Integer.toHexString(pixmapId));
         }
         catch (Throwable t) {
             Log.e("Dri3", "AHB import FAILED for pixmap=0x" + Integer.toHexString(pixmapId), t);

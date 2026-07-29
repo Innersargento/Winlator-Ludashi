@@ -7,6 +7,7 @@ import com.winlator.cmod.core.CursorLocker;
 import com.winlator.cmod.widget.XServerView;
 import com.winlator.cmod.winhandler.WinHandler;
 import com.winlator.cmod.xserver.extensions.BigReqExtension;
+import com.winlator.cmod.xserver.extensions.CompositeExtension;
 import com.winlator.cmod.xserver.extensions.DRI3Extension;
 import com.winlator.cmod.xserver.extensions.Extension;
 import com.winlator.cmod.xserver.extensions.GLXExtension;
@@ -231,6 +232,10 @@ public class XServer {
         extensions.put(PresentExtension.MAJOR_OPCODE, new PresentExtension(this));
         extensions.put(SyncExtension.MAJOR_OPCODE, new SyncExtension(this));
         extensions.put(GLXExtension.MAJOR_OPCODE, new GLXExtension(this));
+        // Without Composite, winex11 falls back to its GLXPixmap hack for child GL windows, and
+        // that fallback costs the VkSwapchain: kopper sees a pixmap, not a window, and zink
+        // presents by reading the framebuffer back to the CPU.
+        extensions.put(CompositeExtension.MAJOR_OPCODE, new CompositeExtension(this));
     }
 
     public <T extends Extension> T getExtension(int opcode) {

@@ -70,6 +70,8 @@ public class GLXExtension implements Extension {
         private static final byte CREATE_NEW_CONTEXT = 24;
         private static final byte QUERY_CONTEXT = 25;
         private static final byte MAKE_CONTEXT_CURRENT = 26;
+        private static final byte CREATE_PIXMAP = 22;
+        private static final byte DESTROY_PIXMAP = 23;
         private static final byte GET_DRAWABLE_ATTRIBUTES = 29;
         private static final byte CHANGE_DRAWABLE_ATTRIBUTES = 30;
         private static final byte CREATE_WINDOW = 31;
@@ -189,13 +191,12 @@ public class GLXExtension implements Extension {
         if (fbConfigs != null) return fbConfigs;
 
         Visual visual = xServer.pixmapManager.visual;
-        // BISECT: cut down from {24,32,16,0} x {8,0} x {double,single} to the four most ordinary
-        // combinations, to find out whether the access violation Wine hits while walking this list
-        // is caused by an exotic config. depth 32 is the prime suspect -- GLX_DEPTH_SIZE (0x0c) was
-        // in a register at the fault, and a 32-bit depth buffer with no stencil is something zink
-        // on Turnip may not be able to back at all.
-        // If the crash survives this, configs are exonerated and the cause is elsewhere.
-        int[] depths = {24};
+        // The bisect that cut this list down to depth 24 is over: the access violation it was
+        // hunting turned out to be a box64 artifact, not an exotic config. Running the same Mesa
+        // and the same server under ARM64EC/FEX -- where winex11's unix half is native aarch64 and
+        // no emulator bridge sits on glXMakeCurrent -- reaches a direct context and three AHB
+        // imports without faulting. Configs were exonerated, so the full matrix is back.
+        int[] depths = {24, 32, 16, 0};
         int[] stencils = {8, 0};
         boolean[] doubles = {true, false};
 
@@ -215,8 +216,6 @@ public class GLXExtension implements Extension {
                 }
             }
         }
-        Log.i(TAG, "advertising " + fbConfigs.length + " fbconfigs on visual 0x"
-                + Integer.toHexString(visual.id));
         return fbConfigs;
     }
 
@@ -232,8 +231,6 @@ public class GLXExtension implements Extension {
             throws IOException {
         int clientMajor = inputStream.readInt();
         int clientMinor = inputStream.readInt();
-        Log.d(TAG, "QueryVersion client=" + clientMajor + "." + clientMinor
-                + " -> " + GLX_MAJOR + "." + GLX_MINOR);
 
         try (XStreamLock lock = outputStream.lock()) {
             writeReplyHeader(client, outputStream, (byte)0, 0);
@@ -272,14 +269,12 @@ public class GLXExtension implements Extension {
             case 3:  value = SERVER_EXTENSIONS; break;  // GLX_EXTENSIONS
             default: value = ""; break;
         }
-        Log.d(TAG, "QueryServerString name=" + name + " -> \"" + value + "\"");
         writeStringReply(client, outputStream, value);
     }
 
     private void queryExtensionsString(XClient client, XInputStream inputStream, XOutputStream outputStream)
             throws IOException {
         inputStream.readInt();                 // screen
-        Log.d(TAG, "QueryExtensionsString");
         writeStringReply(client, outputStream, SERVER_EXTENSIONS);
     }
 
@@ -324,7 +319,6 @@ public class GLXExtension implements Extension {
         inputStream.readInt();                 // screen
         FBConfig[] configs = getFBConfigs();
         int words = configs.length * FBCONFIG_NUM_ATTRIBS * 2;
-        Log.d(TAG, "GetFBConfigs -> " + configs.length + " configs");
 
         try (XStreamLock lock = outputStream.lock()) {
             writeReplyHeader(client, outputStream, (byte)0, words);
@@ -350,8 +344,6 @@ public class GLXExtension implements Extension {
         // anything else. Sending GLX_TRUE_COLOR (0x8002) here poisons every visual it advertises,
         // and this is the list glXChooseVisual answers from.
         int xVisualClass = xServer.pixmapManager.visual.visualClass;
-        Log.d(TAG, "GetVisualConfigs -> " + configs.length + " configs, x visual class "
-                + xVisualClass);
 
         try (XStreamLock lock = outputStream.lock()) {
             writeReplyHeader(client, outputStream, (byte)0, words);
@@ -391,8 +383,6 @@ public class GLXExtension implements Extension {
         context.fbconfigId = fbconfigId;
         context.isDirect = isDirect;
         contexts.put(contextId, context);
-        Log.d(TAG, "CreateContext id=0x" + Integer.toHexString(contextId)
-                + " fbconfig=0x" + Integer.toHexString(fbconfigId) + " direct=" + isDirect);
     }
 
     private void createContextAttribsARB(XClient client, XInputStream inputStream) {
@@ -412,7 +402,6 @@ public class GLXExtension implements Extension {
         int contextId = inputStream.readInt();
         Context context = contexts.get(contextId);
         boolean direct = context == null || context.isDirect;
-        Log.d(TAG, "IsDirect 0x" + Integer.toHexString(contextId) + " -> " + direct);
 
         try (XStreamLock lock = outputStream.lock()) {
             writeReplyHeader(client, outputStream, (byte)0, 0);
@@ -426,7 +415,6 @@ public class GLXExtension implements Extension {
         int contextId = inputStream.readInt();
         Context context = contexts.get(contextId);
         int fbconfigId = context != null ? context.fbconfigId : 0;
-        Log.d(TAG, "QueryContext 0x" + Integer.toHexString(contextId));
 
         final int numAttribs = 3;
         try (XStreamLock lock = outputStream.lock()) {
@@ -488,8 +476,6 @@ public class GLXExtension implements Extension {
 
         int width = drawable != null ? drawable.width : 0;
         int height = drawable != null ? drawable.height : 0;
-        Log.d(TAG, "GetDrawableAttributes 0x" + Integer.toHexString(drawableId)
-                + " -> " + width + "x" + height + (drawable == null ? " (drawable not found!)" : ""));
 
         final int numAttribs = 4;
         try (XStreamLock lock = outputStream.lock()) {
@@ -566,7 +552,6 @@ public class GLXExtension implements Extension {
             case ClientOpcodes.DESTROY_CONTEXT: {
                 int contextId = inputStream.readInt();
                 contexts.remove(contextId);
-                Log.d(TAG, "DestroyContext 0x" + Integer.toHexString(contextId));
                 break;
             }
             case ClientOpcodes.IS_DIRECT:
@@ -582,6 +567,29 @@ public class GLXExtension implements Extension {
                 makeCurrent(client, inputStream, outputStream, true);
                 break;
 
+            // winex11 reaches these only through its "GLXPixmap hack", the fallback it takes for a
+            // child GL window when XComposite is unavailable -- and the Wine built for this
+            // container has no XComposite support compiled in at all, so the fallback is the only
+            // path it has. Leaving CreatePixmap unimplemented made the hack fail with
+            // BadImplementation, which cost the drawable its window status: kopper saw a pixmap,
+            // built no VkSwapchain, and zink fell back to presenting by CPU readback.
+            //
+            // A GLXPixmap never gets a swapchain -- that is by construction, not a gap here. This
+            // restores correctness for that path, not speed.
+            case ClientOpcodes.CREATE_PIXMAP: {
+                inputStream.readInt();          // screen
+                inputStream.readInt();          // fbconfig
+                int pixmapId = inputStream.readInt();
+                int glxPixmapId = inputStream.readInt();
+                // numAttribs and the attribute list follow; skipRequest() consumes them.
+                glxDrawables.put(glxPixmapId, pixmapId);
+                break;
+            }
+            case ClientOpcodes.DESTROY_PIXMAP: {
+                int glxPixmapId = inputStream.readInt();
+                glxDrawables.remove(glxPixmapId);
+                break;
+            }
             case ClientOpcodes.CREATE_WINDOW: {
                 inputStream.readInt();          // screen
                 inputStream.readInt();          // fbconfig
@@ -589,14 +597,11 @@ public class GLXExtension implements Extension {
                 int glxWindowId = inputStream.readInt();
                 // numAttribs and the attribute list follow; skipRequest() consumes them.
                 glxDrawables.put(glxWindowId, windowId);
-                Log.d(TAG, "CreateWindow glx=0x" + Integer.toHexString(glxWindowId)
-                        + " window=0x" + Integer.toHexString(windowId));
                 break;
             }
             case ClientOpcodes.DELETE_WINDOW: {
                 int glxWindowId = inputStream.readInt();
                 glxDrawables.remove(glxWindowId);
-                Log.d(TAG, "DeleteWindow 0x" + Integer.toHexString(glxWindowId));
                 break;
             }
             case ClientOpcodes.GET_DRAWABLE_ATTRIBUTES:
