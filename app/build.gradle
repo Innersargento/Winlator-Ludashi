@@ -77,7 +77,7 @@ tasks.register("downloadImageFS") {
 tasks.register("downloadProton") {
     def assetDir = new File(project.rootDir, ["app","src","main","assets"].join(File.separator))
     File proton = new File(assetDir, "proton-10.0-4-x86_64.txz")
-    String protonBaseURL = "https://github.com/Innersargento/Winlator-Ludashi/releases/download/proton-10.0-4-x86_64"
+    String protonBaseURL = "https://github.com/Innersargento/Winlator-Ludashi/releases/download/assets"
     String protonSHA256Sum = protonBaseURL + "/proton-10.0-4-x86_64.txz.sha256sum"
     int parts = 2
 
