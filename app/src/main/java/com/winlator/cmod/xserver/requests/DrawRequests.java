@@ -7,6 +7,7 @@ import com.winlator.cmod.xconnector.XOutputStream;
 import com.winlator.cmod.xconnector.XStreamLock;
 import com.winlator.cmod.xserver.Drawable;
 import com.winlator.cmod.xserver.GraphicsContext;
+import com.winlator.cmod.xserver.PresentPathStats;
 import com.winlator.cmod.xserver.XClient;
 import com.winlator.cmod.xserver.errors.BadDrawable;
 import com.winlator.cmod.xserver.errors.BadGraphicsContext;
@@ -62,6 +63,8 @@ public abstract class DrawRequests {
                 else throw new BadMatch();
                 break;
         }
+
+        if (PresentPathStats.ENABLED) PresentPathStats.onCorePutImage(width, height, depth);
     }
 
     public static void getImage(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
