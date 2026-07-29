@@ -14,7 +14,6 @@ import com.winlator.cmod.xconnector.XOutputStream;
 import com.winlator.cmod.xconnector.XStreamLock;
 import com.winlator.cmod.xserver.Drawable;
 import com.winlator.cmod.xserver.Pixmap;
-import com.winlator.cmod.xserver.PresentPathStats;
 import com.winlator.cmod.xserver.Window;
 import com.winlator.cmod.xserver.XClient;
 import com.winlator.cmod.xserver.XLock;
@@ -214,8 +213,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
             
             DirectContent directContent = new DirectContent(window, pixmap);
             directContents.put(pixmap.id, directContent);
-
-            if (PresentPathStats.ENABLED) PresentPathStats.onDri3Import();
         }
         catch (Throwable t) {
             Log.e("Dri3", "AHB import FAILED for pixmap=0x" + Integer.toHexString(pixmapId), t);

@@ -5,14 +5,11 @@ import static com.winlator.cmod.xserver.XClientRequestHandler.RESPONSE_CODE_SUCC
 
 import android.util.SparseArray;
 
-import com.winlator.cmod.renderer.GPUImage;
 import com.winlator.cmod.xconnector.XInputStream;
 import com.winlator.cmod.xconnector.XOutputStream;
 import com.winlator.cmod.xconnector.XStreamLock;
 import com.winlator.cmod.xserver.Bitmask;
-import com.winlator.cmod.xserver.Drawable;
 import com.winlator.cmod.xserver.Pixmap;
-import com.winlator.cmod.xserver.PresentPathStats;
 import com.winlator.cmod.xserver.Window;
 import com.winlator.cmod.xserver.XClient;
 import com.winlator.cmod.xserver.XLock;
@@ -154,8 +151,6 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
 
         long ust = System.nanoTime() / 1000;
         long msc = ust / FAKE_INTERVAL;
-
-        if (PresentPathStats.ENABLED) PresentPathStats.onPresent();
 
         pixmap.drawable.updateDirect();
         sendIdleNotify(window, pixmap, serial, idleFence);

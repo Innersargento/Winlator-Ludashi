@@ -7,7 +7,6 @@ import com.winlator.cmod.xconnector.XOutputStream;
 import com.winlator.cmod.xconnector.XStreamLock;
 import com.winlator.cmod.xserver.Drawable;
 import com.winlator.cmod.xserver.GraphicsContext;
-import com.winlator.cmod.xserver.PresentPathStats;
 import com.winlator.cmod.xserver.XClient;
 import com.winlator.cmod.xserver.XLock;
 import com.winlator.cmod.xserver.XServer;
@@ -105,8 +104,6 @@ public class MITSHMExtension implements Extension {
         }
 
         drawable.drawImage(srcX, srcY, dstX, dstY, srcWidth, srcHeight, depth, data, totalWidth, totalHeight);
-
-        if (PresentPathStats.ENABLED) PresentPathStats.onShmPutImage(srcWidth, srcHeight, depth);
     }
 
     @Override
