@@ -17,22 +17,6 @@ import com.winlator.cmod.xserver.errors.XRequestError;
 
 import java.io.IOException;
 
-/**
- * Minimal GLX server for direct-rendering clients.
- *
- * Mesa built with -Dglx=dri does all rendering and presentation client-side: buffers come from
- * DRI3 and reach the screen through Present, both of which this server already implements. What it
- * still needs from GLX is the bookkeeping half of the protocol -- version negotiation, the fbconfig
- * list, and XIDs for contexts and drawables. None of the ~200 indirect-rendering requests are ever
- * sent by a direct client, so they are deliberately not implemented.
- *
- * With -Dglx=xlib (the previous build) none of this was reached: GLX was implemented entirely
- * inside libGL and the server never saw a GLX request, at the cost of presenting every frame by
- * reading the framebuffer back to the CPU and pushing it through MIT-SHM.
- *
- * Unhandled opcodes are logged rather than silently failing, so the first run tells us exactly
- * which request a client stops on.
- */
 public class GLXExtension implements Extension {
     private static final String TAG = "GLXExtension";
 
@@ -40,8 +24,6 @@ public class GLXExtension implements Extension {
     private static final byte FIRST_EVENT = 65;
     private static final byte FIRST_ERROR = -112;
 
-    // The version we advertise. 1.4 is what Mesa's DRI loader expects for
-    // GLX_ARB_create_context / GLX_ARB_create_context_profile to be usable.
     private static final int GLX_MAJOR = 1;
     private static final int GLX_MINOR = 4;
 
@@ -81,7 +63,6 @@ public class GLXExtension implements Extension {
         private static final byte SET_CLIENT_INFO_2ARB = 35;
     }
 
-    /** GLX attribute tags, from the GLX 1.4 spec / glxtokens.h. */
     private static abstract class Attr {
         private static final int BUFFER_SIZE = 2;
         private static final int LEVEL = 3;
@@ -119,7 +100,6 @@ public class GLXExtension implements Extension {
         private static final int SAMPLE_BUFFERS = 100000;
         private static final int SAMPLES = 100001;
 
-        // Values
         private static final int NONE = 0x8000;
         private static final int TRUE_COLOR = 0x8002;
         private static final int RGBA_BIT = 0x01;
@@ -127,13 +107,7 @@ public class GLXExtension implements Extension {
         private static final int PIXMAP_BIT = 0x02;
     }
 
-    /**
-     * Number of (tag, value) pairs emitted per fbconfig by {@link #writeFBConfig}. Must match that
-     * method exactly -- the client reads this many pairs per config out of a flat array, so a
-     * mismatch shifts every following config rather than failing cleanly.
-     */
     private static final int FBCONFIG_NUM_ATTRIBS = 26;
-    /** Fixed-layout property count of the legacy GetVisualConfigs reply. */
     private static final int VISUAL_CONFIG_NUM_PROPS = 18;
 
     private static class FBConfig {
@@ -152,7 +126,6 @@ public class GLXExtension implements Extension {
 
     private final XServer xServer;
     private final SparseArray<Context> contexts = new SparseArray<>();
-    /** GLXWindow/GLXPixmap XID -> the X drawable it wraps. */
     private final SparseArray<Integer> glxDrawables = new SparseArray<>();
     private FBConfig[] fbConfigs;
 
@@ -180,22 +153,10 @@ public class GLXExtension implements Extension {
         return FIRST_EVENT;
     }
 
-    /**
-     * Builds the advertised fbconfig list, bound to the server's displayable visual.
-     *
-     * Mesa intersects this list with what the DRI driver reports, so anything here that zink cannot
-     * back is dropped client-side -- but a config missing here can never be selected. The set is
-     * therefore deliberately broad across the axes Wine's wglChoosePixelFormat varies.
-     */
     private FBConfig[] getFBConfigs() {
         if (fbConfigs != null) return fbConfigs;
 
         Visual visual = xServer.pixmapManager.visual;
-        // The bisect that cut this list down to depth 24 is over: the access violation it was
-        // hunting turned out to be a box64 artifact, not an exotic config. Running the same Mesa
-        // and the same server under ARM64EC/FEX -- where winex11's unix half is native aarch64 and
-        // no emulator bridge sits on glXMakeCurrent -- reaches a direct context and three AHB
-        // imports without faulting. Configs were exonerated, so the full matrix is back.
         int[] depths = {24, 32, 16, 0};
         int[] stencils = {8, 0};
         boolean[] doubles = {true, false};
@@ -240,11 +201,10 @@ public class GLXExtension implements Extension {
         }
     }
 
-    /** Reply carrying a single counted, NUL-terminated string (QueryServerString/ExtensionsString). */
     private void writeStringReply(XClient client, XOutputStream outputStream, String value)
             throws IOException {
         byte[] bytes = value.getBytes();
-        int n = bytes.length + 1;              // includes the terminating NUL
+        int n = bytes.length + 1;
         int padded = (n + 3) & ~3;
 
         try (XStreamLock lock = outputStream.lock()) {
@@ -259,14 +219,14 @@ public class GLXExtension implements Extension {
 
     private void queryServerString(XClient client, XInputStream inputStream, XOutputStream outputStream)
             throws IOException {
-        inputStream.readInt();                 // screen
+        inputStream.readInt();
         int name = inputStream.readInt();
 
         String value;
         switch (name) {
-            case 1:  value = SERVER_VENDOR; break;      // GLX_VENDOR
-            case 2:  value = SERVER_VERSION; break;     // GLX_VERSION
-            case 3:  value = SERVER_EXTENSIONS; break;  // GLX_EXTENSIONS
+            case 1:  value = SERVER_VENDOR; break;
+            case 2:  value = SERVER_VERSION; break;
+            case 3:  value = SERVER_EXTENSIONS; break;
             default: value = ""; break;
         }
         writeStringReply(client, outputStream, value);
@@ -274,15 +234,13 @@ public class GLXExtension implements Extension {
 
     private void queryExtensionsString(XClient client, XInputStream inputStream, XOutputStream outputStream)
             throws IOException {
-        inputStream.readInt();                 // screen
+        inputStream.readInt();
         writeStringReply(client, outputStream, SERVER_EXTENSIONS);
     }
 
     private void writeFBConfig(XOutputStream outputStream, FBConfig config) throws IOException {
         writeAttrib(outputStream, Attr.FBCONFIG_ID, config.id);
         writeAttrib(outputStream, Attr.VISUAL_ID, config.visualId);
-        // GLX_SCREEN is deliberately absent: Mesa's fbconfig tag parser does not know it and warns
-        // once per config. It belongs in the QueryContext reply, not here.
         writeAttrib(outputStream, Attr.X_VISUAL_TYPE, Attr.TRUE_COLOR);
         writeAttrib(outputStream, Attr.X_RENDERABLE, 1);
         writeAttrib(outputStream, Attr.DRAWABLE_TYPE, Attr.WINDOW_BIT | Attr.PIXMAP_BIT);
@@ -316,7 +274,7 @@ public class GLXExtension implements Extension {
 
     private void getFBConfigs(XClient client, XInputStream inputStream, XOutputStream outputStream)
             throws IOException {
-        inputStream.readInt();                 // screen
+        inputStream.readInt();
         FBConfig[] configs = getFBConfigs();
         int words = configs.length * FBCONFIG_NUM_ATTRIBS * 2;
 
@@ -329,20 +287,12 @@ public class GLXExtension implements Extension {
         }
     }
 
-    /**
-     * Legacy GLX 1.2 visual list. The first 18 words are positional rather than tagged; Wine still
-     * reaches this through glXChooseVisual when it probes for a usable visual.
-     */
     private void getVisualConfigs(XClient client, XInputStream inputStream, XOutputStream outputStream)
             throws IOException {
-        inputStream.readInt();                 // screen
+        inputStream.readInt();
         FBConfig[] configs = getFBConfigs();
         int words = configs.length * VISUAL_CONFIG_NUM_PROPS;
 
-        // The second word is the *X* visual class (TrueColor == 4), not the GLX token: the client
-        // runs it through convert_from_x_visual_type(), which maps 0..5 and yields GLX_NONE for
-        // anything else. Sending GLX_TRUE_COLOR (0x8002) here poisons every visual it advertises,
-        // and this is the list glXChooseVisual answers from.
         int xVisualClass = xServer.pixmapManager.visual.visualClass;
 
         try (XStreamLock lock = outputStream.lock()) {
@@ -353,30 +303,26 @@ public class GLXExtension implements Extension {
             for (FBConfig config : configs) {
                 outputStream.writeInt(config.visualId);
                 outputStream.writeInt(xVisualClass);
-                outputStream.writeInt(1);                                  // rgba
-                outputStream.writeInt(8);                                  // red
-                outputStream.writeInt(8);                                  // green
-                outputStream.writeInt(8);                                  // blue
-                outputStream.writeInt(8);                                  // alpha
-                outputStream.writeInt(0);                                  // accum red
-                outputStream.writeInt(0);                                  // accum green
-                outputStream.writeInt(0);                                  // accum blue
-                outputStream.writeInt(0);                                  // accum alpha
+                outputStream.writeInt(1);
+                outputStream.writeInt(8);
+                outputStream.writeInt(8);
+                outputStream.writeInt(8);
+                outputStream.writeInt(8);
+                outputStream.writeInt(0);
+                outputStream.writeInt(0);
+                outputStream.writeInt(0);
+                outputStream.writeInt(0);
                 outputStream.writeInt(config.doubleBuffer ? 1 : 0);
-                outputStream.writeInt(0);                                  // stereo
-                outputStream.writeInt(32);                                 // buffer size
+                outputStream.writeInt(0);
+                outputStream.writeInt(32);
                 outputStream.writeInt(config.depthSize);
                 outputStream.writeInt(config.stencilSize);
-                outputStream.writeInt(0);                                  // aux buffers
-                outputStream.writeInt(0);                                  // level
+                outputStream.writeInt(0);
+                outputStream.writeInt(0);
             }
         }
     }
 
-    /**
-     * Direct clients still allocate a server-side XID for their context so that glXQueryContext and
-     * resource cleanup work; no GL state lives here.
-     */
     private void createContext(XClient client, int contextId, int fbconfigId, boolean isDirect) {
         Context context = new Context();
         context.id = contextId;
@@ -388,12 +334,10 @@ public class GLXExtension implements Extension {
     private void createContextAttribsARB(XClient client, XInputStream inputStream) {
         int contextId = inputStream.readInt();
         int fbconfigId = inputStream.readInt();
-        inputStream.readInt();                 // screen
-        inputStream.readInt();                 // share_list
+        inputStream.readInt();
+        inputStream.readInt();
         boolean isDirect = inputStream.readByte() != 0;
         inputStream.skip(3);
-        // numAttribs and the attribute pairs follow; none of them mean anything to a server that
-        // holds no GL state, and skipRequest() consumes whatever is left.
         createContext(client, contextId, fbconfigId, isDirect);
     }
 
@@ -427,28 +371,20 @@ public class GLXExtension implements Extension {
         }
     }
 
-    /**
-     * Direct contexts never send MakeCurrent -- Mesa keeps that entirely client-side -- so this only
-     * runs for an indirect client. Returning a nonzero tag keeps such a client alive rather than
-     * failing it outright, even though no GL state is bound here.
-     *
-     * The two opcodes do not share a layout: MakeCurrent is (drawable, context, oldContextTag) while
-     * MakeContextCurrent is (oldContextTag, drawable, readDrawable, context).
-     */
     private void makeCurrent(XClient client, XInputStream inputStream, XOutputStream outputStream,
                              boolean contextCurrentVariant) throws IOException {
         int drawable;
         int contextId;
         if (contextCurrentVariant) {
-            inputStream.readInt();             // old context tag
+            inputStream.readInt();
             drawable = inputStream.readInt();
-            inputStream.readInt();             // read drawable
+            inputStream.readInt();
             contextId = inputStream.readInt();
         }
         else {
             drawable = inputStream.readInt();
             contextId = inputStream.readInt();
-            inputStream.readInt();             // old context tag
+            inputStream.readInt();
         }
         Log.w(TAG, "MakeCurrent from an indirect client: context=0x"
                 + Integer.toHexString(contextId) + " drawable=0x" + Integer.toHexString(drawable));
@@ -460,16 +396,10 @@ public class GLXExtension implements Extension {
         }
     }
 
-    /**
-     * Size matters here: the client sizes its drawable -- and therefore the swapchain kopper builds
-     * for it -- from GLX_WIDTH/GLX_HEIGHT. Reporting them as zero, or omitting them, yields a
-     * degenerate swapchain rather than a clean failure.
-     */
     private void getDrawableAttributes(XClient client, XInputStream inputStream, XOutputStream outputStream)
             throws IOException {
         int drawableId = inputStream.readInt();
 
-        // The id may be a GLXWindow we handed out, or a plain X drawable.
         Integer backing = glxDrawables.get(drawableId);
         int lookupId = backing != null ? backing : drawableId;
         Drawable drawable = xServer.drawableManager.getDrawable(lookupId);
@@ -496,10 +426,6 @@ public class GLXExtension implements Extension {
             dispatch(client, inputStream, outputStream);
         }
         finally {
-            // XClientRequestHandler only rewinds to the next request boundary when a handler throws
-            // XRequestError; after a successful dispatch it does not. Any byte left unread here --
-            // a trailing attribute list, a field this server does not care about -- would shift
-            // every subsequent request on the connection and the client dies with a broken pipe.
             client.skipRequest();
         }
     }
@@ -527,9 +453,9 @@ public class GLXExtension implements Extension {
 
             case ClientOpcodes.CREATE_CONTEXT: {
                 int contextId = inputStream.readInt();
-                inputStream.readInt();          // visual
-                inputStream.readInt();          // screen
-                inputStream.readInt();          // share_list
+                inputStream.readInt();
+                inputStream.readInt();
+                inputStream.readInt();
                 boolean direct = inputStream.readByte() != 0;
                 inputStream.skip(3);
                 createContext(client, contextId, 0, direct);
@@ -538,9 +464,9 @@ public class GLXExtension implements Extension {
             case ClientOpcodes.CREATE_NEW_CONTEXT: {
                 int contextId = inputStream.readInt();
                 int fbconfigId = inputStream.readInt();
-                inputStream.readInt();          // screen
-                inputStream.readInt();          // render_type
-                inputStream.readInt();          // share_list
+                inputStream.readInt();
+                inputStream.readInt();
+                inputStream.readInt();
                 boolean direct = inputStream.readByte() != 0;
                 inputStream.skip(3);
                 createContext(client, contextId, fbconfigId, direct);
@@ -567,21 +493,11 @@ public class GLXExtension implements Extension {
                 makeCurrent(client, inputStream, outputStream, true);
                 break;
 
-            // winex11 reaches these only through its "GLXPixmap hack", the fallback it takes for a
-            // child GL window when XComposite is unavailable -- and the Wine built for this
-            // container has no XComposite support compiled in at all, so the fallback is the only
-            // path it has. Leaving CreatePixmap unimplemented made the hack fail with
-            // BadImplementation, which cost the drawable its window status: kopper saw a pixmap,
-            // built no VkSwapchain, and zink fell back to presenting by CPU readback.
-            //
-            // A GLXPixmap never gets a swapchain -- that is by construction, not a gap here. This
-            // restores correctness for that path, not speed.
             case ClientOpcodes.CREATE_PIXMAP: {
-                inputStream.readInt();          // screen
-                inputStream.readInt();          // fbconfig
+                inputStream.readInt();
+                inputStream.readInt();
                 int pixmapId = inputStream.readInt();
                 int glxPixmapId = inputStream.readInt();
-                // numAttribs and the attribute list follow; skipRequest() consumes them.
                 glxDrawables.put(glxPixmapId, pixmapId);
                 break;
             }
@@ -591,11 +507,10 @@ public class GLXExtension implements Extension {
                 break;
             }
             case ClientOpcodes.CREATE_WINDOW: {
-                inputStream.readInt();          // screen
-                inputStream.readInt();          // fbconfig
+                inputStream.readInt();
+                inputStream.readInt();
                 int windowId = inputStream.readInt();
                 int glxWindowId = inputStream.readInt();
-                // numAttribs and the attribute list follow; skipRequest() consumes them.
                 glxDrawables.put(glxWindowId, windowId);
                 break;
             }
@@ -607,8 +522,6 @@ public class GLXExtension implements Extension {
             case ClientOpcodes.GET_DRAWABLE_ATTRIBUTES:
                 getDrawableAttributes(client, inputStream, outputStream);
                 break;
-            // Consumed and ignored: the server keeps no per-client GL state, and these carry none
-            // that a direct client can observe.
             case ClientOpcodes.CHANGE_DRAWABLE_ATTRIBUTES:
             case ClientOpcodes.CLIENT_INFO:
             case ClientOpcodes.SET_CLIENT_INFO_ARB:
@@ -619,8 +532,6 @@ public class GLXExtension implements Extension {
                 break;
 
             case ClientOpcodes.RENDER:
-                // Indirect rendering. A direct client never sends this; if one does, the build is
-                // not using DRI3 and that is the thing to fix, not this branch.
                 Log.e(TAG, "indirect GLX Render request -- client is NOT direct rendering");
                 break;
 

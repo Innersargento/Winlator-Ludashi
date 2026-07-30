@@ -22,37 +22,10 @@ import com.winlator.cmod.xserver.errors.XRequestError;
 
 import java.io.IOException;
 
-/**
- * Composite extension, enough of it for winex11.
- *
- * Wine only looks for one thing here: whether XCompositeQueryExtension succeeds. If it does,
- * winex11 sets usexcomposite and create_gl_drawable() takes the DC_GL_CHILD_WIN path -- a real
- * X child window, redirected, with a GLX drawable on top of it. If it does not, winex11 falls
- * back to the "GLXPixmap hack", and that fallback is what broke rendering here: the GLX drawable
- * becomes a pixmap, kopper sees is_window == 0, no VkSwapchain is built, and zink presents by
- * reading the framebuffer back to the CPU. That is the black screen, and the corePutImage
- * traffic behind it.
- *
- * On redirection being a no-op: in a stock X server, redirecting a window moves its rendering
- * off the parent's storage and into a private pixmap, so a compositing manager can paint it.
- * This server is already built that way -- every Window owns its Drawable (Window.getContent())
- * and the window manager composites those. So the state redirection is supposed to establish
- * already holds for every window; the requests only need to validate, record, and succeed.
- *
- * The distinction that would matter, CompositeRedirectManual meaning "stop painting this window
- * yourself, a compositing manager owns it now", has no one to honour it here: this server is the
- * compositor, and Wine wants exactly the painting it already does. The update mode is recorded
- * so the state can be queried while debugging, and deliberately not acted on.
- *
- * Three requests are left unimplemented rather than faked, because a wrong answer here would
- * cost more to debug than a named error -- which is precisely how the GLXPixmap fallback above
- * was found.
- */
 public class CompositeExtension implements Extension {
     private static final String TAG = "Composite";
     public static final byte MAJOR_OPCODE = -106;
 
-    /** 0.4 is the current protocol; NameWindowPixmap needs >= 0.2, GetOverlayWindow >= 0.3. */
     private static final int COMPOSITE_MAJOR = 0;
     private static final int COMPOSITE_MINOR = 4;
 
@@ -68,11 +41,9 @@ public class CompositeExtension implements Extension {
         private static final byte RELEASE_OVERLAY_WINDOW = 8;
     }
 
-    /** CompositeRedirectAutomatic / CompositeRedirectManual, as sent in the update field. */
     private static final int REDIRECT_AUTOMATIC = 0;
     private static final int REDIRECT_MANUAL = 1;
 
-    /** window id -> update mode, for whole windows and for subwindow redirection. */
     private final SparseIntArray redirectedWindows = new SparseIntArray();
     private final SparseIntArray redirectedSubwindows = new SparseIntArray();
 
@@ -109,9 +80,6 @@ public class CompositeExtension implements Extension {
             dispatch(client, inputStream, outputStream);
         }
         finally {
-            // Same reason as in GLXExtension: XClientRequestHandler only rewinds to the next
-            // request boundary when a handler throws, so anything left unread would shift every
-            // following request on the connection.
             client.skipRequest();
         }
     }
@@ -143,13 +111,10 @@ public class CompositeExtension implements Extension {
                 }
                 break;
             case ClientOpcodes.CREATE_REGION_FROM_BORDER_CLIP:
-                // Would have to hand back an XFixes REGION, and there is no XFixes here.
                 Log.e(TAG, "CreateRegionFromBorderClip requested, but this server has no XFixes");
                 throw new BadImplementation();
             case ClientOpcodes.GET_OVERLAY_WINDOW:
             case ClientOpcodes.RELEASE_OVERLAY_WINDOW:
-                // For a compositing manager that wants to draw above every other window. Nothing
-                // in this stack does; answering with the root window would quietly be a lie.
                 Log.e(TAG, "overlay window requested (opcode " + opcode + "), not implemented");
                 throw new BadImplementation();
             default:
@@ -163,7 +128,6 @@ public class CompositeExtension implements Extension {
         int clientMajor = inputStream.readInt();
         int clientMinor = inputStream.readInt();
 
-        // Both sides settle on the lower version, compared as a (major, minor) pair.
         boolean clientIsOlder = clientMajor < COMPOSITE_MAJOR
                 || (clientMajor == COMPOSITE_MAJOR && clientMinor < COMPOSITE_MINOR);
         int major = clientIsOlder ? clientMajor : COMPOSITE_MAJOR;
@@ -183,10 +147,6 @@ public class CompositeExtension implements Extension {
         }
     }
 
-    /**
-     * Redirect/Unredirect, for a window or for its subwindows. Both requests carry the same body:
-     * a WINDOW and a one-byte update mode.
-     */
     private void setRedirect(XClient client, XInputStream inputStream, SparseIntArray state,
                              boolean redirect, boolean wholeWindow) throws IOException, XRequestError {
         int windowId = inputStream.readInt();
@@ -208,14 +168,6 @@ public class CompositeExtension implements Extension {
                 + " (already how this server stores windows; recorded, not acted on)");
     }
 
-    /**
-     * Names the window's backing storage as a pixmap the client can then draw from or texture.
-     *
-     * The alias has to be the window's actual buffer -- a fresh drawable would collect rendering
-     * nobody ever sees. The window's content must therefore be backed by a GPUImage that can be
-     * pointed at from a second drawable, which is the same mechanism DRI3 uses to hand out
-     * imported AHardwareBuffers.
-     */
     private void nameWindowPixmap(XClient client, XInputStream inputStream)
             throws IOException, XRequestError {
         int windowId = inputStream.readInt();
@@ -227,7 +179,6 @@ public class CompositeExtension implements Extension {
         Drawable content = window.getContent();
         GPUImage gpuImage = content != null ? content.getGPUImage() : null;
         if (gpuImage == null) {
-            // Aliasing by copying would silently desynchronise the moment either side is drawn to.
             Log.e(TAG, "NameWindowPixmap 0x" + Integer.toHexString(windowId)
                     + ": window content has no GPUImage to alias, refusing to hand back a "
                     + "disconnected pixmap");

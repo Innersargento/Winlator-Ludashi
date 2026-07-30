@@ -101,8 +101,6 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
     private static void queryVersion(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         inputStream.skip(8);
 
-        // Must be >= 1.2, together with DRI3 >= 1.2: Mesa's x11_dri3_has_multibuffer() requires
-        // both before it will use the DRI3 path at all.
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
             outputStream.writeByte((byte)0);
@@ -114,20 +112,15 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         }
     }
 
-    /**
-     * Reporting no capabilities keeps clients on plain FIFO presentation. Advertising ASYNC would
-     * invite tear-free-less immediate flips that {@link #presentPixmap} cannot honour yet: it
-     * ignores target_msc entirely and fabricates its MSC from wall clock.
-     */
     private static void queryCapabilities(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
-        inputStream.readInt();  // target
+        inputStream.readInt();
 
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
             outputStream.writeByte((byte)0);
             outputStream.writeShort(client.getSequenceNumber());
             outputStream.writeInt(0);
-            outputStream.writeInt(0);   // capabilities
+            outputStream.writeInt(0);
             outputStream.writePad(20);
         }
     }
