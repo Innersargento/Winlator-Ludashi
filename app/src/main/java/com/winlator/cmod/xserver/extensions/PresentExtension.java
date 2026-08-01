@@ -25,19 +25,37 @@ import com.winlator.cmod.xserver.events.PresentCompleteNotify;
 import com.winlator.cmod.xserver.events.PresentIdleNotify;
 
 import java.io.IOException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class PresentExtension implements Extension, XResourceManager.OnResourceLifecycleListener {
     public static final byte MAJOR_OPCODE = -103;
-    private static final int FAKE_INTERVAL = 1000000 / 60;
+    /* A target further out than this is a client bug, not a wait anyone means
+     * to sit through; completing it late beats parking a task forever.
+     */
+    private static final long MAX_WAIT_FRAMES = 300;
     public enum Kind {PIXMAP, MSC_NOTIFY}
     public enum Mode {COPY, FLIP, SKIP}
     private final SparseArray<Event> events = new SparseArray<>();
+    /* NotifyMSC is the one request here that finishes later than it arrives.
+     * It cannot wait on the X server's request thread -- that thread is the
+     * whole server -- so the completion is handed to a timer. Daemon, so a
+     * pending wait never holds the process open.
+     */
+    private final ScheduledExecutorService mscScheduler =
+            Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "present-msc");
+                thread.setDaemon(true);
+                return thread;
+            });
     private SyncExtension syncExtension;
     private XServer xServer;
 
     private static abstract class ClientOpcodes {
         private static final byte QUERY_VERSION = 0;
         private static final byte PRESENT_PIXMAP = 1;
+        private static final byte NOTIFY_MSC = 2;
         private static final byte SELECT_INPUT = 3;
         private static final byte QUERY_CAPABILITIES = 4;
     }
@@ -136,23 +154,82 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         int idleFence = inputStream.readInt();
         inputStream.skip(client.getRemainingRequestLength());
 
-        android.util.Log.d("Present", "PresentPixmap window 0x" + Integer.toHexString(windowId)
-                                      + " pixmap 0x" + Integer.toHexString(pixmapId)
-                                      + " serial " + serial
-                                      + " idleFence 0x" + Integer.toHexString(idleFence));
-
         final Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
 
         final Pixmap pixmap = client.xServer.pixmapManager.getPixmap(pixmapId);
         if (pixmap == null) throw new BadPixmap(pixmapId);
 
-        long ust = System.nanoTime() / 1000;
-        long msc = ust / FAKE_INTERVAL;
+        long ust = ust();
+        long msc = ust / frameInterval();
 
         pixmap.drawable.updateDirect();
         sendIdleNotify(window, pixmap, serial, idleFence);
         sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
+    }
+
+    /**
+     * There is no CRTC behind any of this, so the MSC is derived from the clock
+     * at the display's refresh rate: frame n began at n * frameInterval().
+     */
+    private static long ust() {
+        return System.nanoTime() / 1000;
+    }
+
+    private long frameInterval() {
+        return (long)(1000000.0f / xServer.getRefreshRate());
+    }
+
+    /**
+     * "Tell me when the frame counter reaches n", the request loader_dri3 uses
+     * once vblank_mode puts it on the MSC path. Answering it with
+     * BadImplementation is not a graceful degradation: the client is waiting on
+     * a reply that turns into a protocol error in the middle of an unrelated
+     * GLX call, and Mesa takes that badly.
+     *
+     * The wait cannot happen here -- this is the server's only request thread --
+     * so a satisfied condition completes inline and everything else goes to the
+     * timer.
+     */
+    private void notifyMSC(XClient client, XInputStream inputStream) throws IOException, XRequestError {
+        int windowId = inputStream.readInt();
+        int serial = inputStream.readInt();
+        /* CARD64 has to start 8-byte aligned, so there is a pad here that the
+         * protocol document does not draw but the wire format has.
+         */
+        inputStream.skip(4);
+        long targetMsc = inputStream.readLong();
+        long divisor = inputStream.readLong();
+        long remainder = inputStream.readLong();
+
+        final Window window = client.xServer.windowManager.getWindow(windowId);
+        if (window == null) throw new BadWindow(windowId);
+
+        long interval = frameInterval();
+        long ust = ust();
+        long currentMsc = ust / interval;
+
+        /* Both counters are CARD64, so every comparison against them is
+         * unsigned -- a client is free to hand us a target with the top bit set.
+         */
+        if (divisor != 0) {
+            targetMsc = currentMsc - Long.remainderUnsigned(currentMsc, divisor) + remainder;
+            if (Long.compareUnsigned(targetMsc, currentMsc) <= 0) targetMsc += divisor;
+        }
+
+        if (Long.compareUnsigned(targetMsc, currentMsc) <= 0) {
+            sendCompleteNotify(window, serial, Kind.MSC_NOTIFY, Mode.COPY, ust, currentMsc);
+            return;
+        }
+
+        long framesAhead = targetMsc - currentMsc;
+        if (Long.compareUnsigned(framesAhead, MAX_WAIT_FRAMES) > 0) framesAhead = MAX_WAIT_FRAMES;
+
+        final long completionMsc = currentMsc + framesAhead;
+        mscScheduler.schedule(
+                () -> sendCompleteNotify(window, serial, Kind.MSC_NOTIFY, Mode.COPY,
+                                         completionMsc * interval, completionMsc),
+                framesAhead * interval, TimeUnit.MICROSECONDS);
     }
 
     private void selectInput(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
@@ -211,6 +288,11 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
             case ClientOpcodes.PRESENT_PIXMAP:
                 try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.PIXMAP_MANAGER)) {
                     presentPixmap(client, inputStream, outputStream);
+                }
+                break;
+            case ClientOpcodes.NOTIFY_MSC:
+                try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
+                    notifyMSC(client, inputStream);
                 }
                 break;
             case ClientOpcodes.SELECT_INPUT:

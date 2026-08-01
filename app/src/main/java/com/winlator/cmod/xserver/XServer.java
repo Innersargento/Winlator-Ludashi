@@ -48,6 +48,7 @@ public class XServer {
     private boolean disableMouse = false;
     private boolean isGrabbed = false;
     private int surfaceFormat = Drawable.HAL_PIXEL_FORMAT_BGRA_8888;
+    private float refreshRate = 60.0f;
     private XServerView xServerView;
     private XClient grabbingClient = null;
 
@@ -82,6 +83,23 @@ public class XServer {
    
     public int getSurfaceFormat() {
         return this.surfaceFormat;
+    }
+
+    /**
+     * What the display is actually running at, which is what the Present
+     * extension counts its MSC in. A client that waits for MSC n+1 is waiting
+     * for one vertical blank, so counting at 60Hz on a 120Hz panel makes every
+     * such wait twice as long as the client asked for.
+     */
+    public float getRefreshRate() {
+        return this.refreshRate;
+    }
+
+    public void setRefreshRate(float refreshRate) {
+        /* getSupportedModes() coming back empty would otherwise divide the
+         * frame interval by zero.
+         */
+        if (refreshRate > 0) this.refreshRate = refreshRate;
     }
     
     public boolean isDisplayX() {

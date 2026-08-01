@@ -490,6 +490,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         inputControlsManager = new InputControlsManager(this);
         xServer = new XServer(new ScreenInfo(screenSize), displayDriver);
+        /* The same rate the activity asks the compositor for below, so the
+         * Present extension's MSC counts the vertical blanks the display
+         * actually has.
+         */
+        xServer.setRefreshRate(pickHighestRefreshRate());
         xServer.setWinHandler(winHandler);
 
         boolean[] winStarted = {false};
