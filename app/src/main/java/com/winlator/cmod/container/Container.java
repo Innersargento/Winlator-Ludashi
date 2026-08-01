@@ -39,7 +39,7 @@ public class Container {
     public static final String DEFAULT_OPENGL_DRIVER = "zink";
     public static final String DEFAULT_OPENGLDRIVERCONFIG =
             "descriptors=auto" + ";zinkDebug=compact" + ";inlineUniforms=0" +
-            ";fdDebug=" + ";mesaDebug=0" + ";shaderCache=1";
+            ";fdDebug=sysmem" + ";vsync=0" + ";shaderCache=1";
     public static final String DEFAULT_AUDIO_DRIVER = "alsa";
     public static final String DEFAULT_EMULATOR = "FEXCore";
     public static final String DEFAULT_DXWRAPPER = "dxvk+vkd3d";

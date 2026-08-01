@@ -1552,14 +1552,20 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 openglDriver.equals("freedreno") ? "kgsl" : openglDriver);
 
         if (openglDriver.equals("freedreno")) {
-            String fdDebug = OpenglDriverConfig.get(openglDriverConfig, "fdDebug", "");
+            String fdDebug = OpenglDriverConfig.get(openglDriverConfig, "fdDebug", "sysmem");
             if (!fdDebug.isEmpty()) envVars.put("FD_MESA_DEBUG", fdDebug);
 
-            /* Gates _mesa_warning(), which is the only way the visual-mismatch
-             * and layout diagnostics reach the log in a release build.
+            /* driconf's vblank_mode, written unconditionally because Mesa's own
+             * default is 1: leaving it out would leave vsync on for a container
+             * whose box is unchecked.
+             *
+             * Setting it at all sends loader_dri3 down the MSC path, so the
+             * Present extension has to answer NotifyMSC for this to be safe.
+             * It did not, and Half-Life took an access violation inside
+             * glXCreateContextAttribsARB.
              */
-            if (OpenglDriverConfig.isEnabled(openglDriverConfig, "mesaDebug", false))
-                envVars.put("MESA_DEBUG", "1");
+            envVars.put("vblank_mode",
+                    OpenglDriverConfig.isEnabled(openglDriverConfig, "vsync", false) ? "1" : "0");
         }
         else {
             envVars.put("ZINK_DESCRIPTORS",

@@ -357,7 +357,7 @@
     <string name="zink_debug">Zink Debug</string>
     <string name="zink_inline_uniforms">Inline Uniforms</string>
     <string name="freedreno_debug">Freedreno Debug</string>
-    <string name="mesa_debug">Mesa Debug Messages</string>
+    <string name="vertical_synchronization">Vertical Synchronization</string>
     <string name="shader_cache">Shader Cache</string>
     <string name="select_graphics_driver_version">Select Graphics Driver Version:</string>
     <string name="graphics_driver_version">Graphics Driver Version</string>
