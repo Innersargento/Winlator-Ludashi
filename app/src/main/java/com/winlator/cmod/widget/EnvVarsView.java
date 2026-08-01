@@ -27,10 +27,12 @@ import com.winlator.cmod.core.UnitUtils;
 import java.util.Arrays;
 
 public class EnvVarsView extends FrameLayout {
+    /* ZINK_DESCRIPTORS, ZINK_DEBUG and ZINK_INLINE_UNIFORMS were here.  They
+     * are now set from the OpenGL driver configuration, which knows whether
+     * zink is even the selected driver; leaving them here as well would let a
+     * container carry a hand-typed value that silently overrides the dialog.
+     */
     public static final String[][] knownEnvVars = {
-        {"ZINK_DESCRIPTORS", "SELECT", "auto", "lazy", "db"},
-        {"ZINK_DEBUG", "SELECT_MULTIPLE", "compact", "gpl", "noshobj", "optimal_keys", "noopt", "rp", "norp", "nobgc", "noreorder", "sync", "flushsync", "validation", "nir", "spirv", "tgsi", "shaderdb", "map", "mem", "quiet"},
-        {"ZINK_INLINE_UNIFORMS", "CHECKBOX", "false", "true"},
         {"MESA_SHADER_CACHE_DISABLE", "CHECKBOX", "false", "true"},
         {"MESA_SHADER_CACHE_MAX_SIZE", "TEXT"},
         {"MESA_NO_ERROR", "CHECKBOX", "0", "1"},
