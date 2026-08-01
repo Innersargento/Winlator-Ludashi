@@ -103,17 +103,29 @@ JNIEXPORT jlong JNICALL
 Java_com_winlator_cmod_renderer_GPUImage_nativeHardwareBufferFromSocket(JNIEnv *env, jclass obj, jint fd) {
     AHardwareBuffer *ahb;
     uint8_t buf = 1;
-    
+
+    /* Both calls below can park this thread forever -- it is the X server's
+     * only request thread, so the whole server stops with it and the client
+     * stops waiting on a reply that will never come. Neither one says
+     * anything on the way in, which makes a stall here indistinguishable from
+     * the request never arriving. Bracket them.
+     */
+    printf("AHB import: fd %d, writing the handshake byte", fd);
+
     if ((write(fd, &buf, 1)) == -1) {
         printf("Failed to write data to socketpair");
         return 0;
     }
-    
+
+    printf("AHB import: handshake written, waiting for the handle");
+
     if ((AHardwareBuffer_recvHandleFromUnixSocket(fd, &ahb)) != 0) {
         printf("Failed to extract hardware buffer from socketpair");
         return 0;
     }
-    
+
+    printf("AHB import: handle received");
+
     AHardwareBuffer_Desc buffDesc;
     AHardwareBuffer_describe(ahb, &buffDesc);
     

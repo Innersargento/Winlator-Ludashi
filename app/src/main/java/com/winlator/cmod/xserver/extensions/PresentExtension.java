@@ -136,6 +136,11 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         int idleFence = inputStream.readInt();
         inputStream.skip(client.getRemainingRequestLength());
 
+        android.util.Log.d("Present", "PresentPixmap window 0x" + Integer.toHexString(windowId)
+                                      + " pixmap 0x" + Integer.toHexString(pixmapId)
+                                      + " serial " + serial
+                                      + " idleFence 0x" + Integer.toHexString(idleFence));
+
         final Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
 

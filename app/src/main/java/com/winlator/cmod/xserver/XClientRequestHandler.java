@@ -461,6 +461,21 @@ public class XClientRequestHandler implements RequestHandler {
             e.sendError(client, opcode);
         }
 
+        /* Resync to the end of the request. A handler that reads fewer bytes
+         * than it was given used to leave them in the stream, so the next
+         * request was parsed starting inside this one's tail -- an offset the
+         * connection never recovers from, and which surfaces as the server
+         * silently waiting on a length it invented rather than as an error.
+         * The failure lands nowhere near the handler at fault, so say which
+         * one it was.
+         */
+        int remaining = client.getRemainingRequestLength();
+        if (remaining > 0) {
+            Log.d("XClientRequestHandler", "opcode " + opcode + " read " + remaining
+                                           + " bytes short of its request; skipping the rest");
+            inputStream.skip(remaining);
+        }
+
         return true;
     }
 }

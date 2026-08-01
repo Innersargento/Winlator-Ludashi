@@ -95,7 +95,15 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
     }
 
     private void getSupportedModifiers(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        /* window, then depth/bpp/pad. All eight bytes have to go: the dispatcher
+         * does not resync a handler that reads short, so leaving any behind
+         * shifts every later request on this connection by that much. Reading
+         * only the window desynchronised the stream right before
+         * PixmapFromBuffers, and the resulting bogus length made the server
+         * wait on megabytes that were never coming.
+         */
         inputStream.readInt();
+        inputStream.skip(4);
 
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
@@ -182,6 +190,7 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         if (pixmap != null) throw new BadIdChoice(pixmapId);
         
         int fd = inputStream.getAncillaryFd();
+        Log.d("Dri3", "PixmapFromBuffers handing fd " + fd + " to the AHB import");
 
         pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd, window);
     }
@@ -216,7 +225,7 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         }
 
         try {
-            syncExtension.createFenceFromFd(drawableId, fenceId, initiallyTriggered, shmPtr);
+            syncExtension.createFenceFromFd(client, drawableId, fenceId, initiallyTriggered, shmPtr);
         }
         catch (XRequestError e) {
             ShmFence.unmap(shmPtr);
@@ -259,6 +268,13 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
     @Override
     public void handleRequest(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         int opcode = client.getRequestData();
+        /* The buffer handover leaves nothing behind when it goes wrong: the
+         * client parks in xcb_request_check() and every request below either
+         * logs nothing or logs only after the part that can block. Say which
+         * request arrived, before anything can swallow it.
+         */
+        Log.d("Dri3", "handleRequest opcode " + opcode + ", has pending fd: "
+                      + inputStream.clientSocket.hasAncillaryFds());
         switch (opcode) {
             case ClientOpcodes.QUERY_VERSION :
                 queryVersion(client, inputStream, outputStream);

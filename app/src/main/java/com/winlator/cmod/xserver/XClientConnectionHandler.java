@@ -2,6 +2,7 @@ package com.winlator.cmod.xserver;
 
 import com.winlator.cmod.xconnector.Client;
 import com.winlator.cmod.xconnector.ConnectionHandler;
+import com.winlator.cmod.xserver.extensions.SyncExtension;
 
 public class XClientConnectionHandler implements ConnectionHandler {
     private final XServer xServer;
@@ -18,6 +19,14 @@ public class XClientConnectionHandler implements ConnectionHandler {
 
     @Override
     public void handleConnectionShutdown(Client client) {
-        ((XClient)client.getTag()).freeResources();
+        XClient xClient = (XClient)client.getTag();
+
+        /* Sync fences are not XResources, so freeResources() cannot see them
+         * and nothing else would ever unmap their shared pages.
+         */
+        SyncExtension syncExtension = xServer.getExtension(SyncExtension.MAJOR_OPCODE);
+        if (syncExtension != null) syncExtension.freeFencesOwnedBy(xClient);
+
+        xClient.freeResources();
     }
 }
