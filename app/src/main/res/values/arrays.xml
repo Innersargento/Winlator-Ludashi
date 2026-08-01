@@ -25,6 +25,61 @@
     <string-array name="graphics_driver_entries">
         <item>Wrapper</item>
     </string-array>
+    <string-array name="opengl_driver_entries">
+        <item>Zink</item>
+        <item>Freedreno</item>
+    </string-array>
+    <string-array name="zink_descriptors_entries">
+        <item>auto</item>
+        <item>lazy</item>
+        <item>db</item>
+    </string-array>
+    <string-array name="zink_debug_entries">
+        <item>compact</item>
+        <item>gpl</item>
+        <item>noshobj</item>
+        <item>optimal_keys</item>
+        <item>noopt</item>
+        <item>rp</item>
+        <item>norp</item>
+        <item>nobgc</item>
+        <item>noreorder</item>
+        <item>sync</item>
+        <item>flushsync</item>
+        <item>validation</item>
+        <item>nir</item>
+        <item>spirv</item>
+        <item>tgsi</item>
+        <item>shaderdb</item>
+        <item>map</item>
+        <item>mem</item>
+        <item>quiet</item>
+    </string-array>
+    <!-- FD_MESA_DEBUG flags from freedreno_screen.c, narrowed to the ones that
+         change how a game renders or that isolate a rendering fault. The full
+         table also carries compiler and a2xx/a3xx/a5xx options with no bearing
+         on a7xx gameplay. -->
+    <string-array name="freedreno_debug_entries">
+        <item>sysmem</item>
+        <item>gmem</item>
+        <item>nobin</item>
+        <item>inorder</item>
+        <item>flush</item>
+        <item>noblit</item>
+        <item>nolrz</item>
+        <item>nolrzfc</item>
+        <item>noubwc</item>
+        <item>notile</item>
+        <item>nofp16</item>
+        <item>noindirect</item>
+        <item>noscis</item>
+        <item>nosbin</item>
+        <item>serialc</item>
+        <item>perf</item>
+        <item>msgs</item>
+        <item>bstat</item>
+        <item>layout</item>
+    </string-array>
     <string-array name="wrapper_graphics_driver_version_entries">
         <item>System</item>
         <item>v819</item>

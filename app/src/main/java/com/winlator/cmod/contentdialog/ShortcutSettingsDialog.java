@@ -125,6 +125,19 @@ public class ShortcutSettingsDialog extends ContentDialog {
         final View vGraphicsDriverConfig = findViewById(R.id.BTGraphicsDriverConfig);
         vGraphicsDriverConfig.setTag(shortcut.getExtra("graphicsDriverConfig", shortcut.container.getGraphicsDriverConfig()));
         
+        final Spinner sOpenglDriver = findViewById(R.id.SOpenglDriver);
+        final View vOpenglDriverConfig = findViewById(R.id.BTOpenglDriverConfig);
+        vOpenglDriverConfig.setTag(shortcut.getExtra("openglDriverConfig", shortcut.container.getOpenglDriverConfig()));
+        AppUtils.setSpinnerSelectionFromIdentifier(sOpenglDriver,
+                shortcut.getExtra("openglDriver", shortcut.container.getOpenglDriver()));
+
+        vOpenglDriverConfig.setOnClickListener((v) -> {
+            if (StringUtils.parseIdentifier(sOpenglDriver.getSelectedItem()).equals("freedreno"))
+                new FreedrenoConfigDialog(vOpenglDriverConfig).show();
+            else
+                new ZinkConfigDialog(vOpenglDriverConfig).show();
+        });
+
         final View vDXWrapperConfig = findViewById(R.id.BTDXWrapperConfig);
         vDXWrapperConfig.setTag(shortcut.getExtra("dxwrapperConfig", shortcut.container.getDXWrapperConfig()));
 
@@ -384,6 +397,8 @@ public class ShortcutSettingsDialog extends ContentDialog {
                 String graphicsDriver = StringUtils.parseIdentifier(sGraphicsDriver.getSelectedItem());
                 String displayDriver = StringUtils.parseIdentifier(sDisplayDriver.getSelectedItem());
                 String graphicsDriverConfig = vGraphicsDriverConfig.getTag().toString();
+                String openglDriver = StringUtils.parseIdentifier(sOpenglDriver.getSelectedItem());
+                String openglDriverConfig = vOpenglDriverConfig.getTag().toString();
                 String dxwrapper = StringUtils.parseIdentifier(sDXWrapper.getSelectedItem());
                 String dxwrapperConfig = vDXWrapperConfig.getTag().toString();
                 String audioDriver = StringUtils.parseIdentifier(sAudioDriver.getSelectedItem());
@@ -413,6 +428,8 @@ public class ShortcutSettingsDialog extends ContentDialog {
                 shortcut.putExtra("displayDriver", displayDriver);
                 shortcut.putExtra("graphicsDriver", graphicsDriver);
                 shortcut.putExtra("graphicsDriverConfig", graphicsDriverConfig);
+                shortcut.putExtra("openglDriver", openglDriver);
+                shortcut.putExtra("openglDriverConfig", openglDriverConfig);
                 shortcut.putExtra("dxwrapper", dxwrapper);
                 shortcut.putExtra("dxwrapperConfig", dxwrapperConfig);
                 shortcut.putExtra("audioDriver", audioDriver);

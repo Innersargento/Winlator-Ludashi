@@ -27,10 +27,15 @@ import com.winlator.cmod.core.UnitUtils;
 import java.util.Arrays;
 
 public class EnvVarsView extends FrameLayout {
+    /* ZINK_DESCRIPTORS, ZINK_DEBUG and ZINK_INLINE_UNIFORMS were here.  They
+     * are now set from the OpenGL driver configuration, which knows whether
+     * zink is even the selected driver; leaving them here as well would let a
+     * container carry a hand-typed value that silently overrides the dialog.
+     */
     public static final String[][] knownEnvVars = {
-        {"ZINK_DESCRIPTORS", "SELECT", "auto", "lazy", "cached", "notemplates"},
-        {"ZINK_DEBUG", "SELECT_MULTIPLE", "nir", "spirv", "tgsi", "validation", "sync", "compact", "noreorder"},
         {"MESA_SHADER_CACHE_DISABLE", "CHECKBOX", "false", "true"},
+        {"MESA_SHADER_CACHE_MAX_SIZE", "TEXT"},
+        {"MESA_NO_ERROR", "CHECKBOX", "0", "1"},
         {"mesa_glthread", "CHECKBOX", "false", "true"},
         {"WINEESYNC", "CHECKBOX", "0", "1"},
         {"TU_DEBUG", "SELECT_MULTIPLE", "forcecb", "nocb", "startup", "nir", "nobin", "sysmem", "gmem", "forcebin", "layout", "noubwc", "nomultipos", "nolrz", "nolrzfc", "perf", "perfc", "flushall", "syncdraw", "push_consts_per_stage", "rast_order", "unaligned_store", "log_skip_gmem_ops", "dynamic", "bos", "3d_load", "fdm", "noconform", "rd"},
@@ -41,7 +46,7 @@ public class EnvVarsView extends FrameLayout {
         {"PULSE_LATENCY_MSEC", "NUMBER"},
         {"WINE_DO_NOT_CREATE_DXGI_DEVICE_MANAGER", "CHECKBOX", "0", "1"},
         {"WINE_NEW_MEDIASOURCE", "CHECKBOX", "0", "1"},
-        {"GALLIUM_HUD", "SELECT_MULTIPLE", "simple", "fps", "frametime"},
+        {"GALLIUM_HUD", "SELECT_MULTIPLE", "simple", "fps", "frametime", "cpu", "main-thread-busy", "API-thread-busy", "primitives-generated", "samples-passed", "cpu0", "cpu1", "cpu2", "cpu3", "cpu4", "cpu5", "cpu6", "cpu7"},
         {"WINE_LARGE_ADDRESS_AWARE", "CHECKBOX", "0", "1"},
         {"WINEDLLOVERRIDES", "TEXT"}
     };

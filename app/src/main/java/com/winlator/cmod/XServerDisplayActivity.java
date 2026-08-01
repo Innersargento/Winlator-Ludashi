@@ -58,6 +58,7 @@ import com.winlator.cmod.contentdialog.ContentDialog;
 import com.winlator.cmod.contentdialog.DXVKConfigDialog;
 import com.winlator.cmod.contentdialog.DebugDialog;
 import com.winlator.cmod.contentdialog.GraphicsDriverConfigDialog;
+import com.winlator.cmod.contentdialog.OpenglDriverConfig;
 import com.winlator.cmod.contentdialog.WineD3DConfigDialog;
 import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
@@ -147,6 +148,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private String displayDriver = Container.DEFAULT_DISPLAY_DRIVER;
     private String graphicsDriver = Container.DEFAULT_GRAPHICS_DRIVER;
     private HashMap<String, String> graphicsDriverConfig;
+    private String openglDriver = Container.DEFAULT_OPENGL_DRIVER;
+    private HashMap<String, String> openglDriverConfig;
     private String audioDriver = Container.DEFAULT_AUDIO_DRIVER;
     private String emulator = Container.DEFAULT_EMULATOR;
     private String dxwrapper = Container.DEFAULT_DXWRAPPER;
@@ -429,6 +432,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         graphicsDriver = container.getGraphicsDriver();
         String graphicsDriverConfig = container.getGraphicsDriverConfig();
+        openglDriver = container.getOpenglDriver();
+        String openglDriverConfigString = container.getOpenglDriverConfig();
         audioDriver = container.getAudioDriver();
         emulator = container.getEmulator();
         midiSoundFont = container.getMIDISoundFont();
@@ -446,6 +451,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             displayDriver = shortcut.getExtra("displayDriver", Container.DEFAULT_DISPLAY_DRIVER);
             graphicsDriver = shortcut.getExtra("graphicsDriver", container.getGraphicsDriver());
             graphicsDriverConfig = shortcut.getExtra("graphicsDriverConfig", container.getGraphicsDriverConfig());
+            openglDriver = shortcut.getExtra("openglDriver", container.getOpenglDriver());
+            openglDriverConfigString = shortcut.getExtra("openglDriverConfig", container.getOpenglDriverConfig());
             audioDriver = shortcut.getExtra("audioDriver", container.getAudioDriver());
             emulator = shortcut.getExtra("emulator", container.getEmulator());
             dxwrapper = shortcut.getExtra("dxwrapper", container.getDXWrapper());
@@ -468,6 +475,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
 
         this.graphicsDriverConfig = GraphicsDriverConfigDialog.parseGraphicsDriverConfig(graphicsDriverConfig);
+        this.openglDriverConfig = OpenglDriverConfig.parse(openglDriverConfigString);
         this.dxwrapperConfig = DXVKConfigDialog.parseConfig(dxwrapperConfig);
 
         if (!wineInfo.isWin64()) {
@@ -1037,6 +1045,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
             if (shortcut != null) envVars.putAll(shortcut.getExtra("envVars"));
 
+            /* After the container's and the shortcut's own variables, not
+             * before: putAll() overwrites, and containers created while
+             * ZINK_DESCRIPTORS and ZINK_DEBUG still lived in DEFAULT_ENV_VARS
+             * carry them in that string to this day. Setting the driver's
+             * environment any earlier would let a stale copy of those quietly
+             * win over the OpenGL driver dialog.
+             */
+            setOpenglDriverEnvVars(envVars);
+
             if (!envVars.has("WINEESYNC")) {
                 envVars.put("WINEESYNC", "1");
             }
@@ -1480,6 +1497,85 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         inputControlsView.invalidate();
     }
 
+    /**
+     * The two OpenGL driver packages install the same two paths, so switching
+     * is just extracting the other one over the top. Only extraction can tell
+     * them apart afterwards, so the container remembers which one it holds --
+     * without that this would either re-extract on every launch or, worse,
+     * never re-extract and leave the selection doing nothing on an existing
+     * container.
+     */
+    private void extractOpenglDriver(File rootDir) {
+        /* On a first boot the rootfs was just laid down fresh, so what the
+         * container remembers about it is meaningless -- extract regardless.
+         */
+        if (!firstTimeBoot && openglDriver.equals(container.getInstalledOpenglDriver()))
+            return;
+
+        Log.d("XServerDisplayActivity", "Installing the " + openglDriver + " OpenGL driver"
+                + " (container had: '" + container.getInstalledOpenglDriver() + "')");
+
+        boolean extracted = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this,
+                "graphics_driver/opengl_" + openglDriver + ".tzst", rootDir);
+
+        if (!extracted) {
+            /* Recording it anyway would mark the container as holding a driver
+             * it does not have, and every later launch would skip the retry.
+             */
+            Log.e("XServerDisplayActivity", "Failed to extract the " + openglDriver
+                    + " OpenGL driver; leaving the container marked as '"
+                    + container.getInstalledOpenglDriver() + "'");
+            return;
+        }
+
+        container.setInstalledOpenglDriver(openglDriver);
+        container.saveData();
+    }
+
+    /**
+     * Turns the OpenGL driver configuration back into the environment the Mesa
+     * build reads. Only the selected driver's keys are applied: leaking zink's
+     * variables into a freedreno run would be harmless but misleading in a log,
+     * and FD_MESA_DEBUG means nothing to zink.
+     */
+    private void setOpenglDriverEnvVars(EnvVars envVars) {
+        envVars.put("GALLIUM_DRIVER", openglDriver);
+
+        /* The loader override is a *kernel driver* name, not the gallium one.
+         * freedreno reaches the hardware through KGSL here, and libgallium
+         * registers that as its own descriptor -- DRM_DRIVER_DESCRIPTOR_ALIAS(
+         * msm, kgsl, ...) in drm_helper.h. Naming "freedreno" finds nothing,
+         * the loader falls back to probing the fd, and DRI3 Open hands it a
+         * memfd that no probe can make sense of.
+         */
+        envVars.put("MESA_LOADER_DRIVER_OVERRIDE",
+                openglDriver.equals("freedreno") ? "kgsl" : openglDriver);
+
+        if (openglDriver.equals("freedreno")) {
+            String fdDebug = OpenglDriverConfig.get(openglDriverConfig, "fdDebug", "");
+            if (!fdDebug.isEmpty()) envVars.put("FD_MESA_DEBUG", fdDebug);
+
+            /* Gates _mesa_warning(), which is the only way the visual-mismatch
+             * and layout diagnostics reach the log in a release build.
+             */
+            if (OpenglDriverConfig.isEnabled(openglDriverConfig, "mesaDebug", false))
+                envVars.put("MESA_DEBUG", "1");
+        }
+        else {
+            envVars.put("ZINK_DESCRIPTORS",
+                    OpenglDriverConfig.get(openglDriverConfig, "descriptors", "auto"));
+
+            String zinkDebug = OpenglDriverConfig.get(openglDriverConfig, "zinkDebug", "compact");
+            if (!zinkDebug.isEmpty()) envVars.put("ZINK_DEBUG", zinkDebug);
+
+            if (OpenglDriverConfig.isEnabled(openglDriverConfig, "inlineUniforms", false))
+                envVars.put("ZINK_INLINE_UNIFORMS", "true");
+        }
+
+        envVars.put("MESA_SHADER_CACHE_DISABLE",
+                OpenglDriverConfig.isEnabled(openglDriverConfig, "shaderCache", true) ? "false" : "true");
+    }
+
     private void extractGraphicsDriverFiles() {
         String adrenoToolsDriverId = graphicsDriverConfig.get("version");
 
@@ -1505,14 +1601,23 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
 
         envVars.put("VK_ICD_FILENAMES", imageFs.getShareDir() + "/vulkan/icd.d/wrapper_icd.aarch64.json");
-        envVars.put("GALLIUM_DRIVER", "zink");
+
+        /* The OpenGL driver's own variables are set later, in
+         * setupXEnvironment(), so the container's stored environment cannot
+         * overwrite them.
+         */
 
         if (firstTimeBoot) {
             Log.d("XServerDisplayActivity", "First time container boot, re-extracting libs");
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/wrapper" + ".tzst", rootDir);
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "layers" + ".tzst", rootDir);
+            /* extra_libs no longer carries the GL driver, only turnip and the
+             * Vulkan layers, which are wanted whichever GL driver is picked.
+             */
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/extra_libs" + ".tzst", rootDir);
         }
+
+        extractOpenglDriver(rootDir);
 
         if (adrenoToolsDriverId != "System") {
             AdrenotoolsManager adrenotoolsManager = new AdrenotoolsManager(this);

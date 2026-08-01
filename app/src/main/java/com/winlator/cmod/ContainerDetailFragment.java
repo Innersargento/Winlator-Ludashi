@@ -40,7 +40,9 @@ import com.winlator.cmod.container.ContainerManager;
 import com.winlator.cmod.contentdialog.AddEnvVarDialog;
 import com.winlator.cmod.contentdialog.ContentDialog;
 import com.winlator.cmod.contentdialog.DXVKConfigDialog;
+import com.winlator.cmod.contentdialog.FreedrenoConfigDialog;
 import com.winlator.cmod.contentdialog.GraphicsDriverConfigDialog;
+import com.winlator.cmod.contentdialog.ZinkConfigDialog;
 import com.winlator.cmod.contentdialog.ShortcutSettingsDialog;
 import com.winlator.cmod.contentdialog.WineD3DConfigDialog;
 import com.winlator.cmod.contents.ContentProfile;
@@ -321,6 +323,23 @@ public class ContainerDetailFragment extends Fragment {
         final View vGraphicsDriverConfig = view.findViewById(R.id.BTGraphicsDriverConfig);
         vGraphicsDriverConfig.setTag(isEditMode() ? container.getGraphicsDriverConfig() : Container.DEFAULT_GRAPHICSDRIVERCONFIG);
 
+        final Spinner sOpenglDriver = view.findViewById(R.id.SOpenglDriver);
+        final View vOpenglDriverConfig = view.findViewById(R.id.BTOpenglDriverConfig);
+        vOpenglDriverConfig.setTag(isEditMode() ? container.getOpenglDriverConfig() : Container.DEFAULT_OPENGLDRIVERCONFIG);
+
+        AppUtils.setSpinnerSelectionFromIdentifier(sOpenglDriver,
+                isEditMode() ? container.getOpenglDriver() : Container.DEFAULT_OPENGL_DRIVER);
+
+        /* Each driver has its own dialog, so which one opens follows the
+         * spinner rather than the button.
+         */
+        vOpenglDriverConfig.setOnClickListener((v) -> {
+            if (StringUtils.parseIdentifier(sOpenglDriver.getSelectedItem()).equals("freedreno"))
+                new FreedrenoConfigDialog(vOpenglDriverConfig).show();
+            else
+                new ZinkConfigDialog(vOpenglDriverConfig).show();
+        });
+
         loadGraphicsDriverSpinner(sGraphicsDriver, sDXWrapper, vGraphicsDriverConfig,
                 isEditMode() ? container.getGraphicsDriver() : Container.DEFAULT_GRAPHICS_DRIVER,
                 isEditMode() ? container.getDXWrapper() : Container.DEFAULT_DXWRAPPER);
@@ -487,6 +506,8 @@ public class ContainerDetailFragment extends Fragment {
                     config.put("version", GPUInformation.isDriverSupported(DefaultVersion.WRAPPER_ADRENO, context) ? DefaultVersion.WRAPPER_ADRENO : DefaultVersion.WRAPPER);
                     graphicsDriverConfig = GraphicsDriverConfigDialog.toGraphicsDriverConfig(config);
                 }
+                String openglDriver = StringUtils.parseIdentifier(sOpenglDriver.getSelectedItem());
+                String openglDriverConfig = vOpenglDriverConfig.getTag().toString();
                 String dxwrapper = StringUtils.parseIdentifier(sDXWrapper.getSelectedItem());
                 String dxwrapperConfig = vDXWrapperConfig.getTag().toString();
                 String audioDriver = StringUtils.parseIdentifier(sAudioDriver.getSelectedItem());
@@ -528,6 +549,8 @@ public class ContainerDetailFragment extends Fragment {
                     container.setCPUListWoW64(cpuListWoW64);
                     container.setGraphicsDriver(graphicsDriver);
                     container.setGraphicsDriverConfig(graphicsDriverConfig);
+                    container.setOpenglDriver(openglDriver);
+                    container.setOpenglDriverConfig(openglDriverConfig);
                     container.setDXWrapper(dxwrapper);
                     container.setDXWrapperConfig(dxwrapperConfig);
                     container.setAudioDriver(audioDriver);
@@ -561,6 +584,8 @@ public class ContainerDetailFragment extends Fragment {
                     data.put("cpuListWoW64", cpuListWoW64);
                     data.put("graphicsDriver", graphicsDriver);
                     data.put("graphicsDriverConfig", graphicsDriverConfig);
+                    data.put("openglDriver", openglDriver);
+                    data.put("openglDriverConfig", openglDriverConfig);
                     data.put("dxwrapper", dxwrapper);
                     data.put("dxwrapperConfig", dxwrapperConfig);
                     data.put("audioDriver", audioDriver);
