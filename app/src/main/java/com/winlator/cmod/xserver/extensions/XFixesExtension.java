@@ -28,8 +28,16 @@ public class XFixesExtension implements Extension {
     public static final byte MAJOR_OPCODE = -107;
     private static final String TAG = "XFixes";
     /* 2.0 is the version that introduced regions, and is the least that lets a
-     * client use them. Advertising more would invite requests for the cursor
-     * and pointer-barrier calls that are not implemented here.
+     * client use them -- CreateRegion is itself a version-2 request, so there is
+     * no lower version to hide behind.
+     *
+     * It does not buy the regions alone, though: requests 23 through 27, the
+     * cursor-name and change-cursor calls, are version 2 as well, so announcing
+     * 2.0 announces those too. libXcursor takes it up immediately -- it names
+     * every themed cursor it loads, but only when XFixes answers -- which is
+     * why SetCursorName started arriving the moment this extension existed.
+     * Only ExpandRegion (28), Hide/ShowCursor (29, 30) and the pointer barriers
+     * (31, 32) sit above this version.
      */
     private static final int MAJOR_VERSION = 2;
     private static final int MINOR_VERSION = 0;
@@ -41,6 +49,7 @@ public class XFixesExtension implements Extension {
         private static final byte CREATE_REGION = 5;
         private static final byte DESTROY_REGION = 10;
         private static final byte SET_REGION = 11;
+        private static final byte SET_CURSOR_NAME = 23;
     }
 
     @Override
@@ -128,6 +137,17 @@ public class XFixesExtension implements Extension {
                 break;
             case ClientOpcodes.DESTROY_REGION:
                 destroyRegion(client, inputStream);
+                break;
+            case ClientOpcodes.SET_CURSOR_NAME:
+                /* Dropped, not refused. The name only exists so a client can
+                 * later reload the cursor by theme through GetCursorName or
+                 * ChangeCursorByName, neither of which anything here calls, and
+                 * the cursor itself is unaffected either way. Answering
+                 * BadImplementation instead costs nothing at the protocol level
+                 * -- the dispatcher resynchronises past the request -- but it
+                 * puts an error per themed cursor into a log that is the only
+                 * instrument left for the real failures.
+                 */
                 break;
             default:
                 Log.e(TAG, "unhandled XFixes opcode " + opcode);
