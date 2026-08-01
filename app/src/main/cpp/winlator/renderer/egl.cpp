@@ -231,12 +231,15 @@ void EGLRenderer::renderWindows() {
         
         auto window = renderableWindow->window;
         if (!window) continue;
-        if (!window->hasContent && !window->hasDirectContents()) continue;
-        
-            
-        if (window->hasDirectContents())
-            renderDrawable(window->currentDirectContent, renderableWindow->rootX, renderableWindow->rootY, true);
-        else
+
+        /* Held for the whole draw: the X request thread frees direct contents
+         * without waiting for us.
+         */
+        auto directContent = window->getDirectContent();
+
+        if (directContent)
+            renderDrawable(directContent.get(), renderableWindow->rootX, renderableWindow->rootY, true);
+        else if (window->hasContent)
             renderDrawable(window->drawable.get(), renderableWindow->rootX, renderableWindow->rootY, true);
     }
 }

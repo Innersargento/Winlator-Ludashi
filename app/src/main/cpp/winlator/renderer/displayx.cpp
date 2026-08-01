@@ -169,7 +169,7 @@ void DisplayX::renderingThreadLoop() {
         
         for (auto window : windows) {
             if (window) {
-                if (window->currentDirectContent) 
+                if (window->getDirectContent())
                     updateWindowDirect(window);
                 else
                     updateWindow(window);
@@ -360,9 +360,12 @@ void DisplayX::updateWindow(Window *window) {
 void DisplayX::updateWindowDirect(Window *window) {
     if (!window->control) return;
     
-    auto drawable = window->currentDirectContent;
+    /* Kept alive across the transaction: the X request thread is free to drop
+     * this drawable while SurfaceFlinger still has the handle.
+     */
+    auto drawable = window->getDirectContent();
     if (!drawable) return;
-         
+
     if (!window->enabled)
         pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, nullptr, -1);
     else

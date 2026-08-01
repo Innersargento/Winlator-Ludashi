@@ -541,7 +541,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeAddDirectContent(JNIEnv *env, jo
     auto window = windowManager.getWindow(windowId);
     if (!window) return;
     
-    auto drawable = std::make_unique<struct Drawable>();
+    auto drawable = std::make_shared<struct Drawable>();
     drawable->id = env->GetIntField(drawableObj, cache.drawableID);
     drawable->textureId = -1;
     drawable->width = env->GetShortField(drawableObj, cache.drawableWidth);
@@ -555,6 +555,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeAddDirectContent(JNIEnv *env, jo
     drawable->isDirectContent = true;
     drawable->drawableObj = env->NewGlobalRef(drawableObj);
     
+    std::lock_guard<std::mutex> lock(window->directContentMutex);
     window->currentDirectContent = nullptr;
     window->directContents[drawable->id] = std::move(drawable);
 }
@@ -564,11 +565,18 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateDirectContent(JNIEnv *env,
     auto window = windowManager.getWindow(windowId);
     if (!window) return;
     
-    auto directContent = window->directContents[drawableId].get();
-    if (!directContent) return;
-    
-    window->currentDirectContent = directContent;
-    
+    {
+        /* find(), not operator[]: an id we do not hold would otherwise insert a
+         * null entry and leave hasDirectContents() true for a window that has
+         * nothing to draw.
+         */
+        std::lock_guard<std::mutex> lock(window->directContentMutex);
+        auto it = window->directContents.find(drawableId);
+        if (it == window->directContents.end() || !it->second) return;
+
+        window->currentDirectContent = it->second;
+    }
+
     if (xserver.isDisplayX())
         displayX.requestWindowUpdate(window);
     else    
@@ -581,5 +589,18 @@ Java_com_winlator_cmod_widget_XServerView_nativeRemoveDirectContent(JNIEnv *env,
     auto window = windowManager.getWindow(windowId);
     if (!window) return;
     
+    /* The renderer may be drawing this very drawable on another thread, so
+     * dropping it here only drops our reference -- whoever is mid-frame holds
+     * one of its own and the memory outlives the call. Clearing the current
+     * pointer as well is what keeps the next frame from picking it up again:
+     * erasing from the map alone left it dangling, and the rendering thread
+     * then dereferenced freed memory, taking the whole X server down and
+     * closing every client connection at once.
+     */
+    std::lock_guard<std::mutex> lock(window->directContentMutex);
+    if (window->currentDirectContent &&
+        window->currentDirectContent->id == drawableId)
+        window->currentDirectContent = nullptr;
+
     window->directContents.erase(drawableId);
 }

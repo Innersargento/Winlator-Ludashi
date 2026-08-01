@@ -53,9 +53,14 @@ void WindowManager::deleteWindow(Window *window) {
     }
     
     window->parent = nullptr;
-    window->currentDirectContent = nullptr;
     window->children.clear();
-    window->directContents.clear();
+
+    {
+        std::lock_guard<std::mutex> lock(window->directContentMutex);
+        window->currentDirectContent = nullptr;
+        window->directContents.clear();
+    }
+
     window->drawable = nullptr;
     
     {
