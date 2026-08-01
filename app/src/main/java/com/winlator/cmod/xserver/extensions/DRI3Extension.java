@@ -227,6 +227,16 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
     private void pixmapFromHardwareBuffer(XClient client, int pixmapId, short width, short height, byte depth, int fd, Window window) throws IOException, XRequestError {
         try {
             GPUImage gpuImage = new GPUImage(fd);
+
+            /* GPUImage swallows a failed handover and leaves the pointer at
+             * zero, and setGPUImage() would then install that as the drawable's
+             * backing for the renderer to dereference, taking the whole process
+             * down. A client that sends an fd this cannot read -- an ordinary
+             * dma-buf, say, rather than the socketpair expected here -- must
+             * get an error back, not crash the server.
+             */
+            if (gpuImage.hardwareBufferPtr == 0) throw new BadAlloc();
+
             Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, width, height, depth);
             drawable.setGPUImage(gpuImage);
             drawable.setOnDrawListener(() -> client.xServer.windowManager.triggerOnUpdateWindowContentDirect(window, drawable));
