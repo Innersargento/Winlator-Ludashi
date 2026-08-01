@@ -14,6 +14,7 @@ import com.winlator.cmod.xconnector.XOutputStream;
 import com.winlator.cmod.xconnector.XStreamLock;
 import com.winlator.cmod.xserver.Drawable;
 import com.winlator.cmod.xserver.Pixmap;
+import com.winlator.cmod.xserver.ShmFence;
 import com.winlator.cmod.xserver.Window;
 import com.winlator.cmod.xserver.XClient;
 import com.winlator.cmod.xserver.XLock;
@@ -49,6 +50,7 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         private static final byte QUERY_VERSION = 0;
         private static final byte OPEN = 1;
         private static final byte PIXMAP_FROM_BUFFER = 2;
+        private static final byte FENCE_FROM_FD = 4;
         private static final byte GET_SUPPORTED_MODIFIERS = 6;
         private static final byte PIXMAP_FROM_BUFFERS = 7;
     }
@@ -184,6 +186,44 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd, window);
     }
     
+    /**
+     * The fd carries a page shared with the client, driven with the libxshmfence
+     * protocol. Mesa's loader_dri3 creates one of these for every buffer it
+     * allocates and resets it before each present, then blocks in
+     * xshmfence_await() before reusing that buffer, so the fence the Sync
+     * extension hands back has to be backed by that page rather than by a
+     * server-side flag.
+     */
+    private void fenceFromFd(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        int drawableId = inputStream.readInt();
+        int fenceId = inputStream.readInt();
+        boolean initiallyTriggered = inputStream.readByte() == 1;
+        inputStream.skip(3);
+
+        Drawable drawable = client.xServer.drawableManager.getDrawable(drawableId);
+        if (drawable == null) throw new BadDrawable(drawableId);
+
+        int fd = inputStream.getAncillaryFd();
+        long shmPtr = ShmFence.map(fd);
+        XConnectorEpoll.closeFd(fd);
+
+        if (shmPtr == 0) throw new BadAlloc();
+
+        SyncExtension syncExtension = client.xServer.getExtension(SyncExtension.MAJOR_OPCODE);
+        if (syncExtension == null) {
+            ShmFence.unmap(shmPtr);
+            throw new BadImplementation();
+        }
+
+        try {
+            syncExtension.createFenceFromFd(drawableId, fenceId, initiallyTriggered, shmPtr);
+        }
+        catch (XRequestError e) {
+            ShmFence.unmap(shmPtr);
+            throw e;
+        }
+    }
+
     private void pixmapFromHardwareBuffer(XClient client, int pixmapId, short width, short height, byte depth, int fd, Window window) throws IOException, XRequestError {
         try {
             GPUImage gpuImage = new GPUImage(fd);
@@ -226,6 +266,11 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
             case ClientOpcodes.PIXMAP_FROM_BUFFERS:
                 try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.PIXMAP_MANAGER, XServer.Lockable.DRAWABLE_MANAGER)) {
                     pixmapFromBuffers(client, inputStream, outputStream);
+                }
+                break;
+            case ClientOpcodes.FENCE_FROM_FD:
+                try (XLock lock = client.xServer.lock(XServer.Lockable.DRAWABLE_MANAGER)) {
+                    fenceFromFd(client, inputStream, outputStream);
                 }
                 break;
             case ClientOpcodes.GET_SUPPORTED_MODIFIERS:

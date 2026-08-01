@@ -19,6 +19,7 @@ add_library(winlator SHARED
         winlator/drawable.c
         winlator/gpu_image.c
         winlator/sysvshared_memory.c
+        winlator/shm_fence.c
         winlator/xconnector_epoll.c
         winlator/alsa_client.c
         winlator/vulkan.c

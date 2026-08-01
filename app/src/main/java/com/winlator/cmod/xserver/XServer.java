@@ -14,6 +14,7 @@ import com.winlator.cmod.xserver.extensions.GLXExtension;
 import com.winlator.cmod.xserver.extensions.MITSHMExtension;
 import com.winlator.cmod.xserver.extensions.PresentExtension;
 import com.winlator.cmod.xserver.extensions.SyncExtension;
+import com.winlator.cmod.xserver.extensions.XFixesExtension;
 
 import java.nio.charset.Charset;
 import java.util.EnumMap;
@@ -233,6 +234,7 @@ public class XServer {
         extensions.put(SyncExtension.MAJOR_OPCODE, new SyncExtension(this));
         extensions.put(GLXExtension.MAJOR_OPCODE, new GLXExtension(this));
         extensions.put(CompositeExtension.MAJOR_OPCODE, new CompositeExtension(this));
+        extensions.put(XFixesExtension.MAJOR_OPCODE, new XFixesExtension());
     }
 
     public <T extends Extension> T getExtension(int opcode) {

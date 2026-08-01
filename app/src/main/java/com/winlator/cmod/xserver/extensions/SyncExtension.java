@@ -5,6 +5,7 @@ import android.util.SparseArray;
 import com.winlator.cmod.xconnector.XInputStream;
 import com.winlator.cmod.xconnector.XOutputStream;
 import com.winlator.cmod.xserver.Pixmap;
+import com.winlator.cmod.xserver.ShmFence;
 import com.winlator.cmod.xserver.Window;
 import com.winlator.cmod.xserver.XClient;
 import com.winlator.cmod.xserver.XResource;
@@ -35,6 +36,51 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
         int fenceId;
         int drawableId;
         boolean triggered;
+        /* Non-zero for fences created through DRI3 FenceFromFD, where the state
+         * lives in a page shared with the client and this object is only a
+         * handle onto it. See ShmFence.
+         */
+        long shmPtr;
+    }
+
+    private static boolean isTriggered(SyncFence fence) {
+        return fence.shmPtr != 0 ? ShmFence.query(fence.shmPtr) : fence.triggered;
+    }
+
+    private static void trigger(SyncFence fence) {
+        fence.triggered = true;
+        if (fence.shmPtr != 0) ShmFence.trigger(fence.shmPtr);
+    }
+
+    private static void reset(SyncFence fence) {
+        fence.triggered = false;
+        if (fence.shmPtr != 0) ShmFence.reset(fence.shmPtr);
+    }
+
+    private static void destroy(SyncFence fence) {
+        if (fence.shmPtr != 0) {
+            ShmFence.unmap(fence.shmPtr);
+            fence.shmPtr = 0;
+        }
+    }
+
+    /**
+     * Registers a fence whose state lives in a page shared with the client.
+     * Called by DRI3 FenceFromFD, which owns the mapping until the fence dies.
+     */
+    public void createFenceFromFd(int drawableId, int fenceId, boolean initiallyTriggered,
+                                  long shmPtr) throws XRequestError {
+        synchronized (fences) {
+            if (fences.indexOfKey(fenceId) >= 0) throw new BadIdChoice(fenceId);
+
+            SyncFence fence = new SyncFence();
+            fence.drawableId = drawableId;
+            fence.fenceId = fenceId;
+            fence.shmPtr = shmPtr;
+            fence.triggered = initiallyTriggered;
+            if (initiallyTriggered) ShmFence.trigger(shmPtr);
+            fences.put(fenceId, fence);
+        }
     }
     
     public SyncExtension(XServer xserver) {
@@ -65,10 +111,7 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
 
     public void setTriggered(int id) {
         synchronized (fences) {
-            if (fences.indexOfKey(id) >= 0) {
-                SyncFence fence = fences.get(id);
-                fence.triggered = true;
-            }
+            if (fences.indexOfKey(id) >= 0) trigger(fences.get(id));
         }
     }
 
@@ -94,8 +137,7 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
         synchronized (fences) {
             int id = inputStream.readInt();
             if (fences.indexOfKey(id) < 0) throw new BadFence(id);
-            SyncFence fence = fences.get(id);
-            fence.triggered = true;
+            trigger(fences.get(id));
         }
     }
 
@@ -105,9 +147,9 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
             if (fences.indexOfKey(id) < 0) throw new BadFence(id);
 
             SyncFence fence = fences.get(id);
-            if (!fence.triggered) throw new BadMatch();
-            
-            fence.triggered = false;
+            if (!isTriggered(fence)) throw new BadMatch();
+
+            reset(fence);
         }
     }
 
@@ -115,6 +157,7 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
         synchronized (fences) {
             int id = inputStream.readInt();
             if (fences.indexOfKey(id) < 0) throw new BadFence(id);
+            destroy(fences.get(id));
             fences.delete(id);
         }
     }
@@ -134,8 +177,7 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
             do {
                 for (int id : ids) {
                     if (fences.indexOfKey(id) < 0) throw new BadFence(id);
-                    SyncFence fence = fences.get(id);
-                    anyTriggered = fence.triggered;
+                    anyTriggered = isTriggered(fences.get(id));
                     if (anyTriggered) break;
                 }
             }
@@ -150,16 +192,20 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
             for (int i = 0; i < fences.size(); i++) {
                 int key = fences.keyAt(i);
                 SyncFence fence = fences.get(key);
-                if (fence.drawableId == pixmap.id)
+                if (fence.drawableId == pixmap.id) {
+                    destroy(fence);
                     fences.remove(fence.fenceId);
+                }
             }
         } else if (resource instanceof Window) {
             Window window = (Window) resource;
             for (int i = 0; i < fences.size(); i++) {
                 int key = fences.keyAt(i);
                 SyncFence fence = fences.get(key);
-                if (fence.drawableId == window.id) 
+                if (fence.drawableId == window.id) {
+                    destroy(fence);
                     fences.remove(fence.fenceId);
+                }
             }
         }
     }
