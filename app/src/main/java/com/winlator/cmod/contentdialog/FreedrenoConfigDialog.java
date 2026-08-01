@@ -8,17 +8,6 @@ import com.winlator.cmod.widget.MultiSelectionComboBox;
 
 import java.util.HashMap;
 
-/**
- * Freedreno's knobs. FD_MESA_DEBUG is the whole of the driver's tuning surface
- * -- there is no equivalent of ZINK_DESCRIPTORS -- so the flag list carries
- * most of the weight here. vblank_mode sits alongside it: it is core Mesa
- * rather than freedreno, but it is the only vsync control a gallium driver
- * answers to, so this is where it belongs for anyone running freedreno.
- *
- * mesa_glthread is deliberately absent: _mesa_glthread_init() returns early
- * unless the driver reports map_unsynchronized_thread_safe, which freedreno
- * does not, so the toggle would control nothing.
- */
 public class FreedrenoConfigDialog extends ContentDialog {
 
     public FreedrenoConfigDialog(View anchor) {
@@ -33,12 +22,6 @@ public class FreedrenoConfigDialog extends ContentDialog {
         CheckBox cbVSync = findViewById(R.id.CBFreedrenoVSync);
         CheckBox cbShaderCache = findViewById(R.id.CBFreedrenoShaderCache);
 
-        /* setItems() without a label, so the box shows the flags themselves
-         * rather than "N Freedreno Debug" -- the point of these is knowing at a
-         * glance what is switched on. And setSelectedItems(), not repeated
-         * setSelectedItem(): the singular only adds an item the set already
-         * holds, so restoring a saved selection with it is a no-op.
-         */
         mscDebug.setItems(anchor.getContext().getResources()
                 .getStringArray(R.array.freedreno_debug_entries));
         mscDebug.setSelectedItems(OpenglDriverConfig.splitFlags(
@@ -48,9 +31,6 @@ public class FreedrenoConfigDialog extends ContentDialog {
         cbShaderCache.setChecked(OpenglDriverConfig.isEnabled(config, "shaderCache", true));
 
         setOnConfirmCallback(() -> {
-            /* Start from what is already stored so zink's half of the string
-             * survives a trip through this dialog.
-             */
             HashMap<String, String> updated = OpenglDriverConfig.parse(anchor.getTag().toString());
 
             updated.put("fdDebug", mscDebug.getSelectedItemsAsString());

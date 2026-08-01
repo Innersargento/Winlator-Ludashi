@@ -139,9 +139,6 @@
                 android:visibility="visible" />
         </LinearLayout>
 
-        <!-- Stays with the Vulkan driver above: TVGraphicsDriverVersion is
-             filled from graphicsDriverConfig, so it describes that spinner and
-             not the OpenGL one that follows. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

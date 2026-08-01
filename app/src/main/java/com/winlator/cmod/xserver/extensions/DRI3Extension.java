@@ -95,13 +95,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
     }
 
     private void getSupportedModifiers(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
-        /* window, then depth/bpp/pad. All eight bytes have to go: the dispatcher
-         * does not resync a handler that reads short, so leaving any behind
-         * shifts every later request on this connection by that much. Reading
-         * only the window desynchronised the stream right before
-         * PixmapFromBuffers, and the resulting bogus length made the server
-         * wait on megabytes that were never coming.
-         */
         inputStream.readInt();
         inputStream.skip(4);
 
@@ -195,14 +188,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd, window);
     }
     
-    /**
-     * The fd carries a page shared with the client, driven with the libxshmfence
-     * protocol. Mesa's loader_dri3 creates one of these for every buffer it
-     * allocates and resets it before each present, then blocks in
-     * xshmfence_await() before reusing that buffer, so the fence the Sync
-     * extension hands back has to be backed by that page rather than by a
-     * server-side flag.
-     */
     private void fenceFromFd(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         int drawableId = inputStream.readInt();
         int fenceId = inputStream.readInt();
@@ -237,13 +222,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
         try {
             GPUImage gpuImage = new GPUImage(fd);
 
-            /* GPUImage swallows a failed handover and leaves the pointer at
-             * zero, and setGPUImage() would then install that as the drawable's
-             * backing for the renderer to dereference, taking the whole process
-             * down. A client that sends an fd this cannot read -- an ordinary
-             * dma-buf, say, rather than the socketpair expected here -- must
-             * get an error back, not crash the server.
-             */
             if (gpuImage.hardwareBufferPtr == 0) throw new BadAlloc();
 
             Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, width, height, depth);
@@ -268,11 +246,6 @@ public class DRI3Extension implements Extension, XResourceManager.OnResourceLife
     @Override
     public void handleRequest(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         int opcode = client.getRequestData();
-        /* The buffer handover leaves nothing behind when it goes wrong: the
-         * client parks in xcb_request_check() and every request below either
-         * logs nothing or logs only after the part that can block. Say which
-         * request arrived, before anything can swallow it.
-         */
         Log.d("Dri3", "handleRequest opcode " + opcode + ", has pending fd: "
                       + inputStream.clientSocket.hasAncillaryFds());
         switch (opcode) {

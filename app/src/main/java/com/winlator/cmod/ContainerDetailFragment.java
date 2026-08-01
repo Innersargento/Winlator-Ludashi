@@ -330,9 +330,6 @@ public class ContainerDetailFragment extends Fragment {
         AppUtils.setSpinnerSelectionFromIdentifier(sOpenglDriver,
                 isEditMode() ? container.getOpenglDriver() : Container.DEFAULT_OPENGL_DRIVER);
 
-        /* Each driver has its own dialog, so which one opens follows the
-         * spinner rather than the button.
-         */
         vOpenglDriverConfig.setOnClickListener((v) -> {
             if (StringUtils.parseIdentifier(sOpenglDriver.getSelectedItem()).equals("freedreno"))
                 new FreedrenoConfigDialog(vOpenglDriverConfig).show();

@@ -27,15 +27,9 @@ public class Container {
         THUMBSTICK_UP, THUMBSTICK_DOWN, THUMBSTICK_LEFT, THUMBSTICK_RIGHT
     }
     public static final String DEFAULT_DISPLAY_DRIVER = "egl";
-    /* ZINK_* used to live here.  They are zink's and only zink's, so they moved
-     * into the OpenGL driver configuration where they can be shown for zink and
-     * hidden for freedreno, instead of sitting in every container's environment
-     * whether or not zink is the driver.
-     */
     public static final String DEFAULT_ENV_VARS = "WRAPPER_MAX_IMAGE_COUNT=0 MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=1 TU_DEBUG=noconform,sysmem DXVK_HUD=devinfo,fps,frametimes,gpuload,version,api";
     public static final String DEFAULT_SCREEN_SIZE = "1280x720";
     public static final String DEFAULT_GRAPHICS_DRIVER = "wrapper";
-    /* zink, so an existing container keeps the driver it was already running. */
     public static final String DEFAULT_OPENGL_DRIVER = "zink";
     public static final String DEFAULT_OPENGLDRIVERCONFIG =
             "descriptors=auto" + ";zinkDebug=compact" + ";inlineUniforms=0" +
@@ -62,11 +56,6 @@ public class Container {
     private String graphicsDriverConfig = DEFAULT_GRAPHICSDRIVERCONFIG;
     private String openglDriver = DEFAULT_OPENGL_DRIVER;
     private String openglDriverConfig = DEFAULT_OPENGLDRIVERCONFIG;
-    /* Which OpenGL driver the container's rootfs currently holds.  The two
-     * packages install the same paths, so switching is just extracting the
-     * other one -- but only extraction can tell them apart afterwards, hence
-     * remembering it here rather than probing the files.
-     */
     private String installedOpenglDriver = "";
     private String dxwrapper = DEFAULT_DXWRAPPER;
     private String dxwrapperConfig = "";
@@ -503,9 +492,6 @@ public class Container {
                 case "graphicsDriverConfig" :
                     setGraphicsDriverConfig(data.getString(key));
                     break;
-                /* Absent from a container written before the OpenGL driver was
-                 * selectable, which is what the field defaults are for.
-                 */
                 case "openglDriver" :
                     setOpenglDriver(data.getString(key));
                     break;

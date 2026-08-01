@@ -566,10 +566,6 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateDirectContent(JNIEnv *env,
     if (!window) return;
     
     {
-        /* find(), not operator[]: an id we do not hold would otherwise insert a
-         * null entry and leave hasDirectContents() true for a window that has
-         * nothing to draw.
-         */
         std::lock_guard<std::mutex> lock(window->directContentMutex);
         auto it = window->directContents.find(drawableId);
         if (it == window->directContents.end() || !it->second) return;
@@ -589,14 +585,6 @@ Java_com_winlator_cmod_widget_XServerView_nativeRemoveDirectContent(JNIEnv *env,
     auto window = windowManager.getWindow(windowId);
     if (!window) return;
     
-    /* The renderer may be drawing this very drawable on another thread, so
-     * dropping it here only drops our reference -- whoever is mid-frame holds
-     * one of its own and the memory outlives the call. Clearing the current
-     * pointer as well is what keeps the next frame from picking it up again:
-     * erasing from the map alone left it dangling, and the rendering thread
-     * then dereferenced freed memory, taking the whole X server down and
-     * closing every client connection at once.
-     */
     std::lock_guard<std::mutex> lock(window->directContentMutex);
     if (window->currentDirectContent &&
         window->currentDirectContent->id == drawableId)

@@ -55,10 +55,6 @@
         <item>mem</item>
         <item>quiet</item>
     </string-array>
-    <!-- FD_MESA_DEBUG flags from freedreno_screen.c, narrowed to the ones that
-         change how a game renders or that isolate a rendering fault. The full
-         table also carries compiler and a2xx/a3xx/a5xx options with no bearing
-         on a7xx gameplay. -->
     <string-array name="freedreno_debug_entries">
         <item>sysmem</item>
         <item>gmem</item>

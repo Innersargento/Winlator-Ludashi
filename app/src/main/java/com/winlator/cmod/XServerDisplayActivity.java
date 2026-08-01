@@ -490,10 +490,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         inputControlsManager = new InputControlsManager(this);
         xServer = new XServer(new ScreenInfo(screenSize), displayDriver);
-        /* The same rate the activity asks the compositor for below, so the
-         * Present extension's MSC counts the vertical blanks the display
-         * actually has.
-         */
         xServer.setRefreshRate(pickHighestRefreshRate());
         xServer.setWinHandler(winHandler);
 
@@ -1050,13 +1046,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
             if (shortcut != null) envVars.putAll(shortcut.getExtra("envVars"));
 
-            /* After the container's and the shortcut's own variables, not
-             * before: putAll() overwrites, and containers created while
-             * ZINK_DESCRIPTORS and ZINK_DEBUG still lived in DEFAULT_ENV_VARS
-             * carry them in that string to this day. Setting the driver's
-             * environment any earlier would let a stale copy of those quietly
-             * win over the OpenGL driver dialog.
-             */
             setOpenglDriverEnvVars(envVars);
 
             if (!envVars.has("WINEESYNC")) {
@@ -1502,18 +1491,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         inputControlsView.invalidate();
     }
 
-    /**
-     * The two OpenGL driver packages install the same two paths, so switching
-     * is just extracting the other one over the top. Only extraction can tell
-     * them apart afterwards, so the container remembers which one it holds --
-     * without that this would either re-extract on every launch or, worse,
-     * never re-extract and leave the selection doing nothing on an existing
-     * container.
-     */
     private void extractOpenglDriver(File rootDir) {
-        /* On a first boot the rootfs was just laid down fresh, so what the
-         * container remembers about it is meaningless -- extract regardless.
-         */
         if (!firstTimeBoot && openglDriver.equals(container.getInstalledOpenglDriver()))
             return;
 
@@ -1524,9 +1502,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 "graphics_driver/opengl_" + openglDriver + ".tzst", rootDir);
 
         if (!extracted) {
-            /* Recording it anyway would mark the container as holding a driver
-             * it does not have, and every later launch would skip the retry.
-             */
             Log.e("XServerDisplayActivity", "Failed to extract the " + openglDriver
                     + " OpenGL driver; leaving the container marked as '"
                     + container.getInstalledOpenglDriver() + "'");
@@ -1537,22 +1512,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         container.saveData();
     }
 
-    /**
-     * Turns the OpenGL driver configuration back into the environment the Mesa
-     * build reads. Only the selected driver's keys are applied: leaking zink's
-     * variables into a freedreno run would be harmless but misleading in a log,
-     * and FD_MESA_DEBUG means nothing to zink.
-     */
     private void setOpenglDriverEnvVars(EnvVars envVars) {
         envVars.put("GALLIUM_DRIVER", openglDriver);
 
-        /* The loader override is a *kernel driver* name, not the gallium one.
-         * freedreno reaches the hardware through KGSL here, and libgallium
-         * registers that as its own descriptor -- DRM_DRIVER_DESCRIPTOR_ALIAS(
-         * msm, kgsl, ...) in drm_helper.h. Naming "freedreno" finds nothing,
-         * the loader falls back to probing the fd, and DRI3 Open hands it a
-         * memfd that no probe can make sense of.
-         */
         envVars.put("MESA_LOADER_DRIVER_OVERRIDE",
                 openglDriver.equals("freedreno") ? "kgsl" : openglDriver);
 
@@ -1560,15 +1522,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             String fdDebug = OpenglDriverConfig.get(openglDriverConfig, "fdDebug", "sysmem");
             if (!fdDebug.isEmpty()) envVars.put("FD_MESA_DEBUG", fdDebug);
 
-            /* driconf's vblank_mode, written unconditionally because Mesa's own
-             * default is 1: leaving it out would leave vsync on for a container
-             * whose box is unchecked.
-             *
-             * Setting it at all sends loader_dri3 down the MSC path, so the
-             * Present extension has to answer NotifyMSC for this to be safe.
-             * It did not, and Half-Life took an access violation inside
-             * glXCreateContextAttribsARB.
-             */
             envVars.put("vblank_mode",
                     OpenglDriverConfig.isEnabled(openglDriverConfig, "vsync", false) ? "1" : "0");
         }
@@ -1613,18 +1566,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         envVars.put("VK_ICD_FILENAMES", imageFs.getShareDir() + "/vulkan/icd.d/wrapper_icd.aarch64.json");
 
-        /* The OpenGL driver's own variables are set later, in
-         * setupXEnvironment(), so the container's stored environment cannot
-         * overwrite them.
-         */
-
         if (firstTimeBoot) {
             Log.d("XServerDisplayActivity", "First time container boot, re-extracting libs");
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/wrapper" + ".tzst", rootDir);
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "layers" + ".tzst", rootDir);
-            /* extra_libs no longer carries the GL driver, only turnip and the
-             * Vulkan layers, which are wanted whichever GL driver is picked.
-             */
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/extra_libs" + ".tzst", rootDir);
         }
 

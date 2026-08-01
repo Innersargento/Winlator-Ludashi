@@ -104,12 +104,6 @@ Java_com_winlator_cmod_renderer_GPUImage_nativeHardwareBufferFromSocket(JNIEnv *
     AHardwareBuffer *ahb;
     uint8_t buf = 1;
 
-    /* Both calls below can park this thread forever -- it is the X server's
-     * only request thread, so the whole server stops with it and the client
-     * stops waiting on a reply that will never come. Neither one says
-     * anything on the way in, which makes a stall here indistinguishable from
-     * the request never arriving. Bracket them.
-     */
     printf("AHB import: fd %d, writing the handshake byte", fd);
 
     if ((write(fd, &buf, 1)) == -1) {

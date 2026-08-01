@@ -31,18 +31,10 @@ import java.util.concurrent.TimeUnit;
 
 public class PresentExtension implements Extension, XResourceManager.OnResourceLifecycleListener {
     public static final byte MAJOR_OPCODE = -103;
-    /* A target further out than this is a client bug, not a wait anyone means
-     * to sit through; completing it late beats parking a task forever.
-     */
     private static final long MAX_WAIT_FRAMES = 300;
     public enum Kind {PIXMAP, MSC_NOTIFY}
     public enum Mode {COPY, FLIP, SKIP}
     private final SparseArray<Event> events = new SparseArray<>();
-    /* NotifyMSC is the one request here that finishes later than it arrives.
-     * It cannot wait on the X server's request thread -- that thread is the
-     * whole server -- so the completion is handed to a timer. Daemon, so a
-     * pending wait never holds the process open.
-     */
     private final ScheduledExecutorService mscScheduler =
             Executors.newSingleThreadScheduledExecutor(runnable -> {
                 Thread thread = new Thread(runnable, "present-msc");
@@ -168,10 +160,6 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
     }
 
-    /**
-     * There is no CRTC behind any of this, so the MSC is derived from the clock
-     * at the display's refresh rate: frame n began at n * frameInterval().
-     */
     private static long ust() {
         return System.nanoTime() / 1000;
     }
@@ -180,23 +168,9 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         return (long)(1000000.0f / xServer.getRefreshRate());
     }
 
-    /**
-     * "Tell me when the frame counter reaches n", the request loader_dri3 uses
-     * once vblank_mode puts it on the MSC path. Answering it with
-     * BadImplementation is not a graceful degradation: the client is waiting on
-     * a reply that turns into a protocol error in the middle of an unrelated
-     * GLX call, and Mesa takes that badly.
-     *
-     * The wait cannot happen here -- this is the server's only request thread --
-     * so a satisfied condition completes inline and everything else goes to the
-     * timer.
-     */
     private void notifyMSC(XClient client, XInputStream inputStream) throws IOException, XRequestError {
         int windowId = inputStream.readInt();
         int serial = inputStream.readInt();
-        /* CARD64 has to start 8-byte aligned, so there is a pad here that the
-         * protocol document does not draw but the wire format has.
-         */
         inputStream.skip(4);
         long targetMsc = inputStream.readLong();
         long divisor = inputStream.readLong();
@@ -209,9 +183,6 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         long ust = ust();
         long currentMsc = ust / interval;
 
-        /* Both counters are CARD64, so every comparison against them is
-         * unsigned -- a client is free to hand us a target with the top bit set.
-         */
         if (divisor != 0) {
             targetMsc = currentMsc - Long.remainderUnsigned(currentMsc, divisor) + remainder;
             if (Long.compareUnsigned(targetMsc, currentMsc) <= 0) targetMsc += divisor;

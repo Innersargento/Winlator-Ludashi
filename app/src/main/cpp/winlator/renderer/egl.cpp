@@ -232,9 +232,6 @@ void EGLRenderer::renderWindows() {
         auto window = renderableWindow->window;
         if (!window) continue;
 
-        /* Held for the whole draw: the X request thread frees direct contents
-         * without waiting for us.
-         */
         auto directContent = window->getDirectContent();
 
         if (directContent)

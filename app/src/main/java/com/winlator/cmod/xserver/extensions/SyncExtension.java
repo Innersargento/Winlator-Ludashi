@@ -33,16 +33,8 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
     private class SyncFence {
         int fenceId;
         int drawableId;
-        /* Who to reclaim it with. A fence outlives the drawable it names -- the
-         * drawable only picks the screen -- so nothing but an explicit
-         * DestroyFence or this client going away may end it.
-         */
         XClient owner;
         boolean triggered;
-        /* Non-zero for fences created through DRI3 FenceFromFD, where the state
-         * lives in a page shared with the client and this object is only a
-         * handle onto it. See ShmFence.
-         */
         long shmPtr;
     }
 
@@ -67,10 +59,6 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
         }
     }
 
-    /**
-     * Registers a fence whose state lives in a page shared with the client.
-     * Called by DRI3 FenceFromFD, which owns the mapping until the fence dies.
-     */
     public void createFenceFromFd(XClient owner, int drawableId, int fenceId,
                                   boolean initiallyTriggered, long shmPtr) throws XRequestError {
         synchronized (fences) {
@@ -123,10 +111,6 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
                 trigger(fences.get(id));
             }
             else {
-                /* Doing nothing here is indistinguishable from succeeding, and
-                 * the client is meanwhile parked in xshmfence_await() waiting
-                 * for this exact fence. Never let it pass in silence.
-                 */
                 android.util.Log.w("Sync", "setTriggered: no fence 0x"
                                            + Integer.toHexString(id)
                                            + "; a client may be stuck waiting on it");
@@ -205,10 +189,6 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
         }
     }
     
-    /**
-     * Reclaims what a departing client never destroyed itself. Fences are not
-     * XResources, so {@link XClient#freeResources} does not reach them.
-     */
     public void freeFencesOwnedBy(XClient client) {
         synchronized (fences) {
             for (int i = fences.size() - 1; i >= 0; i--) {
@@ -223,14 +203,6 @@ public class SyncExtension implements Extension, XResourceManager.OnResourceLife
 
     @Override
     public void onFreeResource(XResource resource) {
-        /* Deliberately empty. Freeing a drawable used to destroy every fence
-         * created from it, but a fence's lifetime is its own -- the drawable
-         * only selects the screen. loader_dri3 frees the pixmap first and then
-         * destroys the fence, so reclaiming here answered its DestroyFence
-         * with BadFence, and a client that legitimately kept using the fence
-         * would have found it silently dead. Fences now go on DestroyFence or
-         * with their owner, via freeFencesOwnedBy().
-         */
     }
 
     @Override

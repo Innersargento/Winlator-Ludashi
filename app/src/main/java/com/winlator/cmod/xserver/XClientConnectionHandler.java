@@ -21,9 +21,6 @@ public class XClientConnectionHandler implements ConnectionHandler {
     public void handleConnectionShutdown(Client client) {
         XClient xClient = (XClient)client.getTag();
 
-        /* Sync fences are not XResources, so freeResources() cannot see them
-         * and nothing else would ever unmap their shared pages.
-         */
         SyncExtension syncExtension = xServer.getExtension(SyncExtension.MAJOR_OPCODE);
         if (syncExtension != null) syncExtension.freeFencesOwnedBy(xClient);
 

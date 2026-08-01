@@ -360,9 +360,6 @@ void DisplayX::updateWindow(Window *window) {
 void DisplayX::updateWindowDirect(Window *window) {
     if (!window->control) return;
     
-    /* Kept alive across the transaction: the X request thread is free to drop
-     * this drawable while SurfaceFlinger still has the handle.
-     */
     auto drawable = window->getDirectContent();
     if (!drawable) return;
 
