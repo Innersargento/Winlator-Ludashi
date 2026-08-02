@@ -86,6 +86,9 @@ public class KeyValueSet implements Iterable<String[]> {
     public Iterator<String[]> iterator() {
         final int[] start = {0};
         final int[] end = {data.indexOf(",")};
+        if (end[0] == -1)
+            end[0] = data.length();
+            
         final String[] item = new String[2];
         return new Iterator<String[]>() {
             @Override
