@@ -46,18 +46,11 @@
                 android:id="@+id/MSCZinkDebug"
                 android:spinnerMode="dialog"/>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/shader_cache"
-                android:textAppearance="?android:attr/textAppearanceMedium"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"/>
-
             <CheckBox
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:id="@+id/CBZinkShaderCache"
+                android:layout_marginTop="16dp"
                 android:text="@string/shader_cache" />
 
             <CheckBox

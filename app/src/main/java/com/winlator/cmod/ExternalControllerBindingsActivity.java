@@ -45,6 +45,7 @@ public class ExternalControllerBindingsActivity extends AppCompatActivity {
     private ExternalController controller;
     private RecyclerView recyclerView;
     private ControllerBindingsAdapter adapter;
+    private boolean isDarkMode;
 
     // Track trigger state to only register on rising edge
     private boolean l2WasPressed = false;
@@ -53,6 +54,7 @@ public class ExternalControllerBindingsActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        applyThemeFromPrefs();
         setContentView(R.layout.external_controller_bindings_activity);
 
         Intent intent = getIntent();
@@ -80,6 +82,26 @@ public class ExternalControllerBindingsActivity extends AppCompatActivity {
         recyclerView.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
         recyclerView.setAdapter(adapter = new ControllerBindingsAdapter());
         updateEmptyTextView();
+    }
+
+    private void applyThemeFromPrefs() {
+        isDarkMode = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("dark_mode", false);
+        setTheme(isDarkMode ? R.style.AppTheme_Dark : R.style.AppTheme);
+        getWindow().setBackgroundDrawableResource(
+                isDarkMode ? R.color.window_background_color_dark : R.color.window_background_color);
+    }
+
+    private void applyComboBoxTheme(Spinner spinner) {
+        if (!isDarkMode) return;
+
+        int paddingLeft = spinner.getPaddingLeft();
+        int paddingTop = spinner.getPaddingTop();
+        int paddingRight = spinner.getPaddingRight();
+        int paddingBottom = spinner.getPaddingBottom();
+
+        spinner.setBackgroundResource(R.drawable.combo_box_dark);
+        spinner.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
+        spinner.setPopupBackgroundResource(R.drawable.content_dialog_background_dark);
     }
 
     // private void updateControllerBinding(int keyCode, Binding binding) {
@@ -270,6 +292,13 @@ public class ExternalControllerBindingsActivity extends AppCompatActivity {
                 this.bindingType = view.findViewById(R.id.SBindingType);
                 this.binding = view.findViewById(R.id.SBinding);
                 this.removeButton = view.findViewById(R.id.BTRemove);
+
+                applyComboBoxTheme(this.bindingType);
+                applyComboBoxTheme(this.binding);
+                if (isDarkMode) {
+                    this.removeButton.setColorFilter(ContextCompat.getColor(
+                            ExternalControllerBindingsActivity.this, R.color.colorPrimary));
+                }
             }
         }
 
