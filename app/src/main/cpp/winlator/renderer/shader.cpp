@@ -1,41 +1,21 @@
 #include "shader.hpp"
 #include "egl.hpp"
 
-static void checkShaderCompile(int shaderId, const char *type) {
-    GLint status = GL_FALSE;
-    glGetShaderiv(shaderId, GL_COMPILE_STATUS, &status);
-    if (status != GL_TRUE) {
-        char log[512];
-        glGetShaderInfoLog(shaderId, sizeof(log), nullptr, log);
-        printf("Failed to compile %s shader: %s", type, log);
-    }
-}
-
 Shader::Shader(const char *vertexShader, const char *fragmentShader) {
     programId = glCreateProgram();
-
+        
     int vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShaderId, 1, &vertexShader, nullptr);
     glCompileShader(vertexShaderId);
-    checkShaderCompile(vertexShaderId, "vertex");
     glAttachShader(programId, vertexShaderId);
-
+    
     int fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragmentShaderId, 1, &fragmentShader, nullptr);
     glCompileShader(fragmentShaderId);
-    checkShaderCompile(fragmentShaderId, "fragment");
     glAttachShader(programId, fragmentShaderId);
-
+    
     glLinkProgram(programId);
-
-    GLint linkStatus = GL_FALSE;
-    glGetProgramiv(programId, GL_LINK_STATUS, &linkStatus);
-    if (linkStatus != GL_TRUE) {
-        char log[512];
-        glGetProgramInfoLog(programId, sizeof(log), nullptr, log);
-        printf("Failed to link shader program: %s", log);
-    }
-
+    
     glDeleteShader(vertexShaderId);
     glDeleteShader(fragmentShaderId);
     

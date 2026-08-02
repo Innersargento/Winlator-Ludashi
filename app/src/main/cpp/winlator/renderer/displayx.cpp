@@ -169,7 +169,7 @@ void DisplayX::renderingThreadLoop() {
         
         for (auto window : windows) {
             if (window) {
-                if (window->getDirectContent())
+                if (window->currentDirectContent) 
                     updateWindowDirect(window);
                 else
                     updateWindow(window);
@@ -360,9 +360,9 @@ void DisplayX::updateWindow(Window *window) {
 void DisplayX::updateWindowDirect(Window *window) {
     if (!window->control) return;
     
-    auto drawable = window->getDirectContent();
+    auto drawable = window->currentDirectContent;
     if (!drawable) return;
-
+         
     if (!window->enabled)
         pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, nullptr, -1);
     else

@@ -11,9 +11,7 @@ void CursorManager::removeCursor(JNIEnv *env, Cursor *cursor) {
 }
 
 Cursor* CursorManager::getCursor(int id) {
-    auto it = this->cursors.find(id);
-    if (it == this->cursors.end()) return nullptr;
-    return it->second.get();
+    return this->cursors[id].get();
 }
 
 void CursorManager::setRootCursor(std::unique_ptr<struct Cursor> cursor) {

@@ -231,12 +231,12 @@ void EGLRenderer::renderWindows() {
         
         auto window = renderableWindow->window;
         if (!window) continue;
-
-        auto directContent = window->getDirectContent();
-
-        if (directContent)
-            renderDrawable(directContent.get(), renderableWindow->rootX, renderableWindow->rootY, true);
-        else if (window->hasContent)
+        if (!window->hasContent && !window->hasDirectContents()) continue;
+        
+            
+        if (window->hasDirectContents())
+            renderDrawable(window->currentDirectContent, renderableWindow->rootX, renderableWindow->rootY, true);
+        else
             renderDrawable(window->drawable.get(), renderableWindow->rootX, renderableWindow->rootY, true);
     }
 }

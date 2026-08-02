@@ -541,7 +541,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeAddDirectContent(JNIEnv *env, jo
     auto window = windowManager.getWindow(windowId);
     if (!window) return;
     
-    auto drawable = std::make_shared<struct Drawable>();
+    auto drawable = std::make_unique<struct Drawable>();
     drawable->id = env->GetIntField(drawableObj, cache.drawableID);
     drawable->textureId = -1;
     drawable->width = env->GetShortField(drawableObj, cache.drawableWidth);
@@ -555,7 +555,6 @@ Java_com_winlator_cmod_widget_XServerView_nativeAddDirectContent(JNIEnv *env, jo
     drawable->isDirectContent = true;
     drawable->drawableObj = env->NewGlobalRef(drawableObj);
     
-    std::lock_guard<std::mutex> lock(window->directContentMutex);
     window->currentDirectContent = nullptr;
     window->directContents[drawable->id] = std::move(drawable);
 }
@@ -565,14 +564,11 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateDirectContent(JNIEnv *env,
     auto window = windowManager.getWindow(windowId);
     if (!window) return;
     
-    {
-        std::lock_guard<std::mutex> lock(window->directContentMutex);
-        auto it = window->directContents.find(drawableId);
-        if (it == window->directContents.end() || !it->second) return;
-
-        window->currentDirectContent = it->second;
-    }
-
+    auto directContent = window->directContents[drawableId].get();
+    if (!directContent) return;
+    
+    window->currentDirectContent = directContent;
+    
     if (xserver.isDisplayX())
         displayX.requestWindowUpdate(window);
     else    
@@ -585,10 +581,5 @@ Java_com_winlator_cmod_widget_XServerView_nativeRemoveDirectContent(JNIEnv *env,
     auto window = windowManager.getWindow(windowId);
     if (!window) return;
     
-    std::lock_guard<std::mutex> lock(window->directContentMutex);
-    if (window->currentDirectContent &&
-        window->currentDirectContent->id == drawableId)
-        window->currentDirectContent = nullptr;
-
     window->directContents.erase(drawableId);
 }

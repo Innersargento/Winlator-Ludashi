@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -27,21 +25,14 @@ struct Window {
     std::vector<Window *> children;
     jobject attributes;
     jobject windowObj;
-    std::unordered_map<int, std::shared_ptr<struct Drawable>> directContents;
-    std::shared_ptr<struct Drawable> currentDirectContent;
-    std::mutex directContentMutex;
+    std::unordered_map<int, std::unique_ptr<struct Drawable>> directContents;
+    Drawable *currentDirectContent;
     ASurfaceControl *control;
-
-    std::shared_ptr<struct Drawable> getDirectContent() {
-        std::lock_guard<std::mutex> lock(directContentMutex);
-        return currentDirectContent;
-    }
-
+        
     bool hasDirectContents() {
-        std::lock_guard<std::mutex> lock(directContentMutex);
         return !directContents.empty();
     }
-
+    
     int getRootX() {
         int rootX = x;
         auto window = parent;
