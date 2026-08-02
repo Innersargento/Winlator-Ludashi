@@ -565,6 +565,7 @@ public class ShortcutSettingsDialog extends ContentDialog {
         // Update Spinners
         Spinner sDisplayDriver = view.findViewById(R.id.SDisplayDriver);
         Spinner sGraphicsDriver = view.findViewById(R.id.SGraphicsDriver);
+        Spinner sOpenglDriver = view.findViewById(R.id.SOpenglDriver);
         Spinner sDXWrapper = view.findViewById(R.id.SDXWrapper);
         Spinner sAudioDriver = view.findViewById(R.id.SAudioDriver);
         Spinner sEmulatorSpinner = view.findViewById(R.id.SEmulator);
@@ -580,6 +581,7 @@ public class ShortcutSettingsDialog extends ContentDialog {
         // Set dark or light mode background for spinners
         sDisplayDriver.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
         sGraphicsDriver.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
+        sOpenglDriver.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
         sDXWrapper.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
         sAudioDriver.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
         sEmulatorSpinner.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
