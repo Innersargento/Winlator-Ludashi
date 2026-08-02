@@ -489,7 +489,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         preloaderDialog.show(R.string.starting_up);
 
         inputControlsManager = new InputControlsManager(this);
-        xServer = new XServer(new ScreenInfo(screenSize), displayDriver);
+        xServer = new XServer(new ScreenInfo(screenSize), displayDriver, preferences.getBoolean("use_dri3", true));
         xServer.setRefreshRate(pickHighestRefreshRate());
         xServer.setWinHandler(winHandler);
 
@@ -1546,6 +1546,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         Log.d("GraphicsDriverExtraction", "Adrenotools DriverID: " + adrenoToolsDriverId);
 
         File rootDir = imageFs.getRootDir();
+        ArrayList<String> vkWsiDebug = new ArrayList<>();
 
         if (dxwrapper.contains("dxvk")) {
             DXVKConfigDialog.setEnvVars(this, dxwrapperConfig, envVars);
@@ -1561,7 +1562,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         boolean useDRI3 = preferences.getBoolean("use_dri3", true);
         if (!useDRI3) {
-            envVars.put("MESA_VK_WSI_DEBUG", "sw");
+            vkWsiDebug.add("sw");
         }
 
         envVars.put("VK_ICD_FILENAMES", imageFs.getShareDir() + "/vulkan/icd.d/wrapper_icd.aarch64.json");
@@ -1611,7 +1612,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         String syncFrame = graphicsDriverConfig.get("syncFrame");
         if (syncFrame.equals("1"))
-            envVars.put("MESA_VK_WSI_DEBUG", "forcesync");
+            vkWsiDebug.add("forcesync");
+
+        if (!vkWsiDebug.isEmpty())
+            envVars.put("MESA_VK_WSI_DEBUG", String.join(",", vkWsiDebug));
 
         String disablePresentWait = graphicsDriverConfig.get("disablePresentWait");
         envVars.put("WRAPPER_DISABLE_PRESENT_WAIT", disablePresentWait);

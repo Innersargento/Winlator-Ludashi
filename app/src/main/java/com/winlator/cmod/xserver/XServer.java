@@ -51,10 +51,16 @@ public class XServer {
     private float refreshRate = 60.0f;
     private XServerView xServerView;
     private XClient grabbingClient = null;
+    private final boolean useDRI3;
 
     public XServer(ScreenInfo screenInfo, String displayDriver) {
+        this(screenInfo, displayDriver, true);
+    }
+
+    public XServer(ScreenInfo screenInfo, String displayDriver, boolean useDRI3) {
         this.screenInfo = screenInfo;
         this.displayDriver = displayDriver;
+        this.useDRI3 = useDRI3;
         if (isDisplayX())
             this.surfaceFormat = HardwareBuffer.RGBA_8888;
             
@@ -238,7 +244,7 @@ public class XServer {
     private void setupExtensions() {
         extensions.put(BigReqExtension.MAJOR_OPCODE, new BigReqExtension());
         extensions.put(MITSHMExtension.MAJOR_OPCODE, new MITSHMExtension());
-        extensions.put(DRI3Extension.MAJOR_OPCODE, new DRI3Extension(this));
+        if (useDRI3) extensions.put(DRI3Extension.MAJOR_OPCODE, new DRI3Extension(this));
         extensions.put(PresentExtension.MAJOR_OPCODE, new PresentExtension(this));
         extensions.put(SyncExtension.MAJOR_OPCODE, new SyncExtension(this));
         extensions.put(GLXExtension.MAJOR_OPCODE, new GLXExtension(this));
