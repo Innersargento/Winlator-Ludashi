@@ -74,8 +74,14 @@
         <item>noindirect</item>
         <item>noscis</item>
         <item>nosbin</item>
+        <item>nogrow</item>
+        <item>direct</item>
+        <item>dclear</item>
+        <item>ddraw</item>
         <item>serialc</item>
+        <item>hiprio</item>
         <item>perf</item>
+        <item>perfcntrs</item>
         <item>msgs</item>
         <item>bstat</item>
         <item>layout</item>

@@ -1552,7 +1552,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 openglDriver.equals("freedreno") ? "kgsl" : openglDriver);
 
         if (openglDriver.equals("freedreno")) {
-            String fdDebug = OpenglDriverConfig.get(openglDriverConfig, "fdDebug", "sysmem");
+            String fdDebug = OpenglDriverConfig.get(openglDriverConfig, "fdDebug", "hiprio");
             if (!fdDebug.isEmpty()) envVars.put("FD_MESA_DEBUG", fdDebug);
 
             /* driconf's vblank_mode, written unconditionally because Mesa's own
