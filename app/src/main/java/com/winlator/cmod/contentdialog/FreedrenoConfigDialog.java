@@ -25,7 +25,7 @@ public class FreedrenoConfigDialog extends ContentDialog {
         mscDebug.setItems(anchor.getContext().getResources()
                 .getStringArray(R.array.freedreno_debug_entries));
         mscDebug.setSelectedItems(OpenglDriverConfig.splitFlags(
-                OpenglDriverConfig.get(config, "fdDebug", "sysmem")));
+                OpenglDriverConfig.get(config, "fdDebug", "hiprio")));
 
         cbVSync.setChecked(OpenglDriverConfig.isEnabled(config, "vsync", false));
         cbShaderCache.setChecked(OpenglDriverConfig.isEnabled(config, "shaderCache", true));
