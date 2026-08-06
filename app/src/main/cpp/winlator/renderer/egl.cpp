@@ -48,7 +48,6 @@ void EGLRenderer::renderingThreadLoop() {
     bool paused = false;
     
     this->env = cache->getEnv();
-    init();
     
     while (true) {
         std::function<void()> func = nullptr;
@@ -118,6 +117,7 @@ void EGLRenderer::renderingThreadLoop() {
             }
             
             if (state == State::REQUEST_RENDERER && hasSurface && !paused) {
+                if (context == EGL_NO_CONTEXT) init();
                 if (surface == EGL_NO_SURFACE) createEGLSurface = true;
                 requestRender = true;
                 state = State::NONE;
@@ -370,8 +370,6 @@ void EGLRenderer::init() {
         printf("Failed to create egl context");
         return;
     }
-    
-    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context);
 }
 
 void EGLRenderer::createEGLSurface(ANativeWindow *window) {
