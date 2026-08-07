@@ -317,18 +317,18 @@ void DisplayX::eventThreadLoop() {
         
         auto lock = eventLock.lock();
         eventLock.wait(lock, [&]{ 
-            return state != State::NONE || !eventQueue.empty();
+            return stopped || state != State::NONE || !eventQueue.empty();
         });
         
-        auto currState = state;
-        state = State::NONE;
-        
-        if (currState == State::STOP) {
+        if (stopped) {
             printf("Received state STOP");
             stopped = true;
             presentLock.notify();
             return;
         }
+        
+        auto currState = state;
+        state = State::NONE;
         
         if (currState == State::PAUSE) {
             printf("Received state PAUSE");
@@ -518,8 +518,7 @@ void DisplayX::start() {
 }
 
 void DisplayX::stop() {
-    auto lock = eventLock.lock();
-    state = State::STOP;
+    stopped = true;
     eventLock.notify();
 }
 

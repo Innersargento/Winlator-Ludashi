@@ -21,7 +21,6 @@ class DisplayX {
     private:
         enum class State {
             NONE,
-            STOP,
             PAUSE,
             RESUME,
             CREATE_SURFACE,
@@ -76,24 +75,24 @@ class DisplayX {
         
         ASurfaceTransaction *windowTransaction;
         ASurfaceTransaction *cursorTransaction;
-        std::queue<std::function<void()>> eventQueue;
         std::queue<std::unique_ptr<PresentRequest>> presentRequests;
+        std::queue<std::function<void()>> eventQueue;
         
         std::thread eventThread;
         std::thread networkThread;
         std::thread presentThread;
         
         State state = State::NONE;
-        bool cursorUpdate = false;
-        bool repostCursor = false;
-        bool fullscreen = false;
-        int64_t previousReportedWorkTime = 0;
-        
         std::atomic_bool paused{false};
         std::atomic_bool stopped{false};
         std::atomic_bool hasSurface{false};
         std::atomic_bool surfaceChanged{false};
         std::atomic_bool perfMode{true};
+        
+        bool cursorUpdate = false;
+        bool repostCursor = false;
+        bool fullscreen = false;
+        int64_t previousReportedWorkTime = 0;
         
         void eventThreadLoop();
         void networkThreadLoop();
