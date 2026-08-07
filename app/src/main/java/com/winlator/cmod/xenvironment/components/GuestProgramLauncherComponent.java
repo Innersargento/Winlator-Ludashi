@@ -350,9 +350,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                     }
                     envVars.put("VK_INSTANCE_LAYERS", "VK_LAYER_DISPLAYX_display_x");
                 }
-                
-                XServerDisplayActivity activity = (XServerDisplayActivity)environment.getContext();
-                activity.getXServerView().nativeSetPerformanceMode(isPerfMode);
+                if (isPerfMode) {
+                    XServerDisplayActivity activity = (XServerDisplayActivity)environment.getContext();
+                    activity.getXServerView().nativeSetPerformanceMode(isPerfMode);
+                }
             }
             
         }
