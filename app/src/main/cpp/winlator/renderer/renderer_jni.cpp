@@ -52,6 +52,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     drawable->data = nullptr;
     drawable->isDirty = false;
     drawable->isDirectContent = false;
+    drawable->isDisplayX = false;
     drawable->sizeChanged = false;
     drawable->drawableObj = env->NewGlobalRef(drawableObj);
     rootWindow->drawable = std::move(drawable);
@@ -99,6 +100,8 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     cursorDrawable->height = h;
     cursorDrawable->data = nullptr;
     cursorDrawable->isDirty = false;
+    cursorDrawable->isDirectContent = false;
+    cursorDrawable->isDisplayX = false;
     cursorDrawable->sizeChanged = false;
     cursorDrawable->drawableObj = nullptr;
     
@@ -147,7 +150,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     xserver.windowManager = env->NewGlobalRef(windowManagerObj);
     xserver.inputDeviceManager = env->NewGlobalRef(inputDeviceManagerObj);
     xserver.displayDriver = dispDriver;
+    xserver.refreshRate = env->CallFloatMethod(context, cache.getRefreshRate);
     xserver.xserver = env->NewGlobalRef(xServer);
+    xserver.xserverDisplayActivity = env->NewGlobalRef(context);
     
     env->DeleteLocalRef(windowManagerObj);
     env->DeleteLocalRef(inputDeviceManagerObj);
@@ -195,6 +200,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateWindow(JNIEnv *env, jobjec
         drawable->format = env->GetIntField(drawableObj, cache.drawableFormat);
         drawable->isDirty = false;
         drawable->isDirectContent = false;
+        drawable->isDisplayX = false;
         drawable->sizeChanged = false;
         drawable->drawableObj = env->NewGlobalRef(drawableObj);
         window->drawable = std::move(drawable);
@@ -294,6 +300,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeCreateCursor(JNIEnv *env, jobjec
     drawable->stride = env->GetShortField(drawableObj, cache.drawableStride);
     drawable->format = env->GetIntField(drawableObj, cache.drawableFormat);
     drawable->isDirectContent = false;
+    drawable->isDisplayX = false;
     drawable->isDirty = false;
     drawable->textureId = -1;
     drawable->sizeChanged = false;
@@ -363,8 +370,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeChangeWindowZOrder(JNIEnv *env, 
     
     if (!window) return;
     
+    windowManager.changeZOrder(stackMode, window, sibling);
+    
     if (!xserver.isDisplayX()) {
-        windowManager.changeZOrder(stackMode, window, sibling);
         renderer.queueEvent([]{ renderer.updateScene(); });
         renderer.requestRenderer();
     }
@@ -414,7 +422,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateWindowContent(JNIEnv *env,
     window->hasContent = true;
     
     if (xserver.isDisplayX())
-        displayX.requestWindowUpdate(window);
+        displayX.requestWindowUpdate(window->drawable.get(), window);
     else
         renderer.requestRenderer();
 }
@@ -553,6 +561,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeAddDirectContent(JNIEnv *env, jo
     drawable->ahb = (AHardwareBuffer *)env->GetLongField(drawableObj, cache.drawableAHB);
     drawable->stride = env->GetShortField(drawableObj, cache.drawableStride);
     drawable->isDirectContent = true;
+    drawable->isDisplayX = false;
     drawable->drawableObj = env->NewGlobalRef(drawableObj);
     
     window->currentDirectContent = nullptr;
@@ -570,11 +579,10 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateDirectContent(JNIEnv *env,
     window->currentDirectContent = directContent;
     
     if (xserver.isDisplayX())
-        displayX.requestWindowUpdate(window);
+        displayX.requestWindowUpdate(directContent, window);
     else    
         renderer.requestRenderer();
 }
-
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_cmod_widget_XServerView_nativeRemoveDirectContent(JNIEnv *env, jclass obj, jint windowId, jint drawableId) {
@@ -582,4 +590,9 @@ Java_com_winlator_cmod_widget_XServerView_nativeRemoveDirectContent(JNIEnv *env,
     if (!window) return;
     
     window->directContents.erase(drawableId);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_winlator_cmod_widget_XServerView_nativeSetPerformanceMode(JNIEnv *env, jclass obj, jboolean perfMode) {
+    displayX.setPerformanceMode(perfMode);
 }

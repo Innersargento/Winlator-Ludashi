@@ -4,6 +4,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Choreographer;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import com.winlator.cmod.R;
 import android.content.Context;
@@ -272,4 +273,6 @@ public class XServerView extends SurfaceView implements SurfaceHolder.Callback, 
     public native void nativeUpdateDirectContent(int windowId, int drawableId);
     @FastNative
     public native void nativeRemoveDirectContent(int windowId, int pixmapId);
+    @FastNative
+    public native void nativeSetPerformanceMode(boolean perfMode);
 }

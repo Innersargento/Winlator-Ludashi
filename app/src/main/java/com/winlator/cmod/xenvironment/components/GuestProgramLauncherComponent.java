@@ -9,10 +9,12 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
+import com.winlator.cmod.XServerDisplayActivity;
 import com.winlator.cmod.box64.Box64Preset;
 import com.winlator.cmod.box64.Box64PresetManager;
 import com.winlator.cmod.container.Container;
 import com.winlator.cmod.container.Shortcut;
+import com.winlator.cmod.contentdialog.DisplayXConfigDialog;
 import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
 import com.winlator.cmod.core.Callback;
@@ -333,6 +335,26 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
 
         if (this.envVars.has("MANGOHUD_CONFIG")) {
             this.envVars.remove("MANGOHUD_CONFIG");
+        }
+        
+        if (shortcut != null) {
+            String displayDriver = shortcut.getExtra("displayDriver", Container.DEFAULT_DISPLAY_DRIVER);
+            String displayxConfigString = shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG);
+            KeyValueSet displayxConfig = DisplayXConfigDialog.parseConfig(displayxConfigString);
+            if (displayDriver.toLowerCase().contains("displayx")) {
+                boolean isTrueDisplayX = displayxConfig.get("trueDisplayX").equals("1") ? true : false;
+                boolean isPerfMode = displayxConfig.get("performanceMode").equals("1") ? true : false;
+                if (isTrueDisplayX) {
+                    if (this.envVars.has("VK_INSTANCE_LAYERS")) {
+                        this.envVars.remove("VK_INSTANCE_LAYERS");
+                    }
+                    envVars.put("VK_INSTANCE_LAYERS", "VK_LAYER_DISPLAYX_display_x");
+                }
+                
+                XServerDisplayActivity activity = (XServerDisplayActivity)environment.getContext();
+                activity.getXServerView().nativeSetPerformanceMode(isPerfMode);
+            }
+            
         }
         
         // Merge any additional environment variables from external sources

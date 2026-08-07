@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <condition_variable>
 #include <android/choreographer.h>
+#include <android/performance_hint.h>
 
 #include "renderer_jni.hpp"
 #include "view_transformation.hpp"
@@ -25,8 +26,7 @@ class DisplayX {
             RESUME,
             CREATE_SURFACE,
             DESTROY_SURFACE,
-            CHANGE_SURFACE,
-            REQUEST_WINDOW_UPDATE
+            CHANGE_SURFACE
         };
         
         struct DisplayXLock {
@@ -47,35 +47,19 @@ class DisplayX {
            }
         };
         
-        class WindowQueue {
-            private: 
-                std::queue<Window *> mQueue;
-                std::unordered_set<Window *> mSet;
-            
-            public:
-                bool push(Window *window) {
-                    if (mSet.insert(window).second) {
-                        mQueue.push(window);
-                        return true;
-                    }
-                    
-                    return false;
-                }
-                
-                Window *pop() {
-                    if (mQueue.empty())
-                        return nullptr;
-                        
-                    auto val = mQueue.front();
-                    mQueue.pop();
-                    mSet.erase(val);
-                    
-                    return val;
-                }
-                
-                bool empty() {
-                    return mQueue.empty();
-                }
+        struct PresentRequest {
+            Drawable *drawable;
+            int sync_fence;
+            uint64_t presentId;
+            uint8_t swapchainId;
+            int clientFd;
+            Window *window;
+        };
+        
+        struct DisplayXSwapchain {
+            uint8_t id;
+            Window *window;
+            std::vector<std::unique_ptr<Drawable>> images;
         };
         
         JNIEnv *env;
@@ -83,22 +67,43 @@ class DisplayX {
         int surfaceHeight;
         AChoreographer *choreographer;
         ViewTransformation viewTransformation;
-        DisplayXLock displayxLock;
+        ANativeWindow *native_window;
+        APerformanceHintManager *performanceHintManager;
+        APerformanceHintSession *performanceHintSession;
+        
+        DisplayXLock eventLock;
+        DisplayXLock presentLock;
+        
         ASurfaceTransaction *windowTransaction;
         ASurfaceTransaction *cursorTransaction;
         std::queue<std::function<void()>> eventQueue;
-        WindowQueue windowQueue;
-        std::thread displayxThread;
-        ANativeWindow *native_window;
+        std::queue<std::unique_ptr<PresentRequest>> presentRequests;
+        
+        std::thread eventThread;
+        std::thread networkThread;
+        std::thread presentThread;
         
         State state = State::NONE;
         bool cursorUpdate = false;
-        bool paused = false;
         bool repostCursor = false;
         bool fullscreen = false;
+        int64_t previousReportedWorkTime = 0;
         
-        void renderingThreadLoop();
+        std::atomic_bool paused{false};
+        std::atomic_bool stopped{false};
+        std::atomic_bool hasSurface{false};
+        std::atomic_bool surfaceChanged{false};
+        std::atomic_bool perfMode{true};
+        
+        void eventThreadLoop();
+        void networkThreadLoop();
+        void presentThreadLoop();
         static void onFrameCallback64(int64_t frameTimeNanos, void *data);
+        static void onCommitCallback(void *context, ASurfaceTransactionStats *stats);
+        static void onCompleteCallback(void *context, ASurfaceTransactionStats *stats);
+        int64_t getCurrentTimeNanos();
+        bool isPerformanceHintAPIAvailable();
+        
         void createRootWindowControl();
         void createRootCursorControl();
         void resizeRootWindow();
@@ -123,7 +128,7 @@ class DisplayX {
         void resume();
         
         void queueEvent(std::function<void()> func);
-        void requestWindowUpdate(Window *window);
+        void requestWindowUpdate(Drawable *drawable, Window *window);
         void requestCursorUpdate();
         void updateCursorPosition();
         
@@ -132,10 +137,9 @@ class DisplayX {
         void mapWindow(Window *window);
         void unmapWindow(Window *window);
         void changeGeometry(Window *window, bool resized);
-        void updateWindow(Window *window);
-        void updateWindowDirect(Window *window);
         void reparentWindow(Window *window, Window *parent);
         void updateCursor(Window *window);
         void drawRootCursor();
         void toggleFullscreen();
+        void setPerformanceMode(bool perfMode);
 };
