@@ -30,33 +30,21 @@
                 android:id="@+id/MSCFreedrenoDebug"
                 android:spinnerMode="dialog"/>
 
-            <TextView
+            <CheckBox
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/vertical_synchronization"
-                android:textAppearance="?android:attr/textAppearanceMedium"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"/>
+                android:id="@+id/CBFreedrenoShaderCache"
+                android:layout_marginTop="16dp"
+                android:text="@string/shader_cache"
+                android:textAppearance="?android:attr/textAppearanceMedium" />
 
             <CheckBox
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:id="@+id/CBFreedrenoVSync"
-                android:text="@string/enable" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/shader_cache"
-                android:textAppearance="?android:attr/textAppearanceMedium"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"/>
-
-            <CheckBox
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:id="@+id/CBFreedrenoShaderCache"
-                android:text="@string/shader_cache" />
+                android:layout_marginTop="8dp"
+                android:text="@string/vertical_synchronization"
+                android:textAppearance="?android:attr/textAppearanceMedium" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

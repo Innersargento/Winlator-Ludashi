@@ -1541,29 +1541,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private void setOpenglDriverEnvVars(EnvVars envVars) {
         envVars.put("GALLIUM_DRIVER", openglDriver);
 
-        /* The loader override is a *kernel driver* name, not the gallium one.
-         * freedreno reaches the hardware through KGSL here, and libgallium
-         * registers that as its own descriptor -- DRM_DRIVER_DESCRIPTOR_ALIAS(
-         * msm, kgsl, ...) in drm_helper.h. Naming "freedreno" finds nothing,
-         * the loader falls back to probing the fd, and DRI3 Open hands it a
-         * memfd that no probe can make sense of.
-         */
-        envVars.put("MESA_LOADER_DRIVER_OVERRIDE",
-                openglDriver.equals("freedreno") ? "kgsl" : openglDriver);
-
         if (openglDriver.equals("freedreno")) {
             String fdDebug = OpenglDriverConfig.get(openglDriverConfig, "fdDebug", "hiprio");
             if (!fdDebug.isEmpty()) envVars.put("FD_MESA_DEBUG", fdDebug);
-
-            /* driconf's vblank_mode, written unconditionally because Mesa's own
-             * default is 1: leaving it out would leave vsync on for a container
-             * whose box is unchecked.
-             *
-             * Setting it at all sends loader_dri3 down the MSC path, so the
-             * Present extension has to answer NotifyMSC for this to be safe.
-             * It did not, and Half-Life took an access violation inside
-             * glXCreateContextAttribsARB.
-             */
             envVars.put("vblank_mode",
                     OpenglDriverConfig.isEnabled(openglDriverConfig, "vsync", false) ? "1" : "0");
         }
