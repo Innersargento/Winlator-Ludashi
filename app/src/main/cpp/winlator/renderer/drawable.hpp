@@ -9,6 +9,7 @@ struct Drawable {
     int width;
     int format;
     int height;
+    int stride;
     int textureId;
     bool isDirty;
     bool sizeChanged;

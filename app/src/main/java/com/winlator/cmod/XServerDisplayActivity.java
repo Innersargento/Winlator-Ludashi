@@ -12,10 +12,13 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.hardware.HardwareBuffer;
+
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -141,6 +144,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private FrameRating frameRating = null;
     private Runnable editInputControlsCallback;
     private Shortcut shortcut;
+    private String displayDriver = Container.DEFAULT_DISPLAY_DRIVER;
     private String graphicsDriver = Container.DEFAULT_GRAPHICS_DRIVER;
     private HashMap<String, String> graphicsDriverConfig;
     private String audioDriver = Container.DEFAULT_AUDIO_DRIVER;
@@ -436,6 +440,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         Log.d("XServerDisplayActivity", "Intent Extras: " + intent.getExtras());
 
         if (shortcut != null) {
+            displayDriver = shortcut.getExtra("displayDriver", Container.DEFAULT_DISPLAY_DRIVER);
             graphicsDriver = shortcut.getExtra("graphicsDriver", container.getGraphicsDriver());
             graphicsDriverConfig = shortcut.getExtra("graphicsDriverConfig", container.getGraphicsDriverConfig());
             audioDriver = shortcut.getExtra("audioDriver", container.getAudioDriver());
@@ -473,7 +478,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         preloaderDialog.show(R.string.starting_up);
 
         inputControlsManager = new InputControlsManager(this);
-        xServer = new XServer(new ScreenInfo(screenSize));
+        xServer = new XServer(new ScreenInfo(screenSize), displayDriver);
         xServer.setWinHandler(winHandler);
 
         boolean[] winStarted = {false};
@@ -864,6 +869,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 drawerLayout.closeDrawers();
                 break;
             case R.id.main_menu_magnifier:
+                if (xServer.isDisplayX()) {
+                    AppUtils.showToast(this, R.string.magnifier_not_available);
+                    drawerLayout.closeDrawers();
+                    break;
+                }
+                
                 if (magnifierView == null) {
                     FrameLayout container = findViewById(R.id.FLXServerDisplay);
                     magnifierView = new MagnifierView(this);
@@ -1571,6 +1582,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         String bcnEmulationCache = graphicsDriverConfig.get("bcnEmulationCache");
         envVars.put("WRAPPER_USE_BCN_CACHE", bcnEmulationCache);
+        
+        if (xServer.isDisplayX())
+            envVars.put("WRAPPER_SURFACE_FORMAT", "rgba8");
 
         if (!vkbasaltConfig.isEmpty()) {
             envVars.put("ENABLE_VKBASALT", "1");

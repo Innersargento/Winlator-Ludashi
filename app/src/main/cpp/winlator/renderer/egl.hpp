@@ -26,15 +26,11 @@
 #include "view_transformation.hpp"
 #include "xform.hpp"
 
-#define LOG_TAG "EGLRenderer"
-#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-
 class EGLRenderer {
     private:
         struct RenderableWindow {
             int rootX;
             int rootY;
-            Drawable *content;
             Window *window;
         };
         
@@ -69,6 +65,7 @@ class EGLRenderer {
         };
         
         EGLDisplay display;
+        JNIEnv *env;
         EGLConfig config;
         EGLSurface surface = EGL_NO_SURFACE;
         EGLContext context = EGL_NO_CONTEXT;
@@ -94,7 +91,7 @@ class EGLRenderer {
         void renderWindows();
         void destroyEGLSurface();
         void renderCursor();
-        void renderDrawable(int textureId, int length, float xform[], bool isFromWindow, bool isRGBA);
+        void renderDrawable(int textureId, int length, float xform[], bool isFromWindow);
         void updateTextureDrawable(int textureId, int width, int height, void *data);
         int allocateTexture(int width, int height);
         int allocateTextureDirect(AHardwareBuffer* hardwareBuffer);
