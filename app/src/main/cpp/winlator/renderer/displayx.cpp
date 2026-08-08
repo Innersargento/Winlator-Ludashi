@@ -468,7 +468,7 @@ void DisplayX::presentThreadLoop() {
         }
         else {
             pfnASurfaceTransactionSetBuffer(presentTransaction, window->control, drawable->ahb, presentRequest->sync_fence);
-            pfnASurfaceTransactionSetOnCommit(presentTransaction, this, DisplayX::onCommitCallback);
+            if (pfnASurfaceTransactionSetOnCommit) pfnASurfaceTransactionSetOnCommit(presentTransaction, this, DisplayX::onCommitCallback);
             if (drawable->isDisplayX) {
                 auto *ptr = presentRequest.release();
                 pfnASurfaceTransactionSetOnComplete(presentTransaction, ptr, DisplayX::onCompleteCallback);
@@ -605,6 +605,7 @@ void DisplayX::createWindowControl(Window *window) {
     if (pfnASurfaceControlAcquire)    
         pfnASurfaceControlAcquire(window->control);
     
+    pfnASurfaceTransactionSetEnableBackPressure(windowTransaction, window->control, false);
     pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
     
     if (pfnASurfaceTransactionSetPosition) {
