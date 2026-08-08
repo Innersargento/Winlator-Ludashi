@@ -400,7 +400,7 @@ int64_t DisplayX::getCurrentTimeNanos() {
 
 void DisplayX::onCommitCallback(void *context, ASurfaceTransactionStats *stats) {
     auto *self = reinterpret_cast<DisplayX *>(context);
-    if (!self->isPerformanceHintAPIAvailable() && !self->performanceHintSession && !self->performanceHintManager)
+    if (!self->isPerformanceHintAPIAvailable() || !self->performanceHintSession || !self->performanceHintManager)
         return;
     
     if (self->previousReportedWorkTime == 0) {
