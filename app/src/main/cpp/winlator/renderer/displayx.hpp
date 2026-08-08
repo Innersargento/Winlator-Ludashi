@@ -67,8 +67,9 @@ class DisplayX {
         AChoreographer *choreographer;
         ViewTransformation viewTransformation;
         ANativeWindow *native_window;
-        APerformanceHintManager *performanceHintManager;
-        APerformanceHintSession *performanceHintSession;
+        
+        APerformanceHintManager *performanceHintManager = nullptr;
+        APerformanceHintSession *performanceHintSession = nullptr;
         
         DisplayXLock eventLock;
         DisplayXLock presentLock;

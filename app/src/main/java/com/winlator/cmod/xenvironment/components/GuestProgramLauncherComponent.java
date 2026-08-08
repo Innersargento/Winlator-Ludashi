@@ -51,6 +51,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private String[] bindingPaths;
     private EnvVars envVars;
     private WineInfo wineInfo;
+    private KeyValueSet displayxConfig = null;
     private String box64Preset = Box64Preset.COMPATIBILITY;
     private String fexcorePreset = FEXCorePreset.INTERMEDIATE;
     private Callback<Integer> terminationCallback;
@@ -65,6 +66,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     }
     public WineInfo getWineInfo() {
         return this.wineInfo;
+    }
+    
+    public void setDisplayxConfig(KeyValueSet displayxConfig) {
+        this.displayxConfig = displayxConfig;
     }
 
     public Container getContainer() { return this.container; }
@@ -337,25 +342,14 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             this.envVars.remove("MANGOHUD_CONFIG");
         }
         
-        if (shortcut != null) {
-            String displayDriver = shortcut.getExtra("displayDriver", Container.DEFAULT_DISPLAY_DRIVER);
-            String displayxConfigString = shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG);
-            KeyValueSet displayxConfig = DisplayXConfigDialog.parseConfig(displayxConfigString);
-            if (displayDriver.toLowerCase().contains("displayx")) {
-                boolean isTrueDisplayX = displayxConfig.get("trueDisplayX").equals("1") ? true : false;
-                boolean isPerfMode = displayxConfig.get("performanceMode").equals("1") ? true : false;
-                if (isTrueDisplayX) {
-                    if (this.envVars.has("VK_INSTANCE_LAYERS")) {
-                        this.envVars.remove("VK_INSTANCE_LAYERS");
-                    }
-                    envVars.put("VK_INSTANCE_LAYERS", "VK_LAYER_DISPLAYX_display_x");
+        if (shortcut != null && displayxConfig != null) {
+            boolean isTrueDisplayX = displayxConfig.get("trueDisplayX").equals("1") ? true : false;
+            if (isTrueDisplayX) {
+                if (this.envVars.has("VK_INSTANCE_LAYERS")) {
+                    this.envVars.remove("VK_INSTANCE_LAYERS");
                 }
-                if (isPerfMode) {
-                    XServerDisplayActivity activity = (XServerDisplayActivity)environment.getContext();
-                    activity.getXServerView().nativeSetPerformanceMode(isPerfMode);
-                }
+                envVars.put("VK_INSTANCE_LAYERS", "VK_LAYER_DISPLAYX_display_x");
             }
-            
         }
         
         // Merge any additional environment variables from external sources

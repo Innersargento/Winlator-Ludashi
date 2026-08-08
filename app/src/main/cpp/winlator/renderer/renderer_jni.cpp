@@ -167,6 +167,8 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     displayX.cache = &cache;
     displayX.xServer = &xserver;
     
+    displayX.setPerformanceMode(env->GetBooleanField(context, cache.performanceMode));
+    
     if (xserver.isDisplayX())
         displayX.start();
     else    
@@ -592,7 +594,3 @@ Java_com_winlator_cmod_widget_XServerView_nativeRemoveDirectContent(JNIEnv *env,
     window->directContents.erase(drawableId);
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_winlator_cmod_widget_XServerView_nativeSetPerformanceMode(JNIEnv *env, jclass obj, jboolean perfMode) {
-    displayX.setPerformanceMode(perfMode);
-}

@@ -400,7 +400,7 @@ int64_t DisplayX::getCurrentTimeNanos() {
 
 void DisplayX::onCommitCallback(void *context, ASurfaceTransactionStats *stats) {
     auto *self = reinterpret_cast<DisplayX *>(context);
-    if (!self->isPerformanceHintAPIAvailable())
+    if (!self->isPerformanceHintAPIAvailable() && !self->performanceHintSession && !self->performanceHintManager)
         return;
     
     if (self->previousReportedWorkTime == 0) {
@@ -431,7 +431,6 @@ void DisplayX::presentThreadLoop() {
     auto lastPresentRequestTimeNanos = 0;
     
     if (isPerformanceHintAPIAvailable()) {
-        auto lock = presentLock.lock();
         performanceHintManager = pfnAPerformanceHintGetManager();
         float targetFloat = this->perfMode ? xServer->refreshRate * 100.0f : xServer->refreshRate;
         int64_t targetWorkDuration = static_cast<int64_t>(1000000000.0f / targetFloat);
@@ -923,13 +922,4 @@ void DisplayX::toggleFullscreen() {
 
 void DisplayX::setPerformanceMode(bool perfMode) {
     this->perfMode = perfMode;
-    if (isPerformanceHintAPIAvailable()) {
-        auto lock = presentLock.lock();
-        float targetFloat = this->perfMode ? xServer->refreshRate * 100.0f : xServer->refreshRate;
-        int64_t targetWorkDuration = static_cast<int64_t>(1000000000.0f / targetFloat);
-    
-        int tid = gettid();
-        std::vector<int32_t> tids{tid};
-        pfnAPerformanceHintUpdateTargetWorkDuration(performanceHintSession, targetWorkDuration);
-    }
 }

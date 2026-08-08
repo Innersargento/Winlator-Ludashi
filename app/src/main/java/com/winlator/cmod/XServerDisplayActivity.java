@@ -149,6 +149,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private String emulator = Container.DEFAULT_EMULATOR;
     private String dxwrapper = Container.DEFAULT_DXWRAPPER;
     private KeyValueSet dxwrapperConfig;
+    private KeyValueSet displayxConfig;
     private String startupSelection;
     private WineInfo wineInfo;
     private final EnvVars envVars = new EnvVars();
@@ -200,6 +201,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     private GuestProgramLauncherComponent guestProgramLauncherComponent;
     private EnvVars overrideEnvVars;
+    
+    public boolean performanceMode;
 
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
@@ -472,6 +475,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         screenSize = container.getScreenSize();
         winHandler.setInputType((byte) container.getInputType());
         lc_all = container.getLC_ALL();
+        String displayxConfig;
 
         // Log the entire intent to verify the extras
         Intent intent = getIntent();
@@ -500,6 +504,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 vkbasaltConfig = "effects=" + sharpnessEffect.toLowerCase() + ";" + "casSharpness=" + sharpnessLevel / 100 + ";" + "dlsSharpness=" + sharpnessLevel / 100  + ";" + "dlsDenoise=" + sharpnessDenoise / 100 + ";" + "enableOnLaunch=True";
             }
             Log.d("XServerDisplayActivity", "XInput Disabled from Shortcut: " + xinputDisabledFromShortcut);
+            displayxConfig = shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG);
+            this.displayxConfig = DisplayXConfigDialog.parseConfig(displayxConfig);
+            this.performanceMode = this.displayxConfig.get("performanceMode").equals("1") ? true : false;
         }
 
         this.graphicsDriverConfig = GraphicsDriverConfigDialog.parseGraphicsDriverConfig(graphicsDriverConfig);
@@ -1073,6 +1080,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             envVars.putAll(container.getEnvVars());
 
             if (shortcut != null) envVars.putAll(shortcut.getExtra("envVars"));
+            if (shortcut != null && xServer.isDisplayX()) guestProgramLauncherComponent.setDisplayxConfig(this.displayxConfig);
 
             if (!envVars.has("WINEESYNC")) {
                 envVars.put("WINEESYNC", "1");
