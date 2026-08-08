@@ -523,7 +523,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         preloaderDialog.show(R.string.starting_up);
 
         inputControlsManager = new InputControlsManager(this);
-        xServer = new XServer(new ScreenInfo(screenSize), displayDriver);
+        xServer = new XServer(new ScreenInfo(screenSize), displayDriver, this.displayxConfig);
         xServer.setWinHandler(winHandler);
 
         boolean[] winStarted = {false};
@@ -1596,9 +1596,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         String bcnEmulationCache = graphicsDriverConfig.get("bcnEmulationCache");
         envVars.put("WRAPPER_USE_BCN_CACHE", bcnEmulationCache);
-        
-        if (xServer.isDisplayX())
-            envVars.put("WRAPPER_SURFACE_FORMAT", "rgba8");
 
         if (!vkbasaltConfig.isEmpty()) {
             envVars.put("ENABLE_VKBASALT", "1");

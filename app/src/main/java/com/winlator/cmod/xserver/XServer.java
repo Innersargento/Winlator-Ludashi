@@ -4,6 +4,7 @@ import android.hardware.HardwareBuffer;
 import android.util.SparseArray;
 
 import com.winlator.cmod.core.CursorLocker;
+import com.winlator.cmod.core.KeyValueSet;
 import com.winlator.cmod.widget.XServerView;
 import com.winlator.cmod.winhandler.WinHandler;
 import com.winlator.cmod.xserver.extensions.BigReqExtension;
@@ -48,11 +49,16 @@ public class XServer {
     private XServerView xServerView;
     private XClient grabbingClient = null;
 
-    public XServer(ScreenInfo screenInfo, String displayDriver) {
+    public XServer(ScreenInfo screenInfo, String displayDriver, KeyValueSet displayxConfig) {
         this.screenInfo = screenInfo;
         this.displayDriver = displayDriver;
-        if (isDisplayX())
-            this.surfaceFormat = HardwareBuffer.RGBA_8888;
+        if (isDisplayX()) {
+            String surfaceFormat = displayxConfig.get("surfaceFormat");
+            if (surfaceFormat.equals("rgba8"))
+                this.surfaceFormat = HardwareBuffer.RGBA_8888;
+            else 
+                this.surfaceFormat = Drawable.HAL_PIXEL_FORMAT_BGRA_8888;        
+        }    
             
         cursorLocker = new CursorLocker(this);
         for (Lockable lockable : Lockable.values()) locks.put(lockable, new ReentrantLock());

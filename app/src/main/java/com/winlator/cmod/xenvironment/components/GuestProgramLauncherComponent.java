@@ -350,6 +350,15 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                 }
                 envVars.put("VK_INSTANCE_LAYERS", "VK_LAYER_DISPLAYX_display_x");
             }
+            String surfaceFormat = displayxConfig.get("surfaceFormat");
+            if (surfaceFormat.equals("rgba8")) {
+                envVars.put("WRAPPER_SURFACE_FORMAT", "rgba8");
+                envVars.put("DISPLAYX_SURFACE_FORMAT", "rgba8");
+            }
+            else {
+                envVars.put("WRAPPER_SURFACE_FORMAT", "bgra8");
+                envVars.put("DISPLAYX_SURFACE_FORMAT", "bgra8");
+            }
         }
         
         // Merge any additional environment variables from external sources
