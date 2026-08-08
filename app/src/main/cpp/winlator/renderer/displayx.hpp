@@ -92,6 +92,7 @@ class DisplayX {
         bool cursorUpdate = false;
         bool repostCursor = false;
         bool fullscreen = false;
+        int eventsPending = 0;
         int64_t previousReportedWorkTime = 0;
         
         void eventThreadLoop();

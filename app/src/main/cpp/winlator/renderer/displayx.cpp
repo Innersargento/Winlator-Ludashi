@@ -378,8 +378,15 @@ void DisplayX::eventThreadLoop() {
             eventQueue.pop();
         }
         
+        lock.unlock();
+        
         if (func) {
             func();
+            {
+                auto l = presentLock.lock();
+                eventsPending--;
+            }
+            presentLock.notify();
         }
     }
 }
@@ -439,7 +446,7 @@ void DisplayX::presentThreadLoop() {
         auto lock = presentLock.lock();
         
         presentLock.wait(lock, [&]{ 
-            return stopped || (eventQueue.empty() && !presentRequests.empty() && hasSurface && surfaceChanged && !paused);
+            return stopped || (eventsPending == 0 && !presentRequests.empty() && hasSurface && surfaceChanged && !paused);
         });
         
         if (stopped)
@@ -563,6 +570,10 @@ void DisplayX::destroySurface() {
 
 void DisplayX::queueEvent(std::function<void()> func) {
     auto lock = eventLock.lock();
+    {
+        auto l = presentLock.lock();
+        eventsPending++;
+    }
     eventQueue.push(func);
     eventLock.notify();
 }
