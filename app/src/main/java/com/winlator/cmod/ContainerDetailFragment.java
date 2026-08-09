@@ -146,9 +146,6 @@ public class ContainerDetailFragment extends Fragment {
         Spinner sGraphicsDriver = view.findViewById(R.id.SGraphicsDriver);
         sGraphicsDriver.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
 
-        Spinner sOpenglDriver = view.findViewById(R.id.SOpenglDriver);
-        sOpenglDriver.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
-
         Spinner sDXWrapper = view.findViewById(R.id.SDXWrapper);
         sDXWrapper.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
 
