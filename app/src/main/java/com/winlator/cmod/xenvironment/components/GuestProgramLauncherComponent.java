@@ -10,10 +10,12 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
+import com.winlator.cmod.XServerDisplayActivity;
 import com.winlator.cmod.box64.Box64Preset;
 import com.winlator.cmod.box64.Box64PresetManager;
 import com.winlator.cmod.container.Container;
 import com.winlator.cmod.container.Shortcut;
+import com.winlator.cmod.contentdialog.DisplayXConfigDialog;
 import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
 import com.winlator.cmod.core.Callback;
@@ -50,6 +52,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private String[] bindingPaths;
     private EnvVars envVars;
     private WineInfo wineInfo;
+    private KeyValueSet displayxConfig = null;
     private String box64Preset = Box64Preset.COMPATIBILITY;
     private String fexcorePreset = FEXCorePreset.INTERMEDIATE;
     private Callback<Integer> terminationCallback;
@@ -64,6 +67,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     }
     public WineInfo getWineInfo() {
         return this.wineInfo;
+    }
+    
+    public void setDisplayxConfig(KeyValueSet displayxConfig) {
+        this.displayxConfig = displayxConfig;
     }
 
     public Container getContainer() { return this.container; }
@@ -372,6 +379,25 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
 
         if (this.envVars.has("MANGOHUD_CONFIG")) {
             this.envVars.remove("MANGOHUD_CONFIG");
+        }
+        
+        if (shortcut != null && displayxConfig != null) {
+            boolean isTrueDisplayX = displayxConfig.get("trueDisplayX").equals("1") ? true : false;
+            if (isTrueDisplayX) {
+                if (this.envVars.has("VK_INSTANCE_LAYERS")) {
+                    this.envVars.remove("VK_INSTANCE_LAYERS");
+                }
+                envVars.put("VK_INSTANCE_LAYERS", "VK_LAYER_DISPLAYX_display_x");
+            }
+            String surfaceFormat = displayxConfig.get("surfaceFormat");
+            if (surfaceFormat.equals("rgba8")) {
+                envVars.put("WRAPPER_SURFACE_FORMAT", "rgba8");
+                envVars.put("DISPLAYX_SURFACE_FORMAT", "rgba8");
+            }
+            else {
+                envVars.put("WRAPPER_SURFACE_FORMAT", "bgra8");
+                envVars.put("DISPLAYX_SURFACE_FORMAT", "bgra8");
+            }
         }
 
         // Merge any additional environment variables from external sources

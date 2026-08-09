@@ -29,6 +29,7 @@ add_library(winlator SHARED
         winlator/renderer/cursor.cpp
         winlator/renderer/xform.cpp
         winlator/renderer/view_transformation.cpp
+        winlator/renderer/displayx.cpp
 )
 
 target_compile_options(winlator PRIVATE -Wall -Wextra)

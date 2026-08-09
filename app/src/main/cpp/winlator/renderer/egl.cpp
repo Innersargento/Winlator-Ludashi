@@ -47,7 +47,7 @@ void EGLRenderer::renderingThreadLoop() {
     bool hasSurface = false;
     bool paused = false;
     
-    xServer->env = cache->getEnv();
+    this->env = cache->getEnv();
     
     while (true) {
         std::function<void()> func = nullptr;
@@ -57,7 +57,7 @@ void EGLRenderer::renderingThreadLoop() {
         auto lock = renderLock.lock();
         renderLock.wait(lock, [&]{ 
             if (paused) {
-                return (state != State::REQUEST_RENDERER && state != State::NONE) ||!eventQueue.empty();
+                return (state != State::REQUEST_RENDERER && state != State::NONE) || !eventQueue.empty();
             } else {
                 return state != State::NONE || !eventQueue.empty();
             } 
@@ -65,7 +65,7 @@ void EGLRenderer::renderingThreadLoop() {
         
         if (state == State::STOP) {
             printf("Received state STOP");
-            cache->detachEnv(xServer->env);
+            cache->detachEnv(env);
             state = State::NONE;
             renderLock.notify();
             return;
@@ -229,16 +229,21 @@ void EGLRenderer::renderWindows() {
     for (const auto& renderableWindow : renderableWindows) {
         if (renderableWindow == nullptr) continue;
         
-        if (renderableWindow->window->hasDirectContents())
-            renderDrawable(renderableWindow->window->currentDirectContent, renderableWindow->rootX, renderableWindow->rootY, true);
+        auto window = renderableWindow->window;
+        if (!window) continue;
+        if (!window->hasContent && !window->hasDirectContents()) continue;
+        
+            
+        if (window->hasDirectContents())
+            renderDrawable(window->currentDirectContent, renderableWindow->rootX, renderableWindow->rootY, true);
         else
-            renderDrawable(renderableWindow->content, renderableWindow->rootX, renderableWindow->rootY, true);
+            renderDrawable(window->drawable.get(), renderableWindow->rootX, renderableWindow->rootY, true);
     }
 }
 
 void EGLRenderer::renderCursor() {
-    jobject pointWindowObj = xServer->env->CallObjectMethod(xServer->inputDeviceManager, cache->getPointWindow);
-    jint id = xServer->env->GetIntField(pointWindowObj, cache->windowID);
+    jobject pointWindowObj = env->CallObjectMethod(xServer->inputDeviceManager, cache->getPointWindow);
+    jint id = env->GetIntField(pointWindowObj, cache->windowID);
     auto pointWindow = windowManager->getWindow(id);
     auto cursor = (pointWindow != nullptr) ? pointWindow->cursor : nullptr;
     int x = std::clamp(cursorManager->pointer.posX, 0, windowManager->getRootWindow()->width - 1);
@@ -254,23 +259,23 @@ void EGLRenderer::renderCursor() {
 }
 
 void EGLRenderer::renderDrawable(Drawable *drawable, int x, int y, bool isWindow) {
-    if (drawable == nullptr || (drawable->data == nullptr && !drawable->isDirectContent)) return;
+    if (drawable == nullptr) return;
     
     if (drawable->textureId < 0) {
-        if (drawable->isDirectContent) 
+        if (drawable->data == nullptr) 
             drawable->textureId = allocateTextureDirect(drawable->ahb);
-        else    
+        else
             drawable->textureId = allocateTexture(drawable->width, drawable->height);
     }    
     else if (drawable->sizeChanged) {
-        if (drawable->isDirectContent) 
+        if (drawable->data == nullptr) 
             drawable->textureId = allocateTextureDirect(drawable->ahb);
         else    
             reallocateTexture(drawable->textureId, drawable->width, drawable->height);
         drawable->sizeChanged = false;
     }
         
-    if (drawable->isDirty && !drawable->isDirectContent) {
+    if (drawable->isDirty) {
         updateTextureDrawable(drawable->textureId, drawable->width, drawable->height, drawable->data);
         drawable->isDirty = false;
     }    
@@ -278,7 +283,7 @@ void EGLRenderer::renderDrawable(Drawable *drawable, int x, int y, bool isWindow
     XForm::set(tmpXForm1, x, y, drawable->width, drawable->height);
     XForm::multiply(tmpXForm1, tmpXForm1, tmpXForm2);
     
-    renderDrawable(drawable->textureId, 6, tmpXForm1, isWindow, drawable->format == AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM);
+    renderDrawable(drawable->textureId, 6, tmpXForm1, isWindow);
 }
 
 void EGLRenderer::updateScene() {
@@ -288,14 +293,15 @@ void EGLRenderer::updateScene() {
 
 void EGLRenderer::collectRenderableWindows(Window *window, int x, int y) {
     if (!window->mapped) return;
+    if (!window->inputOutput) return;
+    
     if (window != windowManager->getRootWindow()) {
-        bool viewable = xServer->env->CallBooleanMethod(window->attributes, cache->windowAttributesIsEnabled);
+        bool viewable = env->CallBooleanMethod(window->attributes, cache->windowAttributesIsEnabled);
 
         if (viewable) {
             auto renderableWindow = std::make_unique<struct RenderableWindow>();
             renderableWindow->rootX = x;
             renderableWindow->rootY = y;
-            renderableWindow->content = window->drawable.get();
             renderableWindow->window = window;
             renderableWindows.push_back(std::move(renderableWindow));
         }    
@@ -394,13 +400,12 @@ void EGLRenderer::createEGLSurface(ANativeWindow *window) {
     drawableShader = new DrawableShader();
 }
 
-void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool isFromWindow, bool isRGBA) {
+void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool isFromWindow) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textureId);
     glUniform1i(drawableShader->getUniformLoc("texture"), 0);
     glUniform1fv(drawableShader->getUniformLoc("xform"), length, xform);
     glUniform1i(drawableShader->getUniformLoc("is_cursor"), isFromWindow ? 0 : 1);
-    glUniform1i(drawableShader->getUniformLoc("is_rgba"), isRGBA ? 1 : 0);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindTexture(GL_TEXTURE_2D, 0);
 }

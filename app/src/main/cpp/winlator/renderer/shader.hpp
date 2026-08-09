@@ -53,7 +53,6 @@ class DrawableShader : public Shader {
             uniform sampler2D texture;
             varying vec2 vUV;
             uniform int is_cursor;
-            uniform int is_rgba;
 
             void main() {
                 vec4 color = vec4(0, 0, 0, 0);
@@ -62,9 +61,6 @@ class DrawableShader : public Shader {
                     color = vec4(texture2D(texture, vUV).rgb, 1.0);            
                 else
                     color = texture2D(texture, vUV);
-                
-                if (is_rgba == 1) 
-                    color = color.bgra;
                 
                 gl_FragColor = color;    
             }

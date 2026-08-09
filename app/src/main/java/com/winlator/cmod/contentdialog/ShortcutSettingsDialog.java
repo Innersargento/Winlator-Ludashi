@@ -28,6 +28,7 @@ import com.winlator.cmod.ContainerDetailFragment;
 import com.winlator.cmod.R;
 import com.winlator.cmod.ShortcutsFragment;
 import com.winlator.cmod.box64.Box64PresetManager;
+import com.winlator.cmod.container.Container;
 import com.winlator.cmod.container.ContainerManager;
 import com.winlator.cmod.container.Shortcut;
 import com.winlator.cmod.contents.ContentProfile;
@@ -108,11 +109,44 @@ public class ShortcutSettingsDialog extends ContentDialog {
 
         loadScreenSizeSpinner(getContentView(), shortcut.getExtra("screenSize", shortcut.container.getScreenSize()), isDarkMode);
 
+        final Spinner sDisplayDriver = findViewById(R.id.SDisplayDriver);
+        String currentDisplayDriver = shortcut.getExtra("displayDriver", Container.DEFAULT_DISPLAY_DRIVER);
+        AppUtils.setSpinnerSelectionFromIdentifier(sDisplayDriver, currentDisplayDriver);
+        
+        final View vDisplayDriverConfig = findViewById(R.id.BTDisplayDriverConfig);
+        if (StringUtils.parseIdentifier(currentDisplayDriver).equals("displayx")) {
+            vDisplayDriverConfig.setVisibility(View.VISIBLE);
+            vDisplayDriverConfig.setOnClickListener((v) -> (new DisplayXConfigDialog(vDisplayDriverConfig)).show());
+            vDisplayDriverConfig.setTag(shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG));
+        }
+        else {
+            vDisplayDriverConfig.setVisibility(View.GONE);
+        }
+        
+        sDisplayDriver.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String selectedItem = parent.getItemAtPosition(position).toString();
+                String identifier = StringUtils.parseIdentifier(selectedItem);
+                if (identifier.equals("displayx")) {
+                    vDisplayDriverConfig.setVisibility(View.VISIBLE);
+                    vDisplayDriverConfig.setOnClickListener((v) -> (new DisplayXConfigDialog(vDisplayDriverConfig)).show());
+                    vDisplayDriverConfig.setTag(shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG));
+                }
+                else {
+                    vDisplayDriverConfig.setVisibility(View.GONE);
+                }
+            }
 
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        
         final Spinner sGraphicsDriver = findViewById(R.id.SGraphicsDriver);
         
         final Spinner sDXWrapper = findViewById(R.id.SDXWrapper);
-
+        
         final Spinner sBox64Version = findViewById(R.id.SBox64Version);
         
         ContentsManager contentsManager = new ContentsManager(context);
@@ -379,6 +413,7 @@ public class ShortcutSettingsDialog extends ContentDialog {
 
             if (renamingSuccess) {
                 String graphicsDriver = StringUtils.parseIdentifier(sGraphicsDriver.getSelectedItem());
+                String displayDriver = StringUtils.parseIdentifier(sDisplayDriver.getSelectedItem());
                 String graphicsDriverConfig = vGraphicsDriverConfig.getTag().toString();
                 String dxwrapper = StringUtils.parseIdentifier(sDXWrapper.getSelectedItem());
                 String dxwrapperConfig = vDXWrapperConfig.getTag().toString();
@@ -406,6 +441,10 @@ public class ShortcutSettingsDialog extends ContentDialog {
                 String execArgs = etExecArgs.getText().toString();
                 shortcut.putExtra("execArgs", !execArgs.isEmpty() ? execArgs : null);
                 shortcut.putExtra("screenSize", screenSize);
+                shortcut.putExtra("displayDriver", displayDriver);
+                if (displayDriver.equals("displayx"))
+                    shortcut.putExtra("displayxConfig", vDisplayDriverConfig.getTag().toString());
+                    
                 shortcut.putExtra("graphicsDriver", graphicsDriver);
                 shortcut.putExtra("graphicsDriverConfig", graphicsDriverConfig);
                 shortcut.putExtra("dxwrapper", dxwrapper);
@@ -524,6 +563,7 @@ public class ShortcutSettingsDialog extends ContentDialog {
         applyDarkThemeToEditText(etName, isDarkMode);
 
         // Update Spinners
+        Spinner sDisplayDriver = view.findViewById(R.id.SDisplayDriver);
         Spinner sGraphicsDriver = view.findViewById(R.id.SGraphicsDriver);
         Spinner sDXWrapper = view.findViewById(R.id.SDXWrapper);
         Spinner sAudioDriver = view.findViewById(R.id.SAudioDriver);
@@ -538,6 +578,7 @@ public class ShortcutSettingsDialog extends ContentDialog {
         
 
         // Set dark or light mode background for spinners
+        sDisplayDriver.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
         sGraphicsDriver.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
         sDXWrapper.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
         sAudioDriver.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);

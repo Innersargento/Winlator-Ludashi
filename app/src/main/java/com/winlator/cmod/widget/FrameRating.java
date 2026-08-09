@@ -30,28 +30,30 @@ public class FrameRating extends FrameLayout implements Runnable {
     private final TextView tvRenderer;
     private final TextView tvGPU;
     private final TextView tvRAM;
+    private String displayDriver;
     private HashMap graphicsDriverConfig;
 
-    public FrameRating(Context context, HashMap graphicsDriverConfig) {
-        this(context, graphicsDriverConfig ,null);
+    public FrameRating(Context context, HashMap graphicsDriverConfig, String displayDriver) {
+        this(context, graphicsDriverConfig, displayDriver, null);
     }
 
-    public FrameRating(Context context, HashMap graphicsDriverConfig, AttributeSet attrs) {
-        this(context, graphicsDriverConfig, attrs, 0);
+    public FrameRating(Context context, HashMap graphicsDriverConfig, String displayDriver, AttributeSet attrs) {
+        this(context, graphicsDriverConfig, displayDriver, attrs, 0);
     }
 
-    public FrameRating(Context context, HashMap graphicsDriverConfig, AttributeSet attrs, int defStyleAttr) {
+    public FrameRating(Context context, HashMap graphicsDriverConfig, String displayDriver, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         this.context = context;
+        this.graphicsDriverConfig = graphicsDriverConfig;
+        this.displayDriver = displayDriver;
         View view = LayoutInflater.from(context).inflate(R.layout.frame_rating, this, false);
         tvFPS = view.findViewById(R.id.TVFPS);
         tvRenderer = view.findViewById(R.id.TVRenderer);
-        tvRenderer.setText("OpenGL");
+        tvRenderer.setText(processDisplayDriver(displayDriver));
         tvGPU = view.findViewById(R.id.TVGPU);
         tvGPU.setText(GPUInformation.getRenderer(graphicsDriverConfig.get("version").toString(), context));
         tvRAM = view.findViewById(R.id.TVRAM);
         totalRAM = getTotalRAM();
-        this.graphicsDriverConfig = graphicsDriverConfig;
         addView(view);
     }
     
@@ -83,8 +85,17 @@ public class FrameRating extends FrameLayout implements Runnable {
     }
 
     public void reset() {
-        tvRenderer.setText("OpenGL");
+        tvRenderer.setText(processDisplayDriver(displayDriver));
         tvGPU.setText(GPUInformation.getRenderer(graphicsDriverConfig.get("version").toString(), context));
+    }
+    
+    public String processDisplayDriver(String displayDriver) {
+        String driver = "EGL";
+        
+        if (displayDriver.equals("displayx"))
+            driver = "DisplayX";
+            
+        return driver;    
     }
 
     public void update() {
