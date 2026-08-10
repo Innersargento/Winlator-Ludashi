@@ -6,9 +6,6 @@
 #include <android/log.h>
 #include <android/surface_control.h>
 
-#define LOG_TAG "EGLRenderer"
-#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-
 #define HAL_PIXEL_FORMAT_BGRA_8888 5
 
 #define LOAD_METHOD_ID(method, env, cls, name, sig) \

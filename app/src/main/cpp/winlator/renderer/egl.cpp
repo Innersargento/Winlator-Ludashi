@@ -1,5 +1,8 @@
 #include "egl.hpp"
 
+#define LOG_TAG "EGLRenderer"
+#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+
 void EGLRenderer::start() {
     renderingThread = std::thread(&EGLRenderer::renderingThreadLoop, this);
 }
