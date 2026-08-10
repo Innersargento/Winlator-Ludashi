@@ -91,7 +91,6 @@ class DisplayX {
         std::atomic_bool perfMode{true};
         
         bool cursorUpdate = false;
-        bool repostCursor = false;
         bool fullscreen = false;
         int eventsPending = 0;
         int64_t previousReportedWorkTime = 0;

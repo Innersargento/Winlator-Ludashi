@@ -346,7 +346,6 @@ void DisplayX::eventThreadLoop() {
         if (currState == State::CREATE_SURFACE) {
             printf("Received state CREATE_SURFACE");
             createRootWindowControl();
-            createRootCursorControl();
             hasSurface = true;
             eventLock.notify();
         }
@@ -368,7 +367,6 @@ void DisplayX::eventThreadLoop() {
             printf("Received state DESTROY_SURFACE");
             hasSurface = false;
             surfaceChanged = false;
-            destroyRootCursorControl();
             destroyRootWindowControl();
             eventLock.notify();
         }
@@ -699,16 +697,6 @@ void DisplayX::updateCursorPosition() {
     int y = std::clamp(cursorManager->pointer.posY, 0, windowManager->getRootWindow()->height - 1);
     
     if (cursorVisible || (cursor && cursor->visible)) {
-        if (repostCursor) {
-            if (cursor != nullptr) {
-                pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, cursor->image->ahb, -1);
-            }
-            else {
-                pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, rootCursor->image->ahb, -1);
-            }
-            repostCursor = false;
-        }
-        
         if (pfnASurfaceTransactionSetPosition) {
             pfnASurfaceTransactionSetPosition(cursorTransaction, cursorManager->control, x, y);
         }
@@ -747,6 +735,8 @@ void DisplayX::createRootCursorControl() {
 }
 
 void DisplayX::drawRootCursor() {
+    createRootCursorControl();
+    
     if (!cursorVisible) return;
     
     auto rootCursor = cursorManager->getRootCursor();
@@ -854,35 +844,21 @@ void DisplayX::resizeRootWindow() {
 
 void DisplayX::restoreControlState() {
     const auto& windowTree = windowManager->getWindowTree();
+    auto rootWindow = windowManager->getRootWindow();
     
     for (const auto& entry : windowTree) {
         auto window = entry.second.get();
-        if (window == windowManager->getRootWindow()) continue;
+        if (window == rootWindow) continue;
         if (!window->control || !window->parent->control) continue;
         
         pfnASurfaceTransactionReparent(windowTransaction, window->control, window->parent->control);
-        pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, window->mapped ? ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
-        
-        if (pfnASurfaceTransactionSetPosition) {
-            pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
-        }
-        else {  
-            ARect src{};
-            ARect dst = {
-                .left = window->x,
-                .top = window->y,
-                .right = window->x + window->width,
-                .bottom = window->y + window->height
-            };
-            pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, src, dst, 0);        
-        }
-        
-        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, window->enabled ? window->drawable->ahb : nullptr, -1);
         pfnASurfaceTransactionApply(windowTransaction);
     }
     
-    repostCursor = true;
-    cursorUpdate = true;
+    if (cursorManager->control && rootWindow->control) {
+        pfnASurfaceTransactionReparent(cursorTransaction, cursorManager->control, rootWindow->control);
+        pfnASurfaceTransactionApply(cursorTransaction);
+    }
 }
 
 void DisplayX::toggleFullscreen() {
