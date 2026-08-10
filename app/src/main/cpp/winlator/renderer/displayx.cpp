@@ -78,13 +78,11 @@ static PFNAPERFORMANCEHINTCLOSESESSION pfnAPerformanceHintCloseSession = nullptr
 void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
     auto *self = reinterpret_cast<DisplayX *>(data);
    
-    if (!self->env) {
-        self->env = self->cache->getEnv();
-    }
-
     if (self->cursorUpdate && self->cursorManager->control && !self->paused) {
-        self->updateCursorPosition();
-        self->cursorUpdate = false;
+        self->queueEvent([self] { 
+            self->updateCursorPosition();
+            self->cursorUpdate = false;
+        });
     }
     
     pfnAChoreographerPostFrameCallback64(self->choreographer, DisplayX::onFrameCallback64, self);
@@ -172,6 +170,7 @@ void DisplayX::networkThreadLoop() {
            
     while ((n = epoll_wait(efd, events.data(), 2, -1))) {
         if (stopped) {
+            printf("Stopping networkThread");
             close(server_fd);
             clientSwapchains.erase(clientSwapchains.begin(), clientSwapchains.end());
             return;
@@ -311,6 +310,7 @@ void DisplayX::networkThreadLoop() {
 
 void DisplayX::eventThreadLoop() {
     bool restoreState = false;
+    this->env = cache->getEnv();
     
     while (true) {
         std::function<void()> func = nullptr;
@@ -321,9 +321,8 @@ void DisplayX::eventThreadLoop() {
         });
         
         if (stopped) {
-            printf("Received state STOP");
-            stopped = true;
-            presentLock.notify();
+            printf("Stopping eventThread");
+            cache->detachEnv(env);
             return;
         }
         
@@ -426,7 +425,6 @@ void DisplayX::onCompleteCallback(void *context, ASurfaceTransactionStats *stats
 void DisplayX::presentThreadLoop() {
     ASurfaceTransaction *presentTransaction = pfnASurfaceTransactionCreate();
     JNIEnv *env = cache->getEnv();
-    auto lastPresentRequestTimeNanos = 0;
     
     if (isPerformanceHintAPIAvailable()) {
         performanceHintManager = pfnAPerformanceHintGetManager();
@@ -446,8 +444,11 @@ void DisplayX::presentThreadLoop() {
             return stopped || (eventsPending == 0 && !presentRequests.empty() && hasSurface && surfaceChanged && !paused);
         });
         
-        if (stopped)
+        if (stopped) {
+            printf("Stopping presentThread");
+            cache->detachEnv(env);
             break;
+        }
         
         auto presentRequest = std::move(presentRequests.front());
         presentRequests.pop();
@@ -524,6 +525,7 @@ void DisplayX::start() {
 void DisplayX::stop() {
     stopped = true;
     eventLock.notify();
+    presentLock.notify();
 }
 
 void DisplayX::pause() {

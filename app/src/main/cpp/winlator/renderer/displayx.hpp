@@ -87,10 +87,10 @@ class DisplayX {
         std::atomic_bool paused{false};
         std::atomic_bool stopped{false};
         std::atomic_bool hasSurface{false};
+        std::atomic_bool cursorUpdate{false};
         std::atomic_bool surfaceChanged{false};
         std::atomic_bool perfMode{true};
         
-        bool cursorUpdate = false;
         bool fullscreen = false;
         int eventsPending = 0;
         int64_t previousReportedWorkTime = 0;
