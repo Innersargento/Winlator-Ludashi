@@ -36,14 +36,11 @@ class EGLRenderer {
         
         enum class State {
             NONE,
-            STOP,
             PAUSE,
             RESUME,
             CREATE_SURFACE,
             DESTROY_SURFACE,
-            CHANGE_SURFACE,
-            REQUEST_RENDERER,
-            RENDER_COMPLETE
+            CHANGE_SURFACE
         };
         
         struct RenderLock {
@@ -74,9 +71,6 @@ class EGLRenderer {
         std::vector<std::unique_ptr<struct RenderableWindow>> renderableWindows;
         std::thread renderingThread;
         ViewTransformation viewTransformation;
-        RenderLock renderLock;
-        State state = State::NONE;
-        std::queue<std::function<void()>> eventQueue;
         int surfaceWidth;
         int surfaceHeight;
         bool fullscreen = false;
@@ -84,12 +78,19 @@ class EGLRenderer {
         float tmpXForm1[6] = {1, 0, 0, 1, 0, 0};
         float tmpXForm2[6] = {1, 0, 0, 1, 0, 0};
         
+        RenderLock renderLock;
+        State state = State::NONE;
+        std::queue<std::function<void()>> eventQueue;
+        
+        std::atomic_bool stopped{false};
+        std::atomic_bool requestUpdate{false};
         
         void renderingThreadLoop();
         void renderDrawable(Drawable *drawable, int x, int y, bool isWindow);
-        void drawFrame();
+        EGLBoolean drawFrame();
         void renderWindows();
         void destroyEGLSurface();
+        void destroyEGLContext();
         void renderCursor();
         void renderDrawable(int textureId, int length, float xform[], bool isFromWindow);
         void updateTextureDrawable(int textureId, int width, int height, void *data);
