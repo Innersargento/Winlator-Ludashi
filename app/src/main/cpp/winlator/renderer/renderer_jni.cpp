@@ -113,7 +113,6 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     desc.layers = 1;
     desc.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
                  AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
-                 AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY |
                  AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
                  
     ret = AHardwareBuffer_allocate(&desc, &cursorDrawable->ahb);
