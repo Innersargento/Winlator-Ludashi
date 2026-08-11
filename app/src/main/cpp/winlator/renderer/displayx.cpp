@@ -90,6 +90,12 @@ void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
         });
     }
     
+    if (!self->presentRequests.empty() && !self->requestUpdate) {
+        auto lock = self->presentLock.lock();
+        self->requestUpdate = true;
+        self->presentLock.notify();
+    }
+    
     pfnAChoreographerPostFrameCallback64(self->choreographer, DisplayX::onFrameCallback64, self);
 }
 
@@ -288,8 +294,6 @@ void DisplayX::networkThreadLoop() {
                             presentRequest->swapchainId = id;
                             
                             presentRequests.push(std::move(presentRequest));
-                            
-                            presentLock.notify();
                             break;
                         }    
                         case DESTROY_CLIENT_SWAPCHAIN: {
@@ -418,12 +422,15 @@ void DisplayX::onCommitCallback(void *context, ASurfaceTransactionStats *stats) 
 }
 
 void DisplayX::onCompleteCallback(void *context, ASurfaceTransactionStats *stats) {
-    std::unique_ptr<PresentRequest> request(static_cast<PresentRequest *>(context));
-    if (request->presentId >= 0) {
-        int requestCode = 4;
-        write(request->clientFd, &requestCode, 4);
-        write(request->clientFd, &request->swapchainId, 1);
-        write(request->clientFd, &request->presentId, 8);
+    std::unique_ptr<OnCompleteContext> completeContext(static_cast<OnCompleteContext *>(context));
+    
+    for (auto &request : completeContext->requests) {
+        if (request->presentId >= 0) {
+            int requestCode = 4;
+            write(request->clientFd, &requestCode, 4);
+            write(request->clientFd, &request->swapchainId, 1);
+            write(request->clientFd, &request->presentId, 8);
+        }
     }
 }
 
@@ -446,7 +453,7 @@ void DisplayX::presentThreadLoop() {
         auto lock = presentLock.lock();
         
         presentLock.wait(lock, [&]{ 
-            return stopped || (eventsPending == 0 && !presentRequests.empty() && hasSurface && surfaceChanged && !paused);
+            return stopped || (eventsPending == 0 && requestUpdate && hasSurface && surfaceChanged && !paused);
         });
         
         if (stopped) {
@@ -455,32 +462,45 @@ void DisplayX::presentThreadLoop() {
             break;
         }
         
-        auto presentRequest = std::move(presentRequests.front());
-        presentRequests.pop();
+        std::queue<std::unique_ptr<PresentRequest>> requests;
+        
+        while (!presentRequests.empty()) {
+            auto presentRequest = presentRequests.pop();
+            requests.push(std::move(presentRequest));
+        }
+        
+        requestUpdate = false;
         lock.unlock();
         
-        auto window = presentRequest->window;
-        if (!window || !window->control) continue;
+        auto completeContext = std::make_unique<OnCompleteContext>();
         
-        auto drawable = presentRequest->drawable;
-        if (!drawable) {
-            continue;
+        while (!requests.empty()) {
+            auto presentRequest = std::move(requests.front());
+            requests.pop();
+            
+            auto window = presentRequest->window;
+            if (!window || !window->control) continue;
+        
+            auto drawable = presentRequest->drawable;
+            if (!drawable) {
+                continue;
+            }
+        
+            if (!window->enabled) {
+                pfnASurfaceTransactionSetBuffer(presentTransaction, window->control, nullptr, presentRequest->sync_fence);
+            }
+            else {
+                pfnASurfaceTransactionSetBuffer(presentTransaction, window->control, drawable->ahb, presentRequest->sync_fence);
+                if (drawable->isDisplayX || drawable->isDirectContent) pfnASurfaceTransactionSetBufferTransparency(presentTransaction, window->control, ASURFACE_TRANSACTION_TRANSPARENCY_OPAQUE);
+                if (drawable->isDisplayX) {
+                   completeContext->requests.push_back(std::move(presentRequest));
+                   env->CallVoidMethod(xServer->xserverDisplayActivity, cache->updateFrameRating, window->windowObj);
+                }    
+            }
         }
         
-        if (!window->enabled) {
-            pfnASurfaceTransactionSetBuffer(presentTransaction, window->control, nullptr, presentRequest->sync_fence);
-        }
-        else {
-            pfnASurfaceTransactionSetBuffer(presentTransaction, window->control, drawable->ahb, presentRequest->sync_fence);
-            if (drawable->isDisplayX || drawable->isDirectContent) pfnASurfaceTransactionSetBufferTransparency(presentTransaction, window->control, ASURFACE_TRANSACTION_TRANSPARENCY_OPAQUE);
-            if (pfnASurfaceTransactionSetOnCommit) pfnASurfaceTransactionSetOnCommit(presentTransaction, this, DisplayX::onCommitCallback);
-            if (drawable->isDisplayX) {
-                auto *ptr = presentRequest.release();
-                pfnASurfaceTransactionSetOnComplete(presentTransaction, ptr, DisplayX::onCompleteCallback);
-                env->CallVoidMethod(xServer->xserverDisplayActivity, cache->updateFrameRating, window->windowObj);
-            }    
-        }
-        
+        if (pfnASurfaceTransactionSetOnCommit) pfnASurfaceTransactionSetOnCommit(presentTransaction, this, DisplayX::onCommitCallback);
+        if (!completeContext->requests.empty()) pfnASurfaceTransactionSetOnComplete(presentTransaction, completeContext.release(), DisplayX::onCompleteCallback);
         pfnASurfaceTransactionApply(presentTransaction);
     }
     
@@ -595,8 +615,6 @@ void DisplayX::requestWindowUpdate(Drawable *drawable, Window *window) {
     presentRequest->window = window;
     
     presentRequests.push(std::move(presentRequest));
-    
-    presentLock.notify();
 }
 
 void DisplayX::requestCursorUpdate() {
