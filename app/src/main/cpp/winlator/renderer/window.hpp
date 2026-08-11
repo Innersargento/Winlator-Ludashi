@@ -14,6 +14,7 @@ struct Window {
     int height;
     int x;
     int y;
+    int z_order;
     std::string className;
     bool mapped;
     bool inputOutput;

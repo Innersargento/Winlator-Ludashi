@@ -609,6 +609,7 @@ void DisplayX::createWindowControl(Window *window) {
         pfnASurfaceControlAcquire(window->control);
     
     pfnASurfaceTransactionSetEnableBackPressure(windowTransaction, window->control, false);
+    pfnASurfaceTransactionSetZOrder(windowTransaction, window->control, window->z_order);
     pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
     
     if (pfnASurfaceTransactionSetPosition) {
@@ -674,6 +675,35 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
             .bottom = window->y + window->height
         };
         pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, src, dst, 0);
+    }
+    
+    pfnASurfaceTransactionApply(windowTransaction);
+}
+
+void DisplayX::changeZOrder(Window *window, Window *sibling, int stackMode) {
+    if (sibling) {
+        window->z_order = stackMode == 1 ? sibling->z_order + 1 : sibling->z_order - 1;
+        pfnASurfaceTransactionSetZOrder(windowTransaction, window->control, window->z_order);
+    }
+    else {
+        if (stackMode == 1) {
+            int max = 0;
+            for (auto& child : window->parent->children) {
+                if (child->z_order > max)
+                    max = child->z_order;
+            }
+            window->z_order = max + 1;
+            pfnASurfaceTransactionSetZOrder(windowTransaction, window->control, window->z_order);
+        }
+        else {
+            int min = 0;
+            for (auto& child : window->parent->children) {
+                if (child->z_order < min)
+                    min = child->z_order;
+            }
+            window->z_order = min - 1;
+            pfnASurfaceTransactionSetZOrder(windowTransaction, window->control, window->z_order);
+        }
     }
     
     pfnASurfaceTransactionApply(windowTransaction);
@@ -844,6 +874,7 @@ void DisplayX::resizeRootWindow() {
     
     pfnASurfaceTransactionSetGeometry(windowTransaction, rootWindow->control, src, dst, 0);
     pfnASurfaceTransactionSetBuffer(windowTransaction, rootWindow->control, rootWindow->drawable->ahb, -1);
+    pfnASurfaceTransactionSetZOrder(windowTransaction, rootWindow->control, rootWindow->z_order);
     pfnASurfaceTransactionApply(windowTransaction);
 }
 
