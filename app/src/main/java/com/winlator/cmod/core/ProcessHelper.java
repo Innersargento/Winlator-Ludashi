@@ -276,11 +276,29 @@ public abstract class ProcessHelper {
                 data = br.readLine();
             }
             catch (IOException e) {}
+            if (data == null) data = "";
+            String cmdline = readCmdline(proc, allPids[index]);
+            String haystack = data + " " + cmdline;
             for (String filter : filterList) {
-                if (data.contains(filter))
+                if (haystack.contains(filter)) {
                     filteredPids.add(allPids[index]);
+                    break;  // add each pid at most once (avoids the double-add when it matches both filters)
+                }
             }
         }
         return filteredPids;
+    }
+
+    private static String readCmdline(File proc, String pid) {
+        try (FileInputStream fr = new FileInputStream(proc + "/" + pid + "/cmdline")) {
+            byte[] buf = new byte[512];
+            int n = fr.read(buf);
+            if (n <= 0) return "";
+            StringBuilder sb = new StringBuilder(n);
+            for (int i = 0; i < n; i++) sb.append(buf[i] == 0 ? ' ' : (char) buf[i]);
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
     }
 }
