@@ -291,7 +291,7 @@ void DisplayX::networkThreadLoop() {
                             presentRequest->drawable = drawable;
                             presentRequest->sync_fence = fence;
                             presentRequest->presentId = present_id;
-                            presentRequest->clientFd = events[id].data.fd;
+                            presentRequest->clientFd = events[i].data.fd;
                             presentRequest->window = swapchain->window;
                             presentRequest->swapchainId = id;
                             
