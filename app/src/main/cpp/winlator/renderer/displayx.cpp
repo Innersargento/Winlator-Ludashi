@@ -90,10 +90,12 @@ void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
         });
     }
     
-    if (!self->presentRequests.empty() && !self->requestUpdate) {
+    {
         auto lock = self->presentLock.lock();
-        self->requestUpdate = true;
-        self->presentLock.notify();
+        if (!self->presentRequests.empty()) {
+            self->requestUpdate = true;
+            self->presentLock.notify();
+        }
     }
     
     pfnAChoreographerPostFrameCallback64(self->choreographer, DisplayX::onFrameCallback64, self);
