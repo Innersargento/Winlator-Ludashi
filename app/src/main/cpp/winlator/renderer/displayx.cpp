@@ -275,7 +275,7 @@ void DisplayX::networkThreadLoop() {
                             
                             fence = readFD(events[i].data.fd);
                             
-                            read(events[id].data.fd, &present_id, 8);
+                            read(events[i].data.fd, &present_id, 8);
                             
                             auto swapchain = clientSwapchains[id].get();
                             if (!swapchain)
