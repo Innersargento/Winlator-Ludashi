@@ -84,10 +84,7 @@ void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
     auto *self = reinterpret_cast<DisplayX *>(data);
    
     if (self->cursorUpdate && self->cursorManager->control && !self->paused) {
-        self->queueEvent([self] { 
-            self->updateCursorPosition();
-            self->cursorUpdate = false;
-        });
+        self->eventLock.notify();
     }
     
     {
@@ -328,7 +325,7 @@ void DisplayX::eventThreadLoop() {
         
         auto lock = eventLock.lock();
         eventLock.wait(lock, [&]{ 
-            return stopped || state != State::NONE || !eventQueue.empty();
+            return stopped || state != State::NONE || !eventQueue.empty() || cursorUpdate;
         });
         
         if (stopped) {
@@ -395,6 +392,11 @@ void DisplayX::eventThreadLoop() {
                 eventsPending--;
             }
             presentLock.notify();
+        }
+        
+        if (cursorUpdate) {
+            updateCursorPosition();
+            cursorUpdate = false;
         }
     }
 }
@@ -621,7 +623,6 @@ void DisplayX::requestWindowUpdate(Drawable *drawable, Window *window) {
 
 void DisplayX::requestCursorUpdate() {
     if (!cursorVisible) return;
-    
     this->cursorUpdate = true;
 }
 
