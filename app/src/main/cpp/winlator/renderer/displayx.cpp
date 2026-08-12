@@ -410,7 +410,7 @@ int64_t DisplayX::getCurrentTimeNanos() {
 
 void DisplayX::onCommitCallback(void *context, ASurfaceTransactionStats *stats) {
     auto *self = reinterpret_cast<DisplayX *>(context);
-    if (!self->isPerformanceHintAPIAvailable() || !self->performanceHintSession || !self->performanceHintManager)
+    if (!self->isPerformanceHintAPIAvailable() || !self->performanceHintSession || !self->performanceHintManager || !self->perfMode)
         return;
     
     if (self->previousReportedWorkTime == 0) {
@@ -442,9 +442,9 @@ void DisplayX::presentThreadLoop() {
     ASurfaceTransaction *presentTransaction = pfnASurfaceTransactionCreate();
     JNIEnv *env = cache->getEnv();
     
-    if (isPerformanceHintAPIAvailable()) {
+    if (isPerformanceHintAPIAvailable() && perfMode) {
         performanceHintManager = pfnAPerformanceHintGetManager();
-        float targetFloat = this->perfMode ? xServer->refreshRate * 100.0f : xServer->refreshRate;
+        float targetFloat = xServer->refreshRate * 100.0f;
         int64_t targetWorkDuration = static_cast<int64_t>(1000000000.0f / targetFloat);
     
         int tid = gettid();
@@ -503,7 +503,7 @@ void DisplayX::presentThreadLoop() {
             }
         }
         
-        if (pfnASurfaceTransactionSetOnCommit) pfnASurfaceTransactionSetOnCommit(presentTransaction, this, DisplayX::onCommitCallback);
+        if (perfMode && pfnASurfaceTransactionSetOnCommit) pfnASurfaceTransactionSetOnCommit(presentTransaction, this, DisplayX::onCommitCallback);
         if (!completeContext->requests.empty()) pfnASurfaceTransactionSetOnComplete(presentTransaction, completeContext.release(), DisplayX::onCompleteCallback);
         pfnASurfaceTransactionApply(presentTransaction);
     }
