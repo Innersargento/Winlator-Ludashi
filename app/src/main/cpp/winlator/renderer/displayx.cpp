@@ -89,7 +89,7 @@ void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
     
     {
         auto lock = self->presentLock.lock();
-        if (!self->presentRequests.empty()) {
+        if (!self->presentRequests.empty() && self->presentRR) {
             self->requestUpdate = true;
             self->presentLock.notify();
         }
@@ -293,6 +293,7 @@ void DisplayX::networkThreadLoop() {
                             presentRequest->swapchainId = id;
                             
                             presentRequests.push(std::move(presentRequest));
+                            if (!presentRR) presentLock.notify();
                             break;
                         }    
                         case DESTROY_CLIENT_SWAPCHAIN: {
@@ -457,7 +458,7 @@ void DisplayX::presentThreadLoop() {
         auto lock = presentLock.lock();
         
         presentLock.wait(lock, [&]{ 
-            return stopped || (eventsPending == 0 && requestUpdate && hasSurface && surfaceChanged && !paused);
+            return stopped || (eventsPending == 0 && ((requestUpdate && presentRR) || (!presentRequests.empty() && !presentRR)) && hasSurface && surfaceChanged && !paused);
         });
         
         if (stopped) {
@@ -473,7 +474,7 @@ void DisplayX::presentThreadLoop() {
             requests.push(std::move(presentRequest));
         }
         
-        requestUpdate = false;
+        if (presentRR) requestUpdate = false;
         lock.unlock();
         
         auto completeContext = std::make_unique<OnCompleteContext>();
@@ -619,6 +620,7 @@ void DisplayX::requestWindowUpdate(Drawable *drawable, Window *window) {
     presentRequest->window = window;
     
     presentRequests.push(std::move(presentRequest));
+    if (!presentRR) presentLock.notify();
 }
 
 void DisplayX::requestCursorUpdate() {
@@ -960,4 +962,8 @@ void DisplayX::toggleFullscreen() {
 
 void DisplayX::setPerformanceMode(bool perfMode) {
     this->perfMode = perfMode;
+}
+
+void DisplayX::setPresentRR(bool presentRR) {
+    this->presentRR = presentRR;
 }

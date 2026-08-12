@@ -126,6 +126,7 @@ class DisplayX {
         std::atomic_bool cursorUpdate{false};
         std::atomic_bool surfaceChanged{false};
         std::atomic_bool perfMode{true};
+        std::atomic_bool presentRR{true};
         
         bool requestUpdate = false;
         
@@ -181,4 +182,5 @@ class DisplayX {
         void drawRootCursor();
         void toggleFullscreen();
         void setPerformanceMode(bool perfMode);
+        void setPresentRR(bool presentRR);
 };

@@ -83,6 +83,7 @@ class JNICache {
         jclass xserverDisplayActivityClass;
         jmethodID updateFrameRating;
         jfieldID performanceMode;
+        jfieldID presentRR;
         
         JNICache() {}
         
@@ -152,6 +153,7 @@ class JNICache {
             LOAD_METHOD_ID(updateFrameRating, env, xserverDisplayActivityClass, "updateFrameRating", "(Lcom/winlator/cmod/xserver/Window;)V");
             LOAD_METHOD_ID(getRefreshRate, env, xserverDisplayActivityClass, "getRefreshRate", "()F");
             LOAD_FIELD_ID(performanceMode, env, xserverDisplayActivityClass, "performanceMode", "Z");
+            LOAD_FIELD_ID(presentRR, env, xserverDisplayActivityClass, "presentRR", "Z");
             
             this->xserverClass = (jclass)env->NewGlobalRef(xServerClass);
             this->windowClass = (jclass)env->NewGlobalRef(windowClass);

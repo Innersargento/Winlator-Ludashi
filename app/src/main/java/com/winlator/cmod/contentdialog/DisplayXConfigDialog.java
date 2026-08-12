@@ -11,7 +11,7 @@ import com.winlator.cmod.core.AppUtils;
 import com.winlator.cmod.core.KeyValueSet;
 
 public class DisplayXConfigDialog extends ContentDialog {
-    public static String DEFAULT_CONFIG = "trueDisplayX=0" + ",performanceMode=1" + ",surfaceFormat=rgba8";
+    public static String DEFAULT_CONFIG = "trueDisplayX=0" + ",performanceMode=1" + ",surfaceFormat=rgba8" + ",presentRR=1";
     private Context context;
     
     public DisplayXConfigDialog(View anchor) {
@@ -22,6 +22,7 @@ public class DisplayXConfigDialog extends ContentDialog {
         
         final CheckBox cbEnableTrueDisplayX = findViewById(R.id.CBEnableTrueDisplayX);
         final CheckBox cbEnablePerfMode = findViewById(R.id.CBEnablePerfMode);
+        final CheckBox cbSyncRR = findViewById(R.id.CBPresentRR);
         final Spinner sSurfaceFormat = findViewById(R.id.SSurfaceFormat);
         
         String tag = anchor.getTag().toString();
@@ -29,11 +30,13 @@ public class DisplayXConfigDialog extends ContentDialog {
         
         cbEnableTrueDisplayX.setChecked(config.get("trueDisplayX").equals("1") ? true : false);
         cbEnablePerfMode.setChecked(config.get("performanceMode").equals("1") ? true : false);
+        cbSyncRR.setChecked(config.get("presentRR").equals("1") ? true : false);
         AppUtils.setSpinnerSelectionFromIdentifier(sSurfaceFormat, config.get("surfaceFormat"));
         
         setOnConfirmCallback(() -> {
             config.put("trueDisplayX", cbEnableTrueDisplayX.isChecked() ? "1": "0");
             config.put("performanceMode", cbEnablePerfMode.isChecked() ? "1" : "0");
+            config.put("presentRR", cbSyncRR.isChecked() ? "1" : "0");
             config.put("surfaceFormat", sSurfaceFormat.getSelectedItem().toString());
             anchor.setTag(config.toString());
         });

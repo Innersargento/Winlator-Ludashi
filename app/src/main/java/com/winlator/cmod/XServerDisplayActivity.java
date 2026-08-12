@@ -203,6 +203,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private EnvVars overrideEnvVars;
     
     public boolean performanceMode;
+    public boolean presentRR;
 
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
@@ -507,6 +508,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             displayxConfig = shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG);
             this.displayxConfig = DisplayXConfigDialog.parseConfig(displayxConfig);
             this.performanceMode = this.displayxConfig.get("performanceMode").equals("1") ? true : false;
+            this.presentRR = this.displayxConfig.get("presentRR").equals("1") ? true : false;
         }
 
         this.graphicsDriverConfig = GraphicsDriverConfigDialog.parseGraphicsDriverConfig(graphicsDriverConfig);
