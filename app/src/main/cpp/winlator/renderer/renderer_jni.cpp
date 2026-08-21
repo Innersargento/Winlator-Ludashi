@@ -426,7 +426,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateWindowContent(JNIEnv *env,
     window->hasContent = true;
     
     if (xserver.isDisplayX())
-        displayX.requestWindowUpdate(window->drawable.get(), window);
+        displayX.requestWindowUpdate(window);
     else
         renderer.requestRenderer();
 }
@@ -581,7 +581,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateDirectContent(JNIEnv *env,
     window->currentDirectContent = directContent;
     
     if (xserver.isDisplayX())
-        displayX.requestWindowUpdate(directContent, window);
+        displayX.requestWindowUpdate(window);
     else    
         renderer.requestRenderer();
 }

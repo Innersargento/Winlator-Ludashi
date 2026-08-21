@@ -605,11 +605,11 @@ void DisplayX::queueEvent(std::function<void()> func) {
     eventLock.notify();
 }
 
-void DisplayX::requestWindowUpdate(Drawable *drawable, Window *window) {
+void DisplayX::requestWindowUpdate(Window *window) {
     auto lock = presentLock.lock();
     
     auto presentRequest = std::make_unique<PresentRequest>();
-    presentRequest->drawable = drawable;
+    presentRequest->drawable = window->hasDirectContents() ? window->currentDirectContent : window->drawable.get();
     presentRequest->sync_fence = -1;
     presentRequest->presentId = -1;
     presentRequest->clientFd = -1;
