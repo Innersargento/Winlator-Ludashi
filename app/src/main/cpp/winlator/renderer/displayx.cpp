@@ -237,18 +237,14 @@ void DisplayX::networkThreadLoop() {
                             for (uint32_t j = 0; j < imageCount; j++) {
                                 auto drawable = std::make_unique<Drawable>();
                                 drawable->id = -1;
-                                drawable->textureId = -1;
                                 drawable->width = window->width;
                                 drawable->height = window->height;
                                 drawable->data = nullptr;
-                                drawable->isDirty = false;
-                                drawable->format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
-                                drawable->sizeChanged = false;
-                                
                                 AHardwareBuffer_recvHandleFromUnixSocket(events[i].data.fd, &drawable->ahb);
                                 AHardwareBuffer_Desc outDesc{};
                                 AHardwareBuffer_describe(drawable->ahb, &outDesc);
                                 drawable->stride = outDesc.stride;
+                                drawable->format = outDesc.format;
                                 drawable->isDirectContent = false;
                                 drawable->isDisplayX = true;
                                 drawable->drawableObj = nullptr;
@@ -685,10 +681,8 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
     
     int ret;
     
-    if (resized) {
-        window->drawable->sizeChanged = false;
+    if (resized)
         pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, nullptr, -1);
-    }
     
     if (pfnASurfaceTransactionSetPosition) {
         pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
