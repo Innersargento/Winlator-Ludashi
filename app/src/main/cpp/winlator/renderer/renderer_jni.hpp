@@ -6,8 +6,13 @@
 #include <android/log.h>
 #include <android/surface_control.h>
 
-#define LOG_TAG "EGLRenderer"
-#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#define EGL_EGLEXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES
+
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 #define HAL_PIXEL_FORMAT_BGRA_8888 5
 
@@ -86,6 +91,7 @@ class JNICache {
         jclass xserverDisplayActivityClass;
         jmethodID updateFrameRating;
         jfieldID performanceMode;
+        jfieldID presentRR;
         
         JNICache() {}
         
@@ -155,6 +161,7 @@ class JNICache {
             LOAD_METHOD_ID(updateFrameRating, env, xserverDisplayActivityClass, "updateFrameRating", "(Lcom/winlator/cmod/xserver/Window;)V");
             LOAD_METHOD_ID(getRefreshRate, env, xserverDisplayActivityClass, "getRefreshRate", "()F");
             LOAD_FIELD_ID(performanceMode, env, xserverDisplayActivityClass, "performanceMode", "Z");
+            LOAD_FIELD_ID(presentRR, env, xserverDisplayActivityClass, "presentRR", "Z");
             
             this->xserverClass = (jclass)env->NewGlobalRef(xServerClass);
             this->windowClass = (jclass)env->NewGlobalRef(windowClass);

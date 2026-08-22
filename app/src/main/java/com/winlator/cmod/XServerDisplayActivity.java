@@ -204,6 +204,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private EnvVars overrideEnvVars;
 
     public boolean performanceMode;
+    public boolean presentRR;
 
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
@@ -485,6 +486,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             displayxConfig = shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG);
             this.displayxConfig = DisplayXConfigDialog.parseConfig(displayxConfig);
             this.performanceMode = this.displayxConfig.get("performanceMode").equals("1") ? true : false;
+            this.presentRR = this.displayxConfig.get("presentRR").equals("1") ? true : false;
         }
 
         this.graphicsDriverConfig = GraphicsDriverConfigDialog.parseGraphicsDriverConfig(graphicsDriverConfig);
@@ -760,7 +762,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         savePlaytimeData();
         handler.removeCallbacks(savePlaytimeRunnable);
-        ProcessHelper.pauseAllWineProcesses();
     }
 
 
@@ -1532,7 +1533,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
 
         envVars.put("VK_ICD_FILENAMES", imageFs.getShareDir() + "/vulkan/icd.d/wrapper_icd.aarch64.json");
-        envVars.put("GALLIUM_DRIVER", "zink");
+        envVars.put("MESA_LOADER_DRIVER_OVERRIDE", "zink");
 
         if (firstTimeBoot) {
             Log.d("XServerDisplayActivity", "First time container boot, re-extracting libs");

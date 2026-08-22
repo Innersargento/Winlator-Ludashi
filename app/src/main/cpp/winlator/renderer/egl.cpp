@@ -1,5 +1,8 @@
 #include "egl.hpp"
 
+#define LOG_TAG "EGLRenderer"
+#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+
 void EGLRenderer::start() {
     renderingThread = std::thread(&EGLRenderer::renderingThreadLoop, this);
 }
@@ -12,7 +15,7 @@ void EGLRenderer::queueEvent(std::function<void()> func) {
 
 void EGLRenderer::requestRenderer() {
     auto lock = renderLock.lock();
-    state = State::REQUEST_RENDERER;
+    requestUpdate = true;
     renderLock.notify();
 }
 
@@ -25,111 +28,145 @@ void EGLRenderer::createSurface(ANativeWindow *window) {
 }
 
 void EGLRenderer::destroySurface() {
-      auto lock = renderLock.lock();
-      this->window = nullptr;
-      state = State::DESTROY_SURFACE;
-      renderLock.notify();
-      renderLock.wait(lock, [&]{ return state == State::NONE; });
+    auto lock = renderLock.lock();
+    this->window = nullptr;
+    state = State::DESTROY_SURFACE;
+    renderLock.notify();
+    renderLock.wait(lock, [&]{ return state == State::NONE; });
 }
 
 void EGLRenderer::changeSurface(int width, int height) {
-      auto lock = renderLock.lock();
-      this->surfaceWidth = width;
-      this->surfaceHeight = height;
-      state = State::CHANGE_SURFACE;
-      renderLock.notify();
-      renderLock.wait(lock, [&]{ return state == State::RENDER_COMPLETE; });
+    auto lock = renderLock.lock();
+    this->surfaceWidth = width;
+    this->surfaceHeight = height;
+    state = State::CHANGE_SURFACE;
+    renderLock.notify();
+    renderLock.wait(lock, [&]{ return state == State::NONE; });
+}
+
+void EGLRenderer::stop() {
+    stopped = true;
+    renderLock.notify();
+}
+
+void EGLRenderer::pause() {
+    auto lock = renderLock.lock();
+    state = State::PAUSE;
+    renderLock.notify();
+    renderLock.wait(lock, [&]{ return state == State::NONE; });
+}
+
+void EGLRenderer::resume() {
+    auto lock = renderLock.lock();
+    state = State::RESUME;
+    renderLock.notify();
+    renderLock.wait(lock, [&]{ return state == State::NONE; });
 }
 
 void EGLRenderer::renderingThreadLoop() {
     bool createEGLSurface = false;
-    bool sizeChanged = false;
+    bool surfaceChanged = false;
     bool hasSurface = false;
     bool paused = false;
+    bool badSurface = false;
+    bool badContext = false;
+    int w = 0;
+    int h = 0;
     
     this->env = cache->getEnv();
     
     while (true) {
         std::function<void()> func = nullptr;
         bool requestRender = false;
-        bool wantRendererNotification = false;
+        bool sizeChanged = false;
         
         auto lock = renderLock.lock();
         renderLock.wait(lock, [&]{ 
             if (paused) {
-                return (state != State::REQUEST_RENDERER && state != State::NONE) || !eventQueue.empty();
+                return stopped || state != State::NONE || !eventQueue.empty();
             } else {
-                return state != State::NONE || !eventQueue.empty();
+                return stopped || state != State::NONE || !eventQueue.empty() || requestUpdate;
             } 
         });
         
-        if (state == State::STOP) {
-            printf("Received state STOP");
+        State currState = state;
+        state = State::NONE;
+        
+        if (stopped) {
+            printf("Stopping renderingThread");
             cache->detachEnv(env);
-            state = State::NONE;
-            renderLock.notify();
             return;
         }
         
         if (!eventQueue.empty()) {
             func = eventQueue.front();
             eventQueue.pop();
+            lock.unlock();
+            func();
+            continue;
         }    
-        else {
-            if (state == State::PAUSE) {
-                printf("Received state PAUSE");
-                paused = true;
-                state = State::NONE;
-                renderLock.notify();
-            }
+        
+        if (currState == State::PAUSE) {
+            printf("Received state PAUSE");
+            paused = true;
+            renderLock.notify();
+        }
             
-            if (state == State::RESUME) {
-                printf("Received state RESUME");
-                paused = false;
-                state = State::NONE;
-            }
+        if (currState == State::RESUME) {
+            printf("Received state RESUME");
+            paused = false;
+            renderLock.notify();
+        }
+        
+        if (badSurface || badContext) {
+            printf("Invalidating current context and surface");
+            eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        }
+        
+        if (badContext) {
+            printf("Destroying invalid context");
+            destroyEGLContext();
+            badContext = false;
+        }
+        
+        if (badSurface) {
+            printf("Destroying invalid surface");
+            destroyEGLSurface();
+            badSurface = false;
+        }
+        
+        if (currState == State::CREATE_SURFACE) {
+            printf("Received state CREATE_SURFACE");
+            hasSurface = true;
+            renderLock.notify();
+        }
             
-            if (paused && surface != EGL_NO_SURFACE) {
-                printf("Destroying stale EGLSurface");
-                destroyEGLSurface();
-                surface = EGL_NO_SURFACE;
-            }
+        if (currState == State::CHANGE_SURFACE) {
+            printf("Received state CHANGE_SURFACE");
+            viewTransformation.update(surfaceWidth, surfaceHeight, windowManager->getRootWindow()->width, windowManager->getRootWindow()->height);    
+            viewportNeedsUpdate = true;
+            surfaceChanged = true;
+            sizeChanged = true;
+            requestUpdate = true;
+            renderLock.notify();
+        }
             
-            if (state == State::CREATE_SURFACE) {
-                printf("Received state CREATE_SURFACE");
-                hasSurface = true;
-                state = State::NONE;
-                renderLock.notify();
-            }
+        if (currState == State::DESTROY_SURFACE) {
+            printf("Received state DESTROY_SURFACE");
+            hasSurface = false;
+            surfaceChanged = false;
+            badSurface = true;
+            renderLock.notify();
+        }
             
-            if (state == State::CHANGE_SURFACE) {
-                printf("Received state CHANGE_SURFACE");
-                sizeChanged = true;
-                state = State::REQUEST_RENDERER;
-                wantRendererNotification = true;
-            }
-            
-            if (state == State::DESTROY_SURFACE) {
-                printf("Received state DESTROY_SURFACE");
-                hasSurface = false;
-                state = State::NONE;
-                renderLock.notify();
-            }
-            
-            if (state == State::REQUEST_RENDERER && hasSurface && !paused) {
-                if (context == EGL_NO_CONTEXT) init();
-                if (surface == EGL_NO_SURFACE) createEGLSurface = true;
-                requestRender = true;
-                state = State::NONE;
-            }
+        if (requestUpdate && hasSurface && surfaceChanged && !badSurface && !badContext && !paused) {
+            if (context == EGL_NO_CONTEXT) init();
+            if (surface == EGL_NO_SURFACE) createEGLSurface = true;
+            requestRender = requestUpdate;
+            requestUpdate = false;
         }
         
         lock.unlock();
-        
-        if (func) {
-            func();
-            continue;
-        }
         
         if (createEGLSurface) {
             this->createEGLSurface(this->window);
@@ -137,29 +174,30 @@ void EGLRenderer::renderingThreadLoop() {
         }
         
         if (sizeChanged) {
-            viewTransformation.update(surfaceWidth, surfaceHeight, windowManager->getRootWindow()->width, windowManager->getRootWindow()->height);    
-            viewportNeedsUpdate = true;
-            sizeChanged = false;
-            drawFrame();
-            eglSwapBuffers(display, surface);
+            printf("Redrawing screen after surface changed");
+            EGLBoolean ret = drawFrame();
+            if (ret == EGL_FALSE) {
+                printf("Failed to redraw screen");
+                requestRender = false;
+                int error = eglGetError();
+                if (error == EGL_BAD_SURFACE) badSurface = true;
+                else if (error == EGL_CONTEXT_LOST) badContext = true;
+            }
         }
         
-        if (requestRender && surface != EGL_NO_SURFACE) {
-            drawFrame();
-            eglSwapBuffers(display, surface);
-        }
-        
-        if (wantRendererNotification) {
-            wantRendererNotification = false;
-            lock.lock();
-            state = State::RENDER_COMPLETE;
-            renderLock.notify();
-            lock.unlock();
+        if (requestRender) {
+            EGLBoolean ret = drawFrame();
+            if (ret == EGL_FALSE) {
+                printf("Failed to draw frame");
+                int error = eglGetError();
+                if (error == EGL_BAD_SURFACE) badSurface = true;
+                else if (error == EGL_CONTEXT_LOST) badContext = true;
+            }
         }
     }
 }
 
-void EGLRenderer::drawFrame() {
+EGLBoolean EGLRenderer::drawFrame() {
     if (toggleFullscreen) {
         fullscreen = !fullscreen;
         toggleFullscreen = false;
@@ -223,6 +261,8 @@ void EGLRenderer::drawFrame() {
     if (!magnifierEnabled && !fullscreen) {
         glDisable(GL_SCISSOR_TEST);
     }
+    
+    return eglSwapBuffers(display, surface);
 }
     
 void EGLRenderer::renderWindows() {
@@ -261,29 +301,31 @@ void EGLRenderer::renderCursor() {
 void EGLRenderer::renderDrawable(Drawable *drawable, int x, int y, bool isWindow) {
     if (drawable == nullptr) return;
     
-    if (drawable->textureId < 0) {
-        if (drawable->data == nullptr) 
-            drawable->textureId = allocateTextureDirect(drawable->ahb);
-        else
-            drawable->textureId = allocateTexture(drawable->width, drawable->height);
+    if (drawable->texture == nullptr) {
+        if (drawable->ahb != nullptr) 
+            drawable->texture = allocateTextureDirect(drawable->ahb);
+        else if (drawable->data != nullptr)
+            drawable->texture = allocateTexture(drawable->width, drawable->height);
     }    
-    else if (drawable->sizeChanged) {
-        if (drawable->data == nullptr) 
-            drawable->textureId = allocateTextureDirect(drawable->ahb);
+    else if (drawable->texture->sizeChanged) {
+        if (drawable->ahb != nullptr) 
+            reallocateTextureDirect(drawable->texture.get(), drawable->ahb);
         else    
-            reallocateTexture(drawable->textureId, drawable->width, drawable->height);
-        drawable->sizeChanged = false;
+            reallocateTexture(drawable->texture.get(), drawable->width, drawable->height);
+            
+        drawable->texture->sizeChanged = false;
     }
         
-    if (drawable->isDirty) {
-        updateTextureDrawable(drawable->textureId, drawable->width, drawable->height, drawable->data);
-        drawable->isDirty = false;
+    if (drawable->texture->isDirty) {
+        updateTextureDrawable(drawable->texture.get(), drawable->width, drawable->height, drawable->data);
+        drawable->texture->isDirty = false;
     }    
     
-    XForm::set(tmpXForm1, x, y, drawable->width, drawable->height);
-    XForm::multiply(tmpXForm1, tmpXForm1, tmpXForm2);
-    
-    renderDrawable(drawable->textureId, 6, tmpXForm1, isWindow);
+    if (drawable->texture) {
+        XForm::set(tmpXForm1, x, y, drawable->width, drawable->height);
+        XForm::multiply(tmpXForm1, tmpXForm1, tmpXForm2);
+        renderDrawable(drawable->texture.get(), 6, tmpXForm1, isWindow);
+    }
 }
 
 void EGLRenderer::updateScene() {
@@ -370,6 +412,10 @@ void EGLRenderer::init() {
         printf("Failed to create egl context");
         return;
     }
+    
+    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context);
+    
+    drawableShader = new DrawableShader();
 }
 
 void EGLRenderer::createEGLSurface(ANativeWindow *window) {
@@ -396,13 +442,11 @@ void EGLRenderer::createEGLSurface(ANativeWindow *window) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    
-    drawableShader = new DrawableShader();
 }
 
-void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool isFromWindow) {
+void EGLRenderer::renderDrawable(Texture *texture, int length, float xform[], bool isFromWindow) {
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, textureId);
+    glBindTexture(GL_TEXTURE_2D, texture->id);
     glUniform1i(drawableShader->getUniformLoc("texture"), 0);
     glUniform1fv(drawableShader->getUniformLoc("xform"), length, xform);
     glUniform1i(drawableShader->getUniformLoc("is_cursor"), isFromWindow ? 0 : 1);
@@ -410,113 +454,125 @@ void EGLRenderer::renderDrawable(int textureId, int length, float xform[], bool 
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-int EGLRenderer::allocateTextureDirect(AHardwareBuffer* hardwareBuffer) {
-    int textureId;
+std::unique_ptr<Texture> EGLRenderer::allocateTextureDirect(AHardwareBuffer* hardwareBuffer) {
+    if (!hardwareBuffer || !display) return nullptr;
     
-    if (!hardwareBuffer || !display) {
-        return -1;
+    std::unique_ptr<Texture> texture = std::make_unique<Texture>();
+    
+    const EGLint attribList[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
+
+    EGLClientBuffer clientBuffer = eglGetNativeClientBufferANDROID(hardwareBuffer);
+    if (!clientBuffer) return nullptr;
+
+    texture->eglImage = eglCreateImageKHR(display, EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, clientBuffer, attribList);
+    if (!texture->eglImage) return nullptr;
+    
+    glGenTextures(1, (GLuint *)&texture->id);
+    glActiveTexture(GL_TEXTURE0);
+
+    glBindTexture(GL_TEXTURE_2D, texture->id);
+    if (glGetError() != GL_NO_ERROR) {
+        eglDestroyImageKHR(display, texture->eglImage);
+        return nullptr;
+    }
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, texture->eglImage);
+    if (glGetError() != GL_NO_ERROR) {
+        eglDestroyImageKHR(display, texture->eglImage);
+        return nullptr;
     }
 
+    glBindTexture(GL_TEXTURE_2D, 0);
+    
+    return texture;
+}
+
+std::unique_ptr<Texture> EGLRenderer::allocateTexture(int width, int height) {
+    std::unique_ptr<Texture> texture = std::make_unique<Texture>();
+    
+    glGenTextures(1, (GLuint *)&texture->id);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glBindTexture(GL_TEXTURE_2D, texture->id);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT, width, height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, nullptr);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    
+    return texture;
+}
+
+void EGLRenderer::reallocateTexture(Texture *texture, int width, int height) {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture->id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT, width, height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void EGLRenderer::reallocateTextureDirect(Texture *texture, AHardwareBuffer* hardwareBuffer) {
+    if (!hardwareBuffer || !display) {
+        destroyTexture(texture);
+        return;
+    }
+    
     const EGLint attribList[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
 
     EGLClientBuffer clientBuffer = eglGetNativeClientBufferANDROID(hardwareBuffer);
     if (!clientBuffer) {
-        return -1;
-    }
-
-    EGLImageKHR imageKHR = eglCreateImageKHR(display, EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, clientBuffer, attribList);
-    if (!imageKHR) {
-        return -1;
+        destroyTexture(texture);
+        return;
     }
     
-    glGenTextures(1, (GLuint *)&textureId);
+    eglDestroyImageKHR(display, texture->eglImage);
+    
+    texture->eglImage = eglCreateImageKHR(display, EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, clientBuffer, attribList);
+    if (!texture->eglImage) {
+        destroyTexture(texture);
+        return;
+    }
+    
     glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture->id);
 
-    glBindTexture(GL_TEXTURE_2D, textureId);
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, texture->eglImage);
     if (glGetError() != GL_NO_ERROR) {
-        eglDestroyImageKHR(display, imageKHR);
-        return -1;
-    }
-    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, imageKHR);
-    if (glGetError() != GL_NO_ERROR) {
-        eglDestroyImageKHR(display, imageKHR);
-        return -1;
+        destroyTexture(texture);
+        return;
     }
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    eglDestroyImageKHR(display, imageKHR);
+}
+
+void EGLRenderer::destroyTexture(Texture* texture) {
+    if (!texture) return;
     
-    return textureId;
+    glDeleteTextures(1, (GLuint *)&texture->id);
+    eglDestroyImageKHR(display, texture->eglImage);
 }
 
-int EGLRenderer::allocateTexture(int width, int height) {
-    int textureId;
-    glGenTextures(1, (GLuint *)&textureId);
-
-    glActiveTexture(GL_TEXTURE0);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glBindTexture(GL_TEXTURE_2D, textureId);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT, width, height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, nullptr);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    
-    return textureId;
-}
-
-int EGLRenderer::reallocateTexture(int textureId, int width, int height) {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, textureId);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT, width, height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    return textureId;
-}
-
-void EGLRenderer::destroyTexture(int textureId) {
-    glDeleteTextures(1, (GLuint *)&textureId);
-}
-
-void EGLRenderer::updateTextureDrawable(int textureId, int width, int height, void *data) {
-    glBindTexture(GL_TEXTURE_2D, textureId);
+void EGLRenderer::updateTextureDrawable(Texture *texture, int width, int height, void *data) {
+    glBindTexture(GL_TEXTURE_2D, texture->id);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA_EXT, GL_UNSIGNED_BYTE, data);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void EGLRenderer::destroyEGLSurface() {
-    glFinish();
-    delete drawableShader;
-    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroySurface(display, surface);
+    surface = EGL_NO_SURFACE;
 }
 
-void EGLRenderer::stop() {
-    auto lock = renderLock.lock();
-    state = State::STOP;
-    renderLock.notify();
-    renderLock.wait(lock, [&]{ return state == State::NONE; });
+void EGLRenderer::destroyEGLContext() {
+    eglDestroyContext(display, context);
+    context = EGL_NO_CONTEXT;
 }
-
-void EGLRenderer::pause() {
-    auto lock = renderLock.lock();
-    state = State::PAUSE;
-    renderLock.notify();
-    renderLock.wait(lock, [&]{ return state == State::NONE; });
-}
-
-void EGLRenderer::resume() {
-    auto lock = renderLock.lock();
-    state = State::RESUME;
-    renderLock.notify();
-}
-

@@ -17,11 +17,15 @@
 
 #include "displayx.hpp"
 
+#define LOG_TAG "DisplayX"
+#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+
 using PFNASURFACETRANSACTIONSETPOSITION = void (*)(ASurfaceTransaction*, ASurfaceControl*, int32_t, int32_t);
 using PFNASURFACETRANSACTIONSETBUFFER = void (*)(ASurfaceTransaction*, ASurfaceControl*, AHardwareBuffer*, int);
 using PFNASURFACETRANSACTIONSETGEOMETRY = void (*)(ASurfaceTransaction*, ASurfaceControl*, const ARect&, const ARect&, int32_t);
 using PFNASURFACETRANSACTIONSETZORDER = void (*)(ASurfaceTransaction*, ASurfaceControl*, int32_t);
 using PFNASURFACETRANSACTIONSETVISIBILITY = void (*)(ASurfaceTransaction*, ASurfaceControl*, enum ASurfaceTransactionVisibility);
+using PFNASURFACETRANSACTIONSETBUFFERTRANSPARENCY = void (*)(ASurfaceTransaction*, ASurfaceControl*, enum ASurfaceTransactionTransparency);
 using PFNASURFACETRANSACTIONSETBUFFERALPHA = void (*)(ASurfaceTransaction*, ASurfaceControl*, float);
 using PFNASURFACETRANSACTIONSTATSGETPRESENTFENCEFD = int (*)(ASurfaceTransactionStats*);
 using PFNASURFACETRANSACTIONREPARENT = void (*)(ASurfaceTransaction*, ASurfaceControl*, ASurfaceControl*);
@@ -52,6 +56,7 @@ static PFNASURFACETRANSACTIONSETGEOMETRY pfnASurfaceTransactionSetGeometry = nul
 static PFNASURFACETRANSACTIONSETZORDER pfnASurfaceTransactionSetZOrder = nullptr;
 static PFNASURFACETRANSACTIONSETVISIBILITY pfnASurfaceTransactionSetVisibility = nullptr;
 static PFNASURFACETRANSACTIONSETBUFFERALPHA pfnASurfaceTransactionSetBufferAlpha = nullptr;
+static PFNASURFACETRANSACTIONSETBUFFERTRANSPARENCY pfnASurfaceTransactionSetBufferTransparency = nullptr;
 static PFNASURFACETRANSACTIONREPARENT pfnASurfaceTransactionReparent = nullptr;
 static PFNASURFACETRANSACTIONSETONCOMPLETE pfnASurfaceTransactionSetOnComplete = nullptr;
 static PFNASURFACETRANSACTIONSETONCOMMIT pfnASurfaceTransactionSetOnCommit = nullptr;
@@ -78,13 +83,16 @@ static PFNAPERFORMANCEHINTCLOSESESSION pfnAPerformanceHintCloseSession = nullptr
 void DisplayX::onFrameCallback64(int64_t frameTimeNanos, void* data) {
     auto *self = reinterpret_cast<DisplayX *>(data);
    
-    if (!self->env) {
-        self->env = self->cache->getEnv();
-    }
-
     if (self->cursorUpdate && self->cursorManager->control && !self->paused) {
-        self->updateCursorPosition();
-        self->cursorUpdate = false;
+        self->eventLock.notify();
+    }
+    
+    {
+        auto lock = self->presentLock.lock();
+        if (!self->presentRequests.empty() && self->presentRR) {
+            self->requestUpdate = true;
+            self->presentLock.notify();
+        }
     }
     
     pfnAChoreographerPostFrameCallback64(self->choreographer, DisplayX::onFrameCallback64, self);
@@ -172,6 +180,7 @@ void DisplayX::networkThreadLoop() {
            
     while ((n = epoll_wait(efd, events.data(), 2, -1))) {
         if (stopped) {
+            printf("Stopping networkThread");
             close(server_fd);
             clientSwapchains.erase(clientSwapchains.begin(), clientSwapchains.end());
             return;
@@ -228,18 +237,14 @@ void DisplayX::networkThreadLoop() {
                             for (uint32_t j = 0; j < imageCount; j++) {
                                 auto drawable = std::make_unique<Drawable>();
                                 drawable->id = -1;
-                                drawable->textureId = -1;
                                 drawable->width = window->width;
                                 drawable->height = window->height;
                                 drawable->data = nullptr;
-                                drawable->isDirty = false;
-                                drawable->format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
-                                drawable->sizeChanged = false;
-                                
                                 AHardwareBuffer_recvHandleFromUnixSocket(events[i].data.fd, &drawable->ahb);
                                 AHardwareBuffer_Desc outDesc{};
                                 AHardwareBuffer_describe(drawable->ahb, &outDesc);
                                 drawable->stride = outDesc.stride;
+                                drawable->format = outDesc.format;
                                 drawable->isDirectContent = false;
                                 drawable->isDisplayX = true;
                                 drawable->drawableObj = nullptr;
@@ -263,7 +268,7 @@ void DisplayX::networkThreadLoop() {
                             
                             fence = readFD(events[i].data.fd);
                             
-                            read(events[id].data.fd, &present_id, 8);
+                            read(events[i].data.fd, &present_id, 8);
                             
                             auto swapchain = clientSwapchains[id].get();
                             if (!swapchain)
@@ -279,13 +284,12 @@ void DisplayX::networkThreadLoop() {
                             presentRequest->drawable = drawable;
                             presentRequest->sync_fence = fence;
                             presentRequest->presentId = present_id;
-                            presentRequest->clientFd = events[id].data.fd;
+                            presentRequest->clientFd = events[i].data.fd;
                             presentRequest->window = swapchain->window;
                             presentRequest->swapchainId = id;
                             
                             presentRequests.push(std::move(presentRequest));
-                            
-                            presentLock.notify();
+                            if (!presentRR) presentLock.notify();
                             break;
                         }    
                         case DESTROY_CLIENT_SWAPCHAIN: {
@@ -311,19 +315,19 @@ void DisplayX::networkThreadLoop() {
 
 void DisplayX::eventThreadLoop() {
     bool restoreState = false;
+    this->env = cache->getEnv();
     
     while (true) {
         std::function<void()> func = nullptr;
         
         auto lock = eventLock.lock();
         eventLock.wait(lock, [&]{ 
-            return stopped || state != State::NONE || !eventQueue.empty();
+            return stopped || state != State::NONE || !eventQueue.empty() || cursorUpdate;
         });
         
         if (stopped) {
-            printf("Received state STOP");
-            stopped = true;
-            presentLock.notify();
+            printf("Stopping eventThread");
+            cache->detachEnv(env);
             return;
         }
         
@@ -346,7 +350,6 @@ void DisplayX::eventThreadLoop() {
         if (currState == State::CREATE_SURFACE) {
             printf("Received state CREATE_SURFACE");
             createRootWindowControl();
-            createRootCursorControl();
             hasSurface = true;
             eventLock.notify();
         }
@@ -368,7 +371,6 @@ void DisplayX::eventThreadLoop() {
             printf("Received state DESTROY_SURFACE");
             hasSurface = false;
             surfaceChanged = false;
-            destroyRootCursorControl();
             destroyRootWindowControl();
             eventLock.notify();
         }
@@ -388,6 +390,11 @@ void DisplayX::eventThreadLoop() {
             }
             presentLock.notify();
         }
+        
+        if (cursorUpdate) {
+            updateCursorPosition();
+            cursorUpdate = false;
+        }
     }
 }
 
@@ -400,7 +407,7 @@ int64_t DisplayX::getCurrentTimeNanos() {
 
 void DisplayX::onCommitCallback(void *context, ASurfaceTransactionStats *stats) {
     auto *self = reinterpret_cast<DisplayX *>(context);
-    if (!self->isPerformanceHintAPIAvailable() || !self->performanceHintSession || !self->performanceHintManager)
+    if (!self->isPerformanceHintAPIAvailable() || !self->performanceHintSession || !self->performanceHintManager || !self->perfMode)
         return;
     
     if (self->previousReportedWorkTime == 0) {
@@ -416,23 +423,25 @@ void DisplayX::onCommitCallback(void *context, ASurfaceTransactionStats *stats) 
 }
 
 void DisplayX::onCompleteCallback(void *context, ASurfaceTransactionStats *stats) {
-    std::unique_ptr<PresentRequest> request(static_cast<PresentRequest *>(context));
-    if (request->presentId >= 0) {
-        int requestCode = 4;
-        write(request->clientFd, &requestCode, 4);
-        write(request->clientFd, &request->swapchainId, 1);
-        write(request->clientFd, &request->presentId, 8);
+    std::unique_ptr<OnCompleteContext> completeContext(static_cast<OnCompleteContext *>(context));
+    
+    for (auto &request : completeContext->requests) {
+        if (request->presentId >= 0) {
+            int requestCode = 4;
+            write(request->clientFd, &requestCode, 4);
+            write(request->clientFd, &request->swapchainId, 1);
+            write(request->clientFd, &request->presentId, 8);
+        }
     }
 }
 
 void DisplayX::presentThreadLoop() {
     ASurfaceTransaction *presentTransaction = pfnASurfaceTransactionCreate();
     JNIEnv *env = cache->getEnv();
-    auto lastPresentRequestTimeNanos = 0;
     
-    if (isPerformanceHintAPIAvailable()) {
+    if (isPerformanceHintAPIAvailable() && perfMode) {
         performanceHintManager = pfnAPerformanceHintGetManager();
-        float targetFloat = this->perfMode ? xServer->refreshRate * 100.0f : xServer->refreshRate;
+        float targetFloat = xServer->refreshRate * 100.0f;
         int64_t targetWorkDuration = static_cast<int64_t>(1000000000.0f / targetFloat);
     
         int tid = gettid();
@@ -445,37 +454,54 @@ void DisplayX::presentThreadLoop() {
         auto lock = presentLock.lock();
         
         presentLock.wait(lock, [&]{ 
-            return stopped || (eventsPending == 0 && !presentRequests.empty() && hasSurface && surfaceChanged && !paused);
+            return stopped || (eventsPending == 0 && ((requestUpdate && presentRR) || (!presentRequests.empty() && !presentRR)) && hasSurface && surfaceChanged && !paused);
         });
         
-        if (stopped)
+        if (stopped) {
+            printf("Stopping presentThread");
+            cache->detachEnv(env);
             break;
+        }
         
-        auto presentRequest = std::move(presentRequests.front());
-        presentRequests.pop();
+        std::queue<std::unique_ptr<PresentRequest>> requests;
+        
+        while (!presentRequests.empty()) {
+            auto presentRequest = presentRequests.pop();
+            requests.push(std::move(presentRequest));
+        }
+        
+        if (presentRR) requestUpdate = false;
         lock.unlock();
         
-        auto window = presentRequest->window;
-        if (!window || !window->control) continue;
+        auto completeContext = std::make_unique<OnCompleteContext>();
         
-        auto drawable = presentRequest->drawable;
-        if (!drawable) {
-            continue;
+        while (!requests.empty()) {
+            auto presentRequest = std::move(requests.front());
+            requests.pop();
+            
+            auto window = presentRequest->window;
+            if (!window || !window->control) continue;
+        
+            auto drawable = presentRequest->drawable;
+            if (!drawable) {
+                continue;
+            }
+        
+            if (!window->enabled) {
+                pfnASurfaceTransactionSetBuffer(presentTransaction, window->control, nullptr, presentRequest->sync_fence);
+            }
+            else {
+                pfnASurfaceTransactionSetBuffer(presentTransaction, window->control, drawable->ahb, presentRequest->sync_fence);
+                if (drawable->isDisplayX || drawable->isDirectContent) pfnASurfaceTransactionSetBufferTransparency(presentTransaction, window->control, ASURFACE_TRANSACTION_TRANSPARENCY_OPAQUE);
+                if (drawable->isDisplayX) {
+                   completeContext->requests.push_back(std::move(presentRequest));
+                   env->CallVoidMethod(xServer->xserverDisplayActivity, cache->updateFrameRating, window->windowObj);
+                }    
+            }
         }
         
-        if (!window->enabled) {
-            pfnASurfaceTransactionSetBuffer(presentTransaction, window->control, nullptr, presentRequest->sync_fence);
-        }
-        else {
-            pfnASurfaceTransactionSetBuffer(presentTransaction, window->control, drawable->ahb, presentRequest->sync_fence);
-            if (pfnASurfaceTransactionSetOnCommit) pfnASurfaceTransactionSetOnCommit(presentTransaction, this, DisplayX::onCommitCallback);
-            if (drawable->isDisplayX) {
-                auto *ptr = presentRequest.release();
-                pfnASurfaceTransactionSetOnComplete(presentTransaction, ptr, DisplayX::onCompleteCallback);
-                env->CallVoidMethod(xServer->xserverDisplayActivity, cache->updateFrameRating, window->windowObj);
-            }    
-        }
-        
+        if (perfMode && pfnASurfaceTransactionSetOnCommit) pfnASurfaceTransactionSetOnCommit(presentTransaction, this, DisplayX::onCommitCallback);
+        if (!completeContext->requests.empty()) pfnASurfaceTransactionSetOnComplete(presentTransaction, completeContext.release(), DisplayX::onCompleteCallback);
         pfnASurfaceTransactionApply(presentTransaction);
     }
     
@@ -496,6 +522,7 @@ void DisplayX::start() {
     pfnASurfaceTransactionSetOnCommit = reinterpret_cast<PFNASURFACETRANSACTIONSETONCOMMIT>(dlsym(handle,"ASurfaceTransaction_setOnCommit"));
     pfnASurfaceTransactionSetEnableBackPressure = reinterpret_cast<PFNASURFACETRANSACTIONSETENABLEBACKPRESSURE>(dlsym(handle,"ASurfaceTransaction_setEnableBackPressure"));
     pfnASurfaceTransactionSetBufferAlpha = reinterpret_cast<PFNASURFACETRANSACTIONSETBUFFERALPHA>(dlsym(handle, "ASurfaceTransaction_setBufferAlpha"));
+    pfnASurfaceTransactionSetBufferTransparency = reinterpret_cast<PFNASURFACETRANSACTIONSETBUFFERTRANSPARENCY>(dlsym(handle, "ASurfaceTransaction_setBufferTransparency"));
     pfnASurfaceTransactionStatsGetPresentFenceFd = reinterpret_cast<PFNASURFACETRANSACTIONSTATSGETPRESENTFENCEFD>(dlsym(handle, "ASurfaceTransactionStats_getPresentFenceFd"));
     pfnASurfaceTransactionCreate = reinterpret_cast<PFNASURFACETRANSACTIONCREATE>(dlsym(handle,"ASurfaceTransaction_create"));
     pfnASurfaceTransactionDelete = reinterpret_cast<PFNASURFACETRANSACTIONDELETE>(dlsym(handle,"ASurfaceTransaction_delete"));
@@ -526,6 +553,7 @@ void DisplayX::start() {
 void DisplayX::stop() {
     stopped = true;
     eventLock.notify();
+    presentLock.notify();
 }
 
 void DisplayX::pause() {
@@ -577,24 +605,22 @@ void DisplayX::queueEvent(std::function<void()> func) {
     eventLock.notify();
 }
 
-void DisplayX::requestWindowUpdate(Drawable *drawable, Window *window) {
+void DisplayX::requestWindowUpdate(Window *window) {
     auto lock = presentLock.lock();
     
     auto presentRequest = std::make_unique<PresentRequest>();
-    presentRequest->drawable = drawable;
+    presentRequest->drawable = window->hasDirectContents() ? window->currentDirectContent : window->drawable.get();
     presentRequest->sync_fence = -1;
     presentRequest->presentId = -1;
     presentRequest->clientFd = -1;
     presentRequest->window = window;
     
     presentRequests.push(std::move(presentRequest));
-    
-    presentLock.notify();
+    if (!presentRR) presentLock.notify();
 }
 
 void DisplayX::requestCursorUpdate() {
     if (!cursorVisible) return;
-    
     this->cursorUpdate = true;
 }
 
@@ -606,6 +632,7 @@ void DisplayX::createWindowControl(Window *window) {
         pfnASurfaceControlAcquire(window->control);
     
     pfnASurfaceTransactionSetEnableBackPressure(windowTransaction, window->control, false);
+    pfnASurfaceTransactionSetZOrder(windowTransaction, window->control, window->z_order);
     pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_HIDE);
     
     if (pfnASurfaceTransactionSetPosition) {
@@ -654,10 +681,8 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
     
     int ret;
     
-    if (resized) {
-        window->drawable->sizeChanged = false;
-        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, window->drawable->ahb, -1);
-    }
+    if (resized)
+        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, nullptr, -1);
     
     if (pfnASurfaceTransactionSetPosition) {
         pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
@@ -676,14 +701,37 @@ void DisplayX::changeGeometry(Window *window, bool resized) {
     pfnASurfaceTransactionApply(windowTransaction);
 }
 
-void DisplayX::updateCursor(Window *window) {
-    int ret;
+void DisplayX::changeZOrder(Window *window, Window *sibling, int stackMode) {
+    if (sibling) {
+        window->z_order = stackMode == 1 ? sibling->z_order + 1 : sibling->z_order - 1;
+        pfnASurfaceTransactionSetZOrder(windowTransaction, window->control, window->z_order);
+    }
+    else {
+        if (stackMode == 1) {
+            int max = 0;
+            for (auto& child : window->parent->children) {
+                if (child->z_order > max)
+                    max = child->z_order;
+            }
+            window->z_order = max + 1;
+            pfnASurfaceTransactionSetZOrder(windowTransaction, window->control, window->z_order);
+        }
+        else {
+            int min = 0;
+            for (auto& child : window->parent->children) {
+                if (child->z_order < min)
+                    min = child->z_order;
+            }
+            window->z_order = min - 1;
+            pfnASurfaceTransactionSetZOrder(windowTransaction, window->control, window->z_order);
+        }
+    }
     
-    auto cursor = window->cursor;
-    if (!cursor) return;
-   
-    pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, cursor->image->ahb, -1);
-    pfnASurfaceTransactionSetVisibility(cursorTransaction, cursorManager->control, (cursor->visible && cursorVisible) ?  ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
+    pfnASurfaceTransactionApply(windowTransaction);
+}
+
+void DisplayX::updateCursor(Cursor *cursor) {
+    pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, cursor && (cursor->visible && cursorVisible) ? cursor->image->ahb : nullptr, -1);
     pfnASurfaceTransactionApply(cursorTransaction);
 }
 
@@ -699,16 +747,6 @@ void DisplayX::updateCursorPosition() {
     int y = std::clamp(cursorManager->pointer.posY, 0, windowManager->getRootWindow()->height - 1);
     
     if (cursorVisible || (cursor && cursor->visible)) {
-        if (repostCursor) {
-            if (cursor != nullptr) {
-                pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, cursor->image->ahb, -1);
-            }
-            else {
-                pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, rootCursor->image->ahb, -1);
-            }
-            repostCursor = false;
-        }
-        
         if (pfnASurfaceTransactionSetPosition) {
             pfnASurfaceTransactionSetPosition(cursorTransaction, cursorManager->control, x, y);
         }
@@ -746,14 +784,14 @@ void DisplayX::createRootCursorControl() {
     cursorTransaction = pfnASurfaceTransactionCreate();
 }
 
-void DisplayX::drawRootCursor() {
-    if (!cursorVisible) return;
+void DisplayX::showCursor() {
+    if (!cursorManager->control) createRootCursorControl();
     
     auto rootCursor = cursorManager->getRootCursor();
-    if (!cursorManager) return;
+    if (!rootCursor) return;
     
     pfnASurfaceTransactionSetBuffer(cursorTransaction, cursorManager->control, rootCursor->image->ahb, -1);
-    pfnASurfaceTransactionSetVisibility(cursorTransaction, cursorManager->control, ASURFACE_TRANSACTION_VISIBILITY_SHOW);
+    pfnASurfaceTransactionSetVisibility(cursorTransaction, cursorManager->control, cursorVisible ? ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
     pfnASurfaceTransactionSetZOrder(cursorTransaction, cursorManager->control, INT32_MAX);
     pfnASurfaceTransactionApply(cursorTransaction);
 }
@@ -849,40 +887,27 @@ void DisplayX::resizeRootWindow() {
     
     pfnASurfaceTransactionSetGeometry(windowTransaction, rootWindow->control, src, dst, 0);
     pfnASurfaceTransactionSetBuffer(windowTransaction, rootWindow->control, rootWindow->drawable->ahb, -1);
+    pfnASurfaceTransactionSetZOrder(windowTransaction, rootWindow->control, rootWindow->z_order);
     pfnASurfaceTransactionApply(windowTransaction);
 }
 
 void DisplayX::restoreControlState() {
     const auto& windowTree = windowManager->getWindowTree();
+    auto rootWindow = windowManager->getRootWindow();
     
     for (const auto& entry : windowTree) {
         auto window = entry.second.get();
-        if (window == windowManager->getRootWindow()) continue;
+        if (window == rootWindow) continue;
         if (!window->control || !window->parent->control) continue;
         
         pfnASurfaceTransactionReparent(windowTransaction, window->control, window->parent->control);
-        pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, window->mapped ? ASURFACE_TRANSACTION_VISIBILITY_SHOW : ASURFACE_TRANSACTION_VISIBILITY_HIDE);
-        
-        if (pfnASurfaceTransactionSetPosition) {
-            pfnASurfaceTransactionSetPosition(windowTransaction, window->control, window->x, window->y);
-        }
-        else {  
-            ARect src{};
-            ARect dst = {
-                .left = window->x,
-                .top = window->y,
-                .right = window->x + window->width,
-                .bottom = window->y + window->height
-            };
-            pfnASurfaceTransactionSetGeometry(windowTransaction, window->control, src, dst, 0);        
-        }
-        
-        pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, window->enabled ? window->drawable->ahb : nullptr, -1);
         pfnASurfaceTransactionApply(windowTransaction);
     }
     
-    repostCursor = true;
-    cursorUpdate = true;
+    if (cursorManager->control && rootWindow->control) {
+        pfnASurfaceTransactionReparent(cursorTransaction, cursorManager->control, rootWindow->control);
+        pfnASurfaceTransactionApply(cursorTransaction);
+    }
 }
 
 void DisplayX::toggleFullscreen() {
@@ -923,4 +948,8 @@ void DisplayX::toggleFullscreen() {
 
 void DisplayX::setPerformanceMode(bool perfMode) {
     this->perfMode = perfMode;
+}
+
+void DisplayX::setPresentRR(bool presentRR) {
+    this->presentRR = presentRR;
 }
