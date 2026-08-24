@@ -38,6 +38,8 @@ public class PreloaderDialog {
     }
 
     public synchronized void show(int textResId) {
+        if (activity.isFinishing() || activity.isDestroyed()) return;
+        
         if (isShowing()) return;
         close();
         if (dialog == null) create();
@@ -46,6 +48,8 @@ public class PreloaderDialog {
     }
 
     public void showOnUiThread(final int textResId) {
+        if (activity.isFinishing() || activity.isDestroyed()) return;
+        
         activity.runOnUiThread(() -> show(textResId));
     }
 
