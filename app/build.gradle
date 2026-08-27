@@ -25,22 +25,14 @@ tasks.register("downloadImageFS") {
     def assetDir = new File(project.rootDir, ["app","src","main","assets"].join(File.separator))
     File imageFS = new File(assetDir, "imagefs.txz")
     String imageFSSHA256Sum = "https://github.com/Innersargento/Winlator-Ludashi/releases/download/assets/imagefs.txz.sha256"
-    int parts = 4
 
     doLast {
         if (!imageFS.exists()) {
             println("ImageFS was not present, downloading...\n")
             FileOutputStream outputStream = new FileOutputStream(imageFS)
-            for (int i = 0; i < parts; i++) {
-                File partFile = new File(assetDir, String.format("imagefs.txz.%02d", i))
-                String partURL = String.format("https://github.com/Innersargento/Winlator-Ludashi/releases/download/assets/imagefs.txz", i)
-                new URL(partURL).withInputStream { p ->
-                    partFile.withOutputStream { it << p }
-                    outputStream << partFile.bytes
-                }
-                partFile.delete()
-            }
-            outputStream.close()
+            File partFile = new File(assetDir, "imagefs.txz")
+            String partURL = "https://github.com/Innersargento/Winlator-Ludashi/releases/download/assets/imagefs.txz"
+            new URL(partURL).withInputStream { i -> imageFS.withOutputStream { it << i } }
         }
 
         String remoteChecksum = new URL(imageFSSHA256Sum).text.split("\\s+")[0].trim()
@@ -51,16 +43,9 @@ tasks.register("downloadImageFS") {
         if (remoteChecksum != localChecksum) {
             println("The version of ImageFS present locally is older than remote or hasn't been downloaded properly, redownloading...\n")
             FileOutputStream outputStream = new FileOutputStream(imageFS)
-            for (int i = 0; i < parts; i++) {
-                File partFile = new File(assetDir, String.format("imagefs.txz.%02d", i))
-                String partURL = String.format("https://gitlab.com/winlator3/winlator-extra/-/raw/main/imagefs/imagefs.txz.%02d", i)
-                new URL(partURL).withInputStream { p ->
-                    partFile.withOutputStream { it << p }
-                    outputStream << partFile.bytes
-                }
-                partFile.delete()
-            }
-            outputStream.close()
+            File partFile = new File(assetDir, "imagefs.txz")
+            String partURL = "https://github.com/Innersargento/Winlator-Ludashi/releases/download/assets/imagefs.txz"
+            new URL(partURL).withInputStream { i -> imageFS.withOutputStream { it << i } }
         }
     }
 }
