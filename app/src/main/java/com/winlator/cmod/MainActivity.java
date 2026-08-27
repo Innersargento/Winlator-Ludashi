@@ -165,22 +165,6 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        if (requestCode == PERMISSION_POST_NOTIFICATIONS_REQUEST_CODE) {
-        	if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
-        		startForegroundService(notificationService);
-        }
-        else if (requestCode == PERMISSION_WRITE_EXTERNAL_STORAGE_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
-                requestAppPermissions();
-            else
-                finish();
-        }
-    }
-
-    @Override
     public void onBackPressed() {
         FragmentManager fragmentManager = getSupportFragmentManager();
         List<Fragment> fragments = fragmentManager.getFragments();
