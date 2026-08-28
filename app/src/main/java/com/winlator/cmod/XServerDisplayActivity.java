@@ -742,6 +742,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     public void onResume() {
         super.onResume();
 
+        if (!isInPictureInPictureMode())
+            xServerView.onResume();
+
         if (environment != null) {
             environment.onResume();
         }
