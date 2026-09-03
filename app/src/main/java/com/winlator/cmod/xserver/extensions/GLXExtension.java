@@ -612,35 +612,6 @@ public class GLXExtension implements Extension {
         glxContexts.put(contextId, context);
     }
 
-    private void createContextAttribsARB(XClient client, XInputStream inputStream)
-            throws XRequestError {
-        int contextId = inputStream.readInt();
-        int fbconfigId = inputStream.readInt();
-        int screen = inputStream.readInt();
-        int shareList = inputStream.readInt();
-        boolean isDirect = inputStream.readByte() != 0;
-        inputStream.skip(3);
-        int numAttribs = inputStream.readInt();
-
-        validateNewResourceId(client, contextId);
-        validateScreen(screen);
-
-        FBConfig fbconfig = findFBConfig(fbconfigId);
-        if (fbconfig == null) throw new GLXBadFBConfig(fbconfigId);
-
-        GLXContext sharedContext = glxContexts.get(shareList);
-        if (sharedContext == null && shareList != 0) throw new GLXBadContext(shareList);
-
-        for (int i = 0; i < numAttribs; i++) {
-            inputStream.readInt();
-            inputStream.readInt();
-        }
-
-        GLXContext context = new GLXContext(contextId, xserver.drawableManager.getVisual().id,
-                fbconfig, screen, GLXRenderType.GLX_RGBA_TYPE, shareList, isDirect);
-        glxContexts.put(contextId, context);
-    }
-
     private void isDirect(XClient client, XInputStream inputStream, XOutputStream outputStream)
             throws IOException, XRequestError {
         int contextId = inputStream.readInt();
@@ -903,7 +874,7 @@ public class GLXExtension implements Extension {
                     createContext(client, inputStream, outputStream);
                     break;
                 case ClientOpcodes.CREATE_CONTEXT_ATTRIBS_ARB:
-                    createContextAttribsARB(client, inputStream);
+                    createContextAttribsARB(client, inputStream, outputStream);
                     break;
                 case ClientOpcodes.DESTROY_CONTEXT:
                     destroyContext(client, inputStream, outputStream);
