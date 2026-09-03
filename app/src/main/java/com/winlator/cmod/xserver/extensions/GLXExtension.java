@@ -28,6 +28,8 @@ import com.winlator.cmod.xserver.errors.GLXError;
 import com.winlator.cmod.xserver.errors.XRequestError;
 
 import java.io.IOException;
+import java.util.ArrayList;
+
 
 public class GLXExtension implements Extension {
     private static final String TAG = "GLXExtension";
@@ -47,6 +49,23 @@ public class GLXExtension implements Extension {
             if (config.id == id) return config;
         }
         return null;
+    }
+
+    private boolean isGLXResourceIdInUse(int id) {
+        return glxContexts.indexOfKey(id) >= 0
+                || glxPixmaps.indexOfKey(id) >= 0
+                || glxWindows.indexOfKey(id) >= 0;
+    }
+
+    private void validateScreen(int screen) throws BadValue {
+        if (screen != 0) throw new BadValue(screen);
+    }
+
+
+    private void validateNewResourceId(XClient client, int id) throws BadIdChoice {
+        if (!client.isValidResourceId(id) || isGLXResourceIdInUse(id)) {
+            throw new BadIdChoice(id);
+        }
     }
 
     private static abstract class GLXConstants {
@@ -921,17 +940,8 @@ public class GLXExtension implements Extension {
                 case ClientOpcodes.WAIT_X:
                 case ClientOpcodes.SWAP_BUFFERS:
                 case ClientOpcodes.CHANGE_DRAWABLE_ATTRIBUTES:
-                case ClientOpcodes.SET_CLIENT_INFO_ARB:
-                case ClientOpcodes.SET_CLIENT_INFO_2_ARB:
                     skipRemainingRequest(client);
                     break;
-                case ClientOpcodes.CREATE_CONTEXT_ATTRIBS_ARB:
-                    createContextAttribsARB(client, inputStream, outputStream);
-                    break;
-                default:
-                    Log.d("GLXExtension", "Unimpemented opcode " + opcode);
-                    throw new BadImplementation();
-
                 case ClientOpcodes.RENDER:
                     Log.e(TAG, "Indirect GLX Render request is not supported");
                     throw new BadImplementation();
