@@ -120,7 +120,9 @@ public class ShortcutSettingsDialog extends ContentDialog {
             vDisplayDriverConfig.setTag(shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG));
         }
         else {
-            vDisplayDriverConfig.setVisibility(View.GONE);
+            vDisplayDriverConfig.setVisibility(View.VISIBLE);
+            vDisplayDriverConfig.setOnClickListener((v) -> (new EGLConfigDialog(vDisplayDriverConfig)).show());
+            vDisplayDriverConfig.setTag(shortcut.getExtra("eglConfig", EGLConfigDialog.DEFAULT_CONFIG));
         }
         
         sDisplayDriver.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -134,7 +136,9 @@ public class ShortcutSettingsDialog extends ContentDialog {
                     vDisplayDriverConfig.setTag(shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG));
                 }
                 else {
-                    vDisplayDriverConfig.setVisibility(View.GONE);
+                    vDisplayDriverConfig.setVisibility(View.VISIBLE);
+                    vDisplayDriverConfig.setOnClickListener((v) -> (new EGLConfigDialog(vDisplayDriverConfig)).show());
+                    vDisplayDriverConfig.setTag(shortcut.getExtra("eglConfig", EGLConfigDialog.DEFAULT_CONFIG));
                 }
             }
 
@@ -413,6 +417,8 @@ public class ShortcutSettingsDialog extends ContentDialog {
                 shortcut.putExtra("displayDriver", displayDriver);
                 if (displayDriver.equals("displayx"))
                     shortcut.putExtra("displayxConfig", vDisplayDriverConfig.getTag().toString());
+                else
+                    shortcut.putExtra("eglConfig", vDisplayDriverConfig.getTag().toString());
                     
                 shortcut.putExtra("graphicsDriver", graphicsDriver);
                 shortcut.putExtra("graphicsDriverConfig", graphicsDriverConfig);
