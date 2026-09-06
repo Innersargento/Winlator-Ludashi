@@ -11,6 +11,8 @@ import com.winlator.cmod.xserver.XClient;
 import com.winlator.cmod.xserver.XLock;
 import com.winlator.cmod.xserver.XServer;
 import com.winlator.cmod.xserver.errors.BadImplementation;
+import com.winlator.cmod.xserver.errors.BadLength;
+import com.winlator.cmod.xserver.errors.BadMatch;
 import com.winlator.cmod.xserver.errors.BadValue;
 import com.winlator.cmod.xserver.errors.BadWindow;
 import com.winlator.cmod.xserver.errors.XRequestError;
@@ -43,6 +45,9 @@ public class XInput2Extension implements Extension {
 
     private static abstract class ClientOpcodes {
         private static final byte GET_EXTENSION_VERSION = 1;
+        private static final byte OPEN_DEVICE = 3;
+        private static final byte CLOSE_DEVICE = 4;
+        private static final byte GET_DEVICE_BUTTON_MAPPING = 28;
         private static final byte GET_CLIENT_POINTER = 45;
         private static final byte SELECT_EVENTS = 46;
         private static final byte QUERY_VERSION = 47;
@@ -79,6 +84,56 @@ public class XInput2Extension implements Extension {
 
     private static boolean isMasterDevice(int deviceId) {
         return deviceId == MASTER_POINTER_ID || deviceId == MASTER_KEYBOARD_ID;
+    }
+
+    private static int readLegacyDevice(XClient client, XInputStream inputStream)
+            throws XRequestError {
+        // XI1 device requests contain an 8-bit ID and three padding bytes.
+        if (client.getRemainingRequestLength() != 4) throw new BadLength();
+        int deviceId = inputStream.readUnsignedByte();
+        inputStream.skip(3);
+        if (!isMasterDevice(deviceId)) {
+            // BadDevice is the first extension error, not the core BadValue error.
+            throw new XRequestError(Byte.toUnsignedInt(FIRST_ERROR_ID), deviceId);
+        }
+        return deviceId;
+    }
+
+    private static void openDevice(XClient client, XInputStream inputStream,
+                                   XOutputStream outputStream) throws IOException, XRequestError {
+        readLegacyDevice(client, inputStream);
+        try (XStreamLock lock = outputStream.lock()) {
+            outputStream.writeByte(RESPONSE_CODE_SUCCESS);
+            outputStream.writeByte(ClientOpcodes.OPEN_DEVICE);
+            outputStream.writeShort(client.getSequenceNumber());
+            outputStream.writeInt(0);
+            // Input events are provided through XI2. Do not advertise XI1 event
+            // classes that this server cannot deliver. Wine opens this handle
+            // only to query the device's button mapping.
+            outputStream.writeByte((byte)0);
+            outputStream.writePad(23);
+        }
+    }
+
+    private static void getDeviceButtonMapping(XClient client, XInputStream inputStream,
+                                               XOutputStream outputStream)
+            throws IOException, XRequestError {
+        int deviceId = readLegacyDevice(client, inputStream);
+        if (deviceId != MASTER_POINTER_ID) throw new BadMatch();
+        int numButtons = Pointer.MAX_BUTTONS;
+        int padding = -numButtons & 3;
+        try (XStreamLock lock = outputStream.lock()) {
+            outputStream.writeByte(RESPONSE_CODE_SUCCESS);
+            outputStream.writeByte(ClientOpcodes.GET_DEVICE_BUTTON_MAPPING);
+            outputStream.writeShort(client.getSequenceNumber());
+            outputStream.writeInt((numButtons + padding) / 4);
+            outputStream.writeByte((byte)numButtons);
+            outputStream.writePad(23);
+            for (int button = 1; button <= numButtons; button++) {
+                outputStream.writeByte((byte)button);
+            }
+            outputStream.writePad(padding);
+        }
     }
 
     private static boolean matchesSelection(Selection selection, int deviceId) {
@@ -251,6 +306,18 @@ public class XInput2Extension implements Extension {
                               XOutputStream outputStream)
             throws IOException, XRequestError {
         switch (client.getRequestData()) {
+            case ClientOpcodes.OPEN_DEVICE:
+                openDevice(client, inputStream, outputStream);
+                break;
+            case ClientOpcodes.CLOSE_DEVICE:
+                // Virtual devices are permanent and opening them allocates no
+                // per-client resources. XI1 CloseDevice has no reply and must
+                // not remove independently registered XI2 event selections.
+                readLegacyDevice(client, inputStream);
+                break;
+            case ClientOpcodes.GET_DEVICE_BUTTON_MAPPING:
+                getDeviceButtonMapping(client, inputStream, outputStream);
+                break;
             case ClientOpcodes.GET_EXTENSION_VERSION:
                 getExtensionVersion(client, inputStream, outputStream);
                 break;
