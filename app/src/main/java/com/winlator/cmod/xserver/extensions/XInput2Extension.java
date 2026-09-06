@@ -152,7 +152,10 @@ public class XInput2Extension implements Extension {
             outputStream.writeShort(client.getSequenceNumber());
             outputStream.writeInt(0);
             outputStream.writeShort((short)XI_MAJOR);
-            outputStream.writeShort((short)0);
+            // libXi caches this version separately from XIQueryVersion. If it
+            // sees 2.0 here, it clears raw-event sourceid to zero, causing Proton
+            // to call XOpenDevice(0) while refreshing the button mapping.
+            outputStream.writeShort((short)XI_MINOR);
             outputStream.writeByte((byte)1);
             outputStream.writePad(19);
         }
