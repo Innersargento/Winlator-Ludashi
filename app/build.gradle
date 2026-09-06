@@ -25,21 +25,19 @@ plugins {
 tasks.register("downloadImageFS") {
     def assetDir = new File(project.rootDir, ["app","src","main","assets"].join(File.separator))
     File imageFS = new File(assetDir, "imagefs.tar.zst")
-    int parts = 2
 
     doLast {
         if (!imageFS.exists()) {
             println("ImageFS was not present, downloading...\n")
             FileOutputStream outputStream = new FileOutputStream(imageFS)
-            for (int i = 0; i < parts; i++) {
-                File partFile = new File(assetDir, String.format("imagefs.tar.zst.%02d", i))
-                String partURL = String.format("https://raw.githubusercontent.com/Other-backup/winlator-imagefs/main/imagefs.tar.zst.%02d", i)
-                new URL(partURL).withInputStream { p ->
-                    partFile.withOutputStream { it << p }
-                    outputStream << partFile.bytes
-                }
-                partFile.delete()
+            File partFile = new File("imagefs.tar.zst")
+            String partURL = "https://github.com/Innersargento/Winlator-Ludashi/releases/download/assets/imagefs.tar.zst"
+            new URL(partURL).withInputStream { p ->
+                partFile.withOutputStream { it << p }
+                outputStream << partFile.bytes
             }
+                partFile.delete()
+
             outputStream.close()
         }
     }
