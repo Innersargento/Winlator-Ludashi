@@ -21,6 +21,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -190,6 +192,7 @@ private val WinlatorShapes = Shapes(
 fun WinlatorTheme(content: @Composable () -> Unit) {
     val theme = WinlatorThemeManager.currentTheme()
     val colors = winlatorColorScheme(theme)
+    ConfigureComposeHostFocus()
     HideSystemBars(theme)
     ApplyLegacyChrome(colors)
     MaterialTheme(colorScheme = colors, typography = WinlatorTypography, shapes = WinlatorShapes) {
@@ -204,6 +207,41 @@ fun WinlatorTheme(content: @Composable () -> Unit) {
 
 @Composable
 fun WinZTheme(content: @Composable () -> Unit) = WinlatorTheme(content)
+
+@Composable
+private fun ConfigureComposeHostFocus() {
+    val owner = LocalView.current
+    DisposableEffect(owner) {
+        // The internal Compose owner must keep focus to dispatch D-pad/gamepad input.
+        // Only Compose controls should draw focus, never the full Android host view.
+        val previousHighlight = owner.defaultFocusHighlightEnabled
+        owner.defaultFocusHighlightEnabled = false
+        val host = owner.parent as? AbstractComposeView
+        val previousHostFocusable = host?.focusable
+        val previousHostTouchFocus = host?.isFocusableInTouchMode
+        val previousHostHighlight = host?.defaultFocusHighlightEnabled
+        val previousDescendantFocus = host?.descendantFocusability
+        val previousAccessibility = host?.importantForAccessibility
+        host?.apply {
+            isFocusableInTouchMode = false
+            isFocusable = false
+            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
+            defaultFocusHighlightEnabled = false
+            // Skip the empty wrapper, while retaining all virtual Compose children.
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        onDispose {
+            owner.defaultFocusHighlightEnabled = previousHighlight
+            host?.apply {
+                isFocusableInTouchMode = previousHostTouchFocus!!
+                focusable = previousHostFocusable!!
+                descendantFocusability = previousDescendantFocus!!
+                defaultFocusHighlightEnabled = previousHostHighlight!!
+                importantForAccessibility = previousAccessibility!!
+            }
+        }
+    }
+}
 
 @Composable
 private fun HideSystemBars(theme: WinlatorThemeType) {
