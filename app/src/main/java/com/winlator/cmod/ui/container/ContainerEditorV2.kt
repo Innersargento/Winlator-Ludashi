@@ -2,6 +2,7 @@
 
 package com.winlator.cmod.ui.container
 
+import com.winlator.cmod.ui.settings.DDrawWrapperChoice
 import android.content.Context
 import android.graphics.Bitmap
 import android.widget.Toast
@@ -967,7 +968,7 @@ private fun ContainerCategoryV2(
                         SettingToggle("Async Cache", s.asyncCache) { s.asyncCache = it; s.wrapperValue("asyncCache", if (it) "1" else "0") }
                     }
                     SettingsDivider()
-                    SettingChoice("DDraw Wrapper", s.ddrawWrapper, listOf("none", "wined3d", "cnc-ddraw", "dd7to9")) {
+                    DDrawWrapperChoice(s.ddrawWrapper) {
                         s.ddrawWrapper = it; s.wrapperValue("ddrawrapper", it)
                     }
                 }

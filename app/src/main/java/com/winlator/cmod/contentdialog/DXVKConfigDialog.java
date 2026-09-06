@@ -12,6 +12,7 @@ import com.winlator.cmod.R;
 import com.winlator.cmod.container.Container;
 import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
+import com.winlator.cmod.contents.D7VKManager;
 import com.winlator.cmod.core.AppUtils;
 import com.winlator.cmod.core.UnitUtils;
 import com.winlator.cmod.core.DefaultVersion;
@@ -109,6 +110,13 @@ public class DXVKConfigDialog extends ContentDialog {
         this.contentsManager.syncContents();
 
         KeyValueSet config = parseConfig(anchor.getTag());
+        final List<String> ddrawEntries = D7VKManager.getWrapperEntries(context);
+        List<String> ddrawLabels = new ArrayList<>();
+        for (String entry : ddrawEntries) ddrawLabels.add(D7VKManager.getWrapperLabel(entry));
+        ArrayAdapter<String> ddrawAdapter = new ArrayAdapter<>(context, R.layout.spinner_item_amoled, ddrawLabels);
+        ddrawAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item_amoled_compact);
+        sDDRAWrapper.setAdapter(ddrawAdapter);
+        configureContentSpinnerDropdown(sDDRAWrapper);
         loadDxvkVersionSpinner(this.contentsManager, sDXVKVersion, isARM64EC);
         loadVkd3dVersionSpinner(this.contentsManager, sVKD3DVersion, isARM64EC);
 
@@ -121,7 +129,12 @@ public class DXVKConfigDialog extends ContentDialog {
         AppUtils.setSpinnerSelectionFromIdentifier(sFramerate, config.get("framerate"));
         AppUtils.setSpinnerSelectionFromIdentifier(sVKD3DVersion, config.get("vkd3dVersion"));
         AppUtils.setSpinnerSelectionFromIdentifier(sVKD3DFeatureLevel, config.get("vkd3dLevel"));
-        AppUtils.setSpinnerSelectionFromIdentifier(sDDRAWrapper, config.get("ddrawrapper"));
+        for (int i = 0; i < ddrawEntries.size(); i++) {
+            if (ddrawEntries.get(i).equalsIgnoreCase(config.get("ddrawrapper"))) {
+                sDDRAWrapper.setSelection(i);
+                break;
+            }
+        }
 
         swAsync.setChecked(config.get("async").equals("1"));
         swAsyncCache.setChecked(config.get("asyncCache").equals("1"));
@@ -227,7 +240,7 @@ public class DXVKConfigDialog extends ContentDialog {
             VKD3DVersionItem selectedItem = (VKD3DVersionItem) sVKD3DVersion.getSelectedItem();
             config.put("vkd3dVersion", selectedItem.getIdentifier());
             config.put("vkd3dLevel", sVKD3DFeatureLevel.getSelectedItem().toString());
-            config.put("ddrawrapper", StringUtils.parseIdentifier(sDDRAWrapper.getSelectedItem().toString()));
+            config.put("ddrawrapper", ddrawEntries.get(sDDRAWrapper.getSelectedItemPosition()));
             anchor.setTag(config.toString());
         });
     }

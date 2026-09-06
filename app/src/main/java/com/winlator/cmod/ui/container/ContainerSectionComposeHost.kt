@@ -1,5 +1,6 @@
 package com.winlator.cmod.ui.container
 
+import com.winlator.cmod.ui.settings.DDrawWrapperChoice
 import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -994,12 +995,7 @@ private fun WrapperOptionsPanel(
                 ToggleSetting("Max Frame Latency", maxFrameLatency, onMaxFrameLatency)
                 ToggleSetting("Async shaders", async, onAsync)
                 ToggleSetting("Async shader cache", asyncCache, onAsyncCache)
-                InlineChoice(
-                    label = "DDraw Wrapper",
-                    selected = ddrawWrapper,
-                    entries = arrayOf("wined3d", "cnc-ddraw"),
-                    onSelected = onDdrawWrapper
-                )
+                DDrawWrapperChoice(ddrawWrapper, onDdrawWrapper)
             } else {
                 ToggleSetting("CSMT", csmt, onCsmt)
                 ToggleSetting("Strict Shader Math", strictShaderMath, onStrictShaderMath)

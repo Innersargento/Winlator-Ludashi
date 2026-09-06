@@ -397,6 +397,7 @@ public class OnboardingActivity extends AppCompatActivity {
         if (key.contains("fexcore")) return "FEXCore";
         if (key.contains("vkd3d")) return "VKD3D";
         if (key.contains("dxvk")) return "DXVK";
+        if (key.contains("d7vk")) return "D7VK";
         if (key.contains("proton")) return "Proton";
         if (key.contains("wine")) return "Wine";
         return "";

@@ -1,5 +1,6 @@
 package com.winlator.cmod.ui.container
 
+import com.winlator.cmod.ui.settings.DDrawWrapperChoice
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,7 +96,7 @@ internal fun ContainerWrapperInline(containerId: Int, callbacks: ContainerInline
             VCToggle("Max Frame Latency", maxLatency) { maxLatency = it }
             VCToggle("Async shaders", asyncShaders) { asyncShaders = it }
             VCToggle("Async shader cache", asyncCache) { asyncCache = it }
-            VCChoice("DDraw Wrapper", ddraw, arrayOf("wined3d", "cnc-ddraw")) { ddraw = it }
+            DDrawWrapperChoice(ddraw) { ddraw = it }
         } else {
             VCToggle("CSMT", csmt) { csmt = it }
             VCToggle("Strict Shader Math", strictMath) { strictMath = it }

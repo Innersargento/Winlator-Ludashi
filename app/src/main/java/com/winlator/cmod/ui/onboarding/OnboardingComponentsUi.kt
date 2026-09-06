@@ -54,7 +54,7 @@ private val bundledRuntimeName = ProtonPackageManager.getPackage(ProtonPackageMa
     ?: "Proton 10.0-5 arm64ec"
 
 private val componentCategories = listOf(
-    "Recommended", "Wine & Proton", "DXVK", "VKD3D", "FEXCore", "Box64", "WOWBox64", "AdrenoTools"
+    "Recommended", "Wine & Proton", "DXVK", "D7VK", "VKD3D", "FEXCore", "Box64", "WOWBox64", "AdrenoTools"
 )
 
 private val latestRecommendedTypes = setOf("DXVK", "VKD3D", "FEXCore", "Box64", "WOWBox64")

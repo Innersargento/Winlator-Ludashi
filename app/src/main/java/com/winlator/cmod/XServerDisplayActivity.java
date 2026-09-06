@@ -65,6 +65,7 @@ import com.winlator.cmod.contentdialog.GraphicsDriverConfigDialog;
 import com.winlator.cmod.contentdialog.WineD3DConfigDialog;
 import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
+import com.winlator.cmod.contents.D7VKManager;
 import com.winlator.cmod.contents.AdrenotoolsManager;
 import com.winlator.cmod.core.AppUtils;
 import com.winlator.cmod.core.DefaultVersion;
@@ -964,13 +965,19 @@ public class XServerDisplayActivity extends AppCompatActivity {
             String dxvkWrapper = "dxvk-" + dxwrapperConfig.get("version");
             String vkd3dWrapper = "vkd3d-" + dxwrapperConfig.get("vkd3dVersion");
             String ddrawrapper = dxwrapperConfig.get("ddrawrapper");
-            dxwrapper = dxvkWrapper + ";" + vkd3dWrapper + ";" + ddrawrapper;
+            dxwrapper = dxvkWrapper + ";" + vkd3dWrapper + ";" + ddrawrapper + D7VKManager.getSignature(ddrawrapper);
         }
 
         if (!dxwrapper.equals(container.getExtra("dxwrapper"))) {
-            extractDXWrapperFiles(dxwrapper);
-            container.putExtra("dxwrapper", dxwrapper);
-            containerDataChanged = true;
+            if (extractDXWrapperFiles(dxwrapper)) {
+                container.putExtra("dxwrapper", dxwrapper);
+                containerDataChanged = true;
+            } else {
+                // A failed apply may have restored builtin DLLs. The previous
+                // wrapper is no longer guaranteed to be present either.
+                container.putExtra("dxwrapper", "");
+                containerDataChanged = true;
+            }
         }
 
         String wincomponents = shortcut != null ? shortcut.getExtra("wincomponents", container.getWinComponents())
@@ -2535,7 +2542,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
     private static final String TAG = "DXWrapperExtraction";
 
-    private void extractDXWrapperFiles(String dxwrapper) {
+    private boolean extractDXWrapperFiles(String dxwrapper) {
         final String[] dlls = { "d3d10.dll", "d3d10_1.dll", "d3d10core.dll", "d3d11.dll", "d3d12.dll", "d3d12core.dll",
                 "d3d8.dll", "d3d9.dll", "dxgi.dll", "ddraw.dll", "d3dimm.dll" };
 
@@ -2584,7 +2591,15 @@ public class XServerDisplayActivity extends AppCompatActivity {
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "ddrawrapper/nglide.tzst", windowsDir,
                     onExtractFileListener);
 
-            if (ddrawrapper.contains("None")) {
+            if (D7VKManager.isD7VK(ddrawrapper)) {
+                restoreOriginalDllFiles("ddraw.dll", "d3dimm.dll");
+                if (!D7VKManager.apply(this, contentsManager, ddrawrapper, windowsDir,
+                        new File(imageFs.getWinePath()), wineInfo.isWin64(), wineInfo.isArm64EC())) {
+                    Log.e(TAG, "D7VK could not be applied: " + ddrawrapper);
+                    restoreOriginalDllFiles("ddraw.dll", "d3dimm.dll");
+                    return false;
+                }
+            } else if (ddrawrapper.equalsIgnoreCase("none") || ddrawrapper.equalsIgnoreCase("wined3d")) {
                 Log.d(TAG, "No DDRaw wrapper has been selected, restoring original ddraw files");
                 restoreOriginalDllFiles(new String[] { "ddraw.dll", "d3dimm.dll" });
             } else {
@@ -2601,6 +2616,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
             Log.d(TAG, "Restoring original DLL files for wined3d.");
             restoreOriginalDllFiles(dlls);
         }
+        return true;
     }
 
     private static int compareVersion(String varA, String varB) {
