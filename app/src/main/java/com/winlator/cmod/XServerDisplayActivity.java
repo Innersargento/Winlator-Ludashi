@@ -371,6 +371,8 @@ public class XServerDisplayActivity extends AppCompatActivity {
         winHandler = new WinHandler(this);
         winHandler.setFakeInputPath(devInputDir.getAbsolutePath());
 
+        wineRequestHandler = new WineRequestHandler(this);
+
         String screenSize = Container.DEFAULT_SCREEN_SIZE;
         containerManager = new ContainerManager(this);
         container = containerManager.getContainerById(getIntent().getIntExtra("container_id", 0));
