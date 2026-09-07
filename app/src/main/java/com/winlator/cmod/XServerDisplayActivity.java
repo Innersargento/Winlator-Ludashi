@@ -472,7 +472,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             LogView.setFilename(getExecutable());
             ProcessHelper.addDebugCallback(debugDialog = new DebugDialog(this));
         }
-
+        
+        displayDriver = container.getDisplayDriver();
+        String displayConfig;
+        if (displayDriver.toLowerCase().contains("displayx")) 
+            displayConfig = container.getDisplayXConfig();
+        else
+            displayConfig = container.getEGLConfig();
+            
         graphicsDriver = container.getGraphicsDriver();
         String graphicsDriverConfig = container.getGraphicsDriverConfig();
         audioDriver = container.getAudioDriver();
@@ -483,14 +490,18 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         screenSize = container.getScreenSize();
         winHandler.setInputType((byte) container.getInputType());
         lc_all = container.getLC_ALL();
-        String displayConfig;
 
         // Log the entire intent to verify the extras
         Intent intent = getIntent();
         Log.d("XServerDisplayActivity", "Intent Extras: " + intent.getExtras());
 
         if (shortcut != null) {
-            displayDriver = shortcut.getExtra("displayDriver", Container.DEFAULT_DISPLAY_DRIVER);
+            displayDriver = shortcut.getExtra("displayDriver", container.getDisplayDriver());
+            if (displayDriver.toLowerCase().contains("displayx"))
+                displayConfig = shortcut.getExtra("displayxConfig", container.getDisplayXConfig());
+            else
+                displayConfig = shortcut.getExtra("eglConfig", container.getEGLConfig());
+                
             graphicsDriver = shortcut.getExtra("graphicsDriver", container.getGraphicsDriver());
             graphicsDriverConfig = shortcut.getExtra("graphicsDriverConfig", container.getGraphicsDriverConfig());
             audioDriver = shortcut.getExtra("audioDriver", container.getAudioDriver());
@@ -512,19 +523,18 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 vkbasaltConfig = "effects=" + sharpnessEffect.toLowerCase() + ";" + "casSharpness=" + sharpnessLevel / 100 + ";" + "dlsSharpness=" + sharpnessLevel / 100  + ";" + "dlsDenoise=" + sharpnessDenoise / 100 + ";" + "enableOnLaunch=True";
             }
             Log.d("XServerDisplayActivity", "XInput Disabled from Shortcut: " + xinputDisabledFromShortcut);
-            if (displayDriver.toLowerCase().contains("displayx")) {
-                displayConfig = shortcut.getExtra("displayxConfig", DisplayXConfigDialog.DEFAULT_CONFIG);
-                this.displayConfig = DisplayXConfigDialog.parseConfig(displayConfig);
-                this.performanceMode = this.displayConfig.get("performanceMode").equals("1") ? true : false;
-                this.presentRR = this.displayConfig.get("presentRR").equals("1") ? true : false;
-                this.backPressure = this.displayConfig.get("backPressure").equals("1") ? true : false;
-                this.precisePresentation = this.displayConfig.get("precisePresentation").equals("1") ? true : false;
-            }
-            else {
-                displayConfig = shortcut.getExtra("eglConfig", EGLConfigDialog.DEFAULT_CONFIG);
-                this.displayConfig = EGLConfigDialog.parseConfig(displayConfig);
-                this.textureFilter = this.displayConfig.get("textureFilter").equals("linear") ? 1 : 0;
-            }
+        }
+        
+        if (displayDriver.toLowerCase().contains("displayx")) {
+            this.displayConfig = DisplayXConfigDialog.parseConfig(displayConfig);
+            this.performanceMode = this.displayConfig.get("performanceMode").equals("1") ? true : false;
+            this.presentRR = this.displayConfig.get("presentRR").equals("1") ? true : false;
+            this.backPressure = this.displayConfig.get("backPressure").equals("1") ? true : false;
+            this.precisePresentation = this.displayConfig.get("precisePresentation").equals("1") ? true : false;
+        }
+        else {
+            this.displayConfig = EGLConfigDialog.parseConfig(displayConfig);
+            this.textureFilter = this.displayConfig.get("textureFilter").equals("linear") ? 1 : 0;
         }
 
         this.graphicsDriverConfig = GraphicsDriverConfigDialog.parseGraphicsDriverConfig(graphicsDriverConfig);

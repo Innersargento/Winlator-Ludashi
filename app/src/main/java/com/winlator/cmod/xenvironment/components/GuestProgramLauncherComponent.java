@@ -342,28 +342,25 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             this.envVars.remove("MANGOHUD_CONFIG");
         }
         
-        if (shortcut != null) {
-            boolean isDisplayX = shortcut.getExtra("displayDriver", Container.DEFAULT_DISPLAY_DRIVER).toLowerCase().equals("displayx");
-            
-            if (isDisplayX) {
-                boolean isTrueDisplayX = displayConfig.get("trueDisplayX").equals("1") ? true : false;
-                if (isTrueDisplayX) {
-                    if (this.envVars.has("VK_INSTANCE_LAYERS")) {
-                        this.envVars.remove("VK_INSTANCE_LAYERS");
-                    }
-                    envVars.put("VK_INSTANCE_LAYERS", "VK_LAYER_DISPLAYX_display_x");
+        String displayDriver = (shortcut != null) ? shortcut.getExtra("displayDriver", container.getDisplayDriver()) : container.getDisplayDriver();
+        if (displayDriver.toLowerCase().equals("displayx")) {
+            boolean isTrueDisplayX = displayConfig.get("trueDisplayX").equals("1") ? true : false;
+            if (isTrueDisplayX) {
+                if (this.envVars.has("VK_INSTANCE_LAYERS")) {
+                    this.envVars.remove("VK_INSTANCE_LAYERS");
                 }
+                envVars.put("VK_INSTANCE_LAYERS", "VK_LAYER_DISPLAYX_display_x");
             }
-            
-            String surfaceFormat = displayConfig.get("surfaceFormat");
-            if (surfaceFormat.equals("rgba8")) {
-                envVars.put("WRAPPER_SURFACE_FORMAT", "rgba8");
-                envVars.put("DISPLAYX_SURFACE_FORMAT", "rgba8");
-            }
-            else {
-                envVars.put("WRAPPER_SURFACE_FORMAT", "bgra8");
-                envVars.put("DISPLAYX_SURFACE_FORMAT", "bgra8");
-            }
+        }   
+         
+        String surfaceFormat = displayConfig.get("surfaceFormat");
+        if (surfaceFormat.equals("rgba8")) {
+            envVars.put("WRAPPER_SURFACE_FORMAT", "rgba8");
+            envVars.put("DISPLAYX_SURFACE_FORMAT", "rgba8");
+        }
+        else {
+            envVars.put("WRAPPER_SURFACE_FORMAT", "bgra8");
+            envVars.put("DISPLAYX_SURFACE_FORMAT", "bgra8");
         }
         
         // Merge any additional environment variables from external sources
