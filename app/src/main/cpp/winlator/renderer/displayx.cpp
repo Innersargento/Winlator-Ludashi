@@ -353,7 +353,7 @@ void DisplayX::eventThreadLoop() {
         
         auto lock = eventLock.lock();
         eventLock.wait(lock, [&]{ 
-            return stopped || state != State::NONE || !eventQueue.empty() || cursorUpdate;
+            return stopped || ((state != State::NONE || !eventQueue.empty() || cursorUpdate) && !effectComposer->isPending());
         });
         
         if (stopped) {
