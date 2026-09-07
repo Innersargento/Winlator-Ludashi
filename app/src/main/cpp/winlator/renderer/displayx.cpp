@@ -714,7 +714,7 @@ void DisplayX::destroyWindowControl(Window *window) {
 void DisplayX::mapWindow(Window *window) {
     if (!window->control) return;
     
-    if (!strcmp(window->className.c_str(), windowManager->getUnviewableWMClass().c_str()))
+    if (!windowManager->getUnviewableWMClass().empty() && !strcmp(window->className.c_str(), windowManager->getUnviewableWMClass().c_str()))
         window->enabled = false;
     
     pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_SHOW);
@@ -730,8 +730,6 @@ void DisplayX::unmapWindow(Window *window) {
 
 void DisplayX::changeGeometry(Window *window, bool resized) {
     if (!window->control) return;
-    
-    int ret;
     
     if (resized)
         pfnASurfaceTransactionSetBuffer(windowTransaction, window->control, nullptr, -1);
