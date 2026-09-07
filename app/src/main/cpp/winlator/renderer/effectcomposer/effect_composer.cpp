@@ -81,8 +81,8 @@ VkResult EffectComposer::createInstance() {
     createInfo.pApplicationInfo = &appInfo;
     createInfo.enabledExtensionCount = 0;
     createInfo.ppEnabledExtensionNames = nullptr;
-    createInfo.enabledLayerCount = static_cast<uint32_t>(layerNames.size());
-    createInfo.ppEnabledLayerNames = layerNames.data();
+    createInfo.enabledLayerCount = enable_validation ? static_cast<uint32_t>(layerNames.size()) : 0;
+    createInfo.ppEnabledLayerNames = enable_validation ? layerNames.data() : nullptr;
 
     result = vkCreateInstance(&createInfo, nullptr, &instance);
     if (result != VK_SUCCESS) {
