@@ -40,7 +40,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeInit(JNIEnv *env, jobject thiz, 
     rootWindow->height = env->CallShortMethod(rootWindowObj, cache.windowGetHeight);
     rootWindow->x = env->CallShortMethod(rootWindowObj, cache.windowGetX);
     rootWindow->y = env->CallShortMethod(rootWindowObj, cache.windowGetY);
-    rootWindow->z_order = -1;
+    rootWindow->z_order = INT32_MIN;
     rootWindow->className = "";
     
     auto drawable = std::make_unique<struct Drawable>();
