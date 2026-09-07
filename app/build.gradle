@@ -24,7 +24,7 @@ plugins {
 tasks.register("downloadImageFS") {
     def assetDir = new File(project.rootDir, ["app","src","main","assets"].join(File.separator))
     File imageFS = new File(assetDir, "imagefs.txz")
-    String imageFSSHA256Sum = "https://github.com/Innersargento/Winlator-Ludashi/releases/download/assets/imagefs.txz.sha256"
+    String imageFSSHA256Sum = "https://github.com/Innersargento/Winlator-Ludashi/releases/download/assets/imagefs.txz.sha256sum"
 
     doLast {
         if (!imageFS.exists()) {

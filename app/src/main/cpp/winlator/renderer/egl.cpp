@@ -301,30 +301,30 @@ void EGLRenderer::renderCursor() {
 void EGLRenderer::renderDrawable(Drawable *drawable, int x, int y, bool isWindow) {
     if (drawable == nullptr) return;
     
-    if (drawable->texture == nullptr) {
+    if (drawable->glTexture == nullptr) {
         if (drawable->ahb != nullptr) 
-            drawable->texture = allocateTextureDirect(drawable->ahb);
+            drawable->glTexture = allocateTextureDirect(drawable->ahb);
         else if (drawable->data != nullptr)
-            drawable->texture = allocateTexture(drawable->width, drawable->height);
+            drawable->glTexture = allocateTexture(drawable->width, drawable->height);
     }    
-    else if (drawable->texture->sizeChanged) {
+    else if (drawable->glTexture->sizeChanged) {
         if (drawable->ahb != nullptr) 
-            reallocateTextureDirect(drawable->texture.get(), drawable->ahb);
+            reallocateTextureDirect(drawable->glTexture.get(), drawable->ahb);
         else    
-            reallocateTexture(drawable->texture.get(), drawable->width, drawable->height);
+            reallocateTexture(drawable->glTexture.get(), drawable->width, drawable->height);
             
-        drawable->texture->sizeChanged = false;
+        drawable->glTexture->sizeChanged = false;
     }
         
-    if (drawable->texture->isDirty) {
-        updateTextureDrawable(drawable->texture.get(), drawable->width, drawable->height, drawable->data);
-        drawable->texture->isDirty = false;
+    if (drawable->glTexture->isDirty) {
+        updateTextureDrawable(drawable->glTexture.get(), drawable->width, drawable->height, drawable->data);
+        drawable->glTexture->isDirty = false;
     }    
     
-    if (drawable->texture) {
+    if (drawable->glTexture) {
         XForm::set(tmpXForm1, x, y, drawable->width, drawable->height);
         XForm::multiply(tmpXForm1, tmpXForm1, tmpXForm2);
-        renderDrawable(drawable->texture.get(), 6, tmpXForm1, isWindow);
+        renderDrawable(drawable->glTexture.get(), 6, tmpXForm1, isWindow, !drawable->isDirectContent && drawable->format == AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM);
     }
 }
 
@@ -444,20 +444,21 @@ void EGLRenderer::createEGLSurface(ANativeWindow *window) {
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 }
 
-void EGLRenderer::renderDrawable(Texture *texture, int length, float xform[], bool isFromWindow) {
+void EGLRenderer::renderDrawable(GLTexture *texture, int length, float xform[], bool isFromWindow, bool swapColors) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture->id);
     glUniform1i(drawableShader->getUniformLoc("texture"), 0);
     glUniform1fv(drawableShader->getUniformLoc("xform"), length, xform);
     glUniform1i(drawableShader->getUniformLoc("is_cursor"), isFromWindow ? 0 : 1);
+    glUniform1i(drawableShader->getUniformLoc("swap_colors"), swapColors ? 1 : 0);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-std::unique_ptr<Texture> EGLRenderer::allocateTextureDirect(AHardwareBuffer* hardwareBuffer) {
+std::unique_ptr<GLTexture> EGLRenderer::allocateTextureDirect(AHardwareBuffer* hardwareBuffer) {
     if (!hardwareBuffer || !display) return nullptr;
     
-    std::unique_ptr<Texture> texture = std::make_unique<Texture>();
+    std::unique_ptr<GLTexture> texture = std::make_unique<GLTexture>();
     
     const EGLint attribList[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
 
@@ -478,8 +479,8 @@ std::unique_ptr<Texture> EGLRenderer::allocateTextureDirect(AHardwareBuffer* har
     
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFilter == TextureFilter::Nearest ? GL_NEAREST : GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFilter == TextureFilter::Nearest ? GL_NEAREST : GL_LINEAR);
 
     glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, texture->eglImage);
     if (glGetError() != GL_NO_ERROR) {
@@ -492,8 +493,8 @@ std::unique_ptr<Texture> EGLRenderer::allocateTextureDirect(AHardwareBuffer* har
     return texture;
 }
 
-std::unique_ptr<Texture> EGLRenderer::allocateTexture(int width, int height) {
-    std::unique_ptr<Texture> texture = std::make_unique<Texture>();
+std::unique_ptr<GLTexture> EGLRenderer::allocateTexture(int width, int height) {
+    std::unique_ptr<GLTexture> texture = std::make_unique<GLTexture>();
     
     glGenTextures(1, (GLuint *)&texture->id);
     
@@ -505,22 +506,22 @@ std::unique_ptr<Texture> EGLRenderer::allocateTexture(int width, int height) {
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFilter == TextureFilter::Nearest ? GL_NEAREST : GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFilter == TextureFilter::Nearest ? GL_NEAREST : GL_LINEAR);
 
     glBindTexture(GL_TEXTURE_2D, 0);
     
     return texture;
 }
 
-void EGLRenderer::reallocateTexture(Texture *texture, int width, int height) {
+void EGLRenderer::reallocateTexture(GLTexture *texture, int width, int height) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture->id);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT, width, height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void EGLRenderer::reallocateTextureDirect(Texture *texture, AHardwareBuffer* hardwareBuffer) {
+void EGLRenderer::reallocateTextureDirect(GLTexture *texture, AHardwareBuffer* hardwareBuffer) {
     if (!hardwareBuffer || !display) {
         destroyTexture(texture);
         return;
@@ -554,14 +555,14 @@ void EGLRenderer::reallocateTextureDirect(Texture *texture, AHardwareBuffer* har
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void EGLRenderer::destroyTexture(Texture* texture) {
+void EGLRenderer::destroyTexture(GLTexture* texture) {
     if (!texture) return;
     
     glDeleteTextures(1, (GLuint *)&texture->id);
     eglDestroyImageKHR(display, texture->eglImage);
 }
 
-void EGLRenderer::updateTextureDrawable(Texture *texture, int width, int height, void *data) {
+void EGLRenderer::updateTextureDrawable(GLTexture *texture, int width, int height, void *data) {
     glBindTexture(GL_TEXTURE_2D, texture->id);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA_EXT, GL_UNSIGNED_BYTE, data);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -575,4 +576,8 @@ void EGLRenderer::destroyEGLSurface() {
 void EGLRenderer::destroyEGLContext() {
     eglDestroyContext(display, context);
     context = EGL_NO_CONTEXT;
+}
+
+void EGLRenderer::setTextureFilter(int textureFilter) {
+    this->textureFilter = static_cast<TextureFilter>(textureFilter);
 }

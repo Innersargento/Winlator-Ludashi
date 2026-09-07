@@ -35,6 +35,11 @@ class EGLRenderer {
             CHANGE_SURFACE
         };
         
+        enum class TextureFilter {
+            Nearest = 0,
+            Linear = 1
+        };
+        
         struct RenderLock {
            std::condition_variable cv;
            std::mutex mutex;
@@ -69,6 +74,7 @@ class EGLRenderer {
         bool viewportNeedsUpdate = true;
         float tmpXForm1[6] = {1, 0, 0, 1, 0, 0};
         float tmpXForm2[6] = {1, 0, 0, 1, 0, 0};
+        TextureFilter textureFilter;
         
         RenderLock renderLock;
         State state = State::NONE;
@@ -84,12 +90,12 @@ class EGLRenderer {
         void destroyEGLSurface();
         void destroyEGLContext();
         void renderCursor();
-        void renderDrawable(Texture *texture, int length, float xform[], bool isFromWindow);
-        void updateTextureDrawable(Texture *texture, int width, int height, void *data);
-        std::unique_ptr<Texture> allocateTexture(int width, int height);
-        std::unique_ptr<Texture> allocateTextureDirect(AHardwareBuffer* hardwareBuffer);
-        void reallocateTexture(Texture *texture, int width, int height);
-        void reallocateTextureDirect(Texture *texture, AHardwareBuffer* hardwareBuffer);
+        void renderDrawable(GLTexture *texture, int length, float xform[], bool isFromWindow, bool swapColors);
+        void updateTextureDrawable(GLTexture *texture, int width, int height, void *data);
+        std::unique_ptr<GLTexture> allocateTexture(int width, int height);
+        std::unique_ptr<GLTexture> allocateTextureDirect(AHardwareBuffer* hardwareBuffer);
+        void reallocateTexture(GLTexture *texture, int width, int height);
+        void reallocateTextureDirect(GLTexture *texture, AHardwareBuffer* hardwareBuffer);
         void init();
         void createEGLSurface(ANativeWindow *window);
         void collectRenderableWindows(Window *window, int x, int y);
@@ -116,8 +122,9 @@ class EGLRenderer {
         void updateWindowPosition(Window *window);
         void queueEvent(std::function<void()> func);
         void requestRenderer();
-        void destroyTexture(Texture *texture);
+        void destroyTexture(GLTexture *texture);
         void destroySurface();
         void createSurface(ANativeWindow *window);
         void changeSurface(int width, int height);
+        void setTextureFilter(int textureFilter);
 };
