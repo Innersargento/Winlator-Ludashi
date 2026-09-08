@@ -11,6 +11,7 @@ import androidx.core.view.WindowCompat
 import androidx.fragment.app.Fragment
 import com.winlator.cmod.container.Shortcut
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 
 object ShortcutSettingsComposeDialog {
     @JvmStatic
@@ -32,7 +33,7 @@ object ShortcutSettingsComposeDialog {
             }
             decorView.systemUiVisibility = immersiveUiFlagsV2()
         }
-        dialog.setContentView(ComposeView(fragment.requireContext()).apply {
+        dialog.setContentView(createControllerComposeView(fragment.requireContext()).apply {
             setContent { WinZTheme { ShortcutEditorV2(fragment, shortcut, dialog::dismiss) } }
         })
         dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)

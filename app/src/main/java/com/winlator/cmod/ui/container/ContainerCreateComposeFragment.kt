@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 
 class ContainerCreateComposeFragment : Fragment() {
     companion object {
@@ -23,7 +24,7 @@ class ContainerCreateComposeFragment : Fragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View = ComposeView(requireContext()).apply {
+    ): View = createControllerComposeView(requireContext()).apply {
         val editId = arguments?.getInt(ARG_EDIT_CONTAINER_ID, -1)?.takeIf { it > 0 }
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent {

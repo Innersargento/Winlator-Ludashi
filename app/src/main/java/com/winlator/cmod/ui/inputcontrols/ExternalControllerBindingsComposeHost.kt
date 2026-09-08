@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.winlator.cmod.R
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 
 data class ExternalControllerBindingItem(
     val keyCode: Int,
@@ -87,7 +88,7 @@ object ExternalControllerBindingsComposeHost {
         state: ExternalControllerBindingsState,
         bindingLabels: List<List<String>>,
         callbacks: ExternalControllerBindingsCallbacks
-    ): ComposeView = ComposeView(context).apply {
+    ): ComposeView = createControllerComposeView(context).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent {
             WinZTheme {

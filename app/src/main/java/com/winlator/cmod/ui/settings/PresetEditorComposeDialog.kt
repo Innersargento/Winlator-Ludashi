@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.winlator.cmod.R
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 
 data class PresetEditorVariable(
     val name: String,
@@ -81,7 +82,7 @@ object PresetEditorComposeDialog {
         listener: PresetEditorSaveListener
     ): Dialog {
         val dialog: Dialog = ComponentDialog(context, R.style.ContentDialog_Dark)
-        val composeView = ComposeView(context).apply {
+        val composeView = createControllerComposeView(context).apply {
             setBackgroundColor(Color.TRANSPARENT)
             setContent {
                 WinZTheme {

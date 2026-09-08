@@ -52,11 +52,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 
 object ContainerOverviewLandscapeComposeHost {
     @JvmStatic
     fun create(context: Context, model: ContainerOverviewModel, callbacks: ContainerOverviewCallbacks): ComposeView =
-        ComposeView(context).apply {
+        createControllerComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent { WinZTheme { LandscapeContainerOverview(model, callbacks) } }
         }

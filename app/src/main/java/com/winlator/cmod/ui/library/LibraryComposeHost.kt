@@ -14,6 +14,7 @@ import com.winlator.cmod.MainActivity
 import com.winlator.cmod.ui.LibraryToolbarActions
 import com.winlator.cmod.ui.applyAppFullscreen
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 import java.util.concurrent.atomic.AtomicInteger
 
 @Immutable
@@ -111,7 +112,7 @@ object LibraryComposeHost {
             query,
             selectedShortcutPath
         )
-        val view = ComposeView(context).apply {
+        val view = createControllerComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 WinZTheme {

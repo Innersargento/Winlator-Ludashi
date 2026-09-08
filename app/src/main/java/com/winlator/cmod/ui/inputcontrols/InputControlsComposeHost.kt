@@ -65,6 +65,7 @@ import com.winlator.cmod.MainActivity
 import com.winlator.cmod.R
 import com.winlator.cmod.ui.LandscapeMainNavigation
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 import kotlin.math.roundToInt
 
 @Immutable
@@ -105,7 +106,7 @@ object InputControlsComposeHost {
     @JvmStatic
     fun create(context: Context, model: InputControlsModel, callbacks: InputControlsCallbacks): ComposeView {
         val modelState = mutableStateOf(model)
-        return ComposeView(context).apply {
+        return createControllerComposeView(context).apply {
             tag = modelState
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent { WinZTheme { InputControlsScreen(modelState.value, callbacks) } }

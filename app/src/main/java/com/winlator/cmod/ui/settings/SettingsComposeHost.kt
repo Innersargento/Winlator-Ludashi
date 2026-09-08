@@ -79,6 +79,7 @@ import com.winlator.cmod.MainActivity
 import com.winlator.cmod.R
 import com.winlator.cmod.ui.LandscapeMainNavigation
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 import com.winlator.cmod.ui.theme.WinlatorThemePreferenceCard
 import kotlin.math.roundToInt
 
@@ -138,7 +139,7 @@ object SettingsComposeHost {
     @JvmStatic
     fun create(context: Context, model: SettingsModel, callbacks: SettingsCallbacks): ComposeView {
         val modelState = mutableStateOf(model)
-        return ComposeView(context).apply {
+        return createControllerComposeView(context).apply {
             tag = modelState
             setBackgroundColor(Color.TRANSPARENT)
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)

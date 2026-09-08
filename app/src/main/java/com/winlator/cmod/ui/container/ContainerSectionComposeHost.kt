@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.winlator.cmod.core.DefaultVersion
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 
 @Stable
 interface ContainerSectionCallbacks {
@@ -139,7 +140,7 @@ object ContainerSectionComposeHost {
         fexcorePresetIds: Array<String>,
         selectedFexcorePreset: String,
         callbacks: ContainerSectionCallbacks
-    ): ComposeView = ComposeView(context).apply {
+    ): ComposeView = createControllerComposeView(context).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent {
             WinZTheme {

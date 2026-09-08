@@ -51,6 +51,7 @@ import com.winlator.cmod.R
 import com.winlator.cmod.ui.LandscapeMainNavigation
 import com.winlator.cmod.ui.applyAppFullscreen
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 
 class ContainerUiModel(
     val id: Int,
@@ -76,7 +77,7 @@ class ContainersComposeHost(
 
     fun createView(): ComposeView {
         applyAppFullscreen(context as? MainActivity)
-        return ComposeView(context).apply {
+        return createControllerComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 WinZTheme {

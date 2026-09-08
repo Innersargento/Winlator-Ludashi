@@ -62,6 +62,7 @@ import com.winlator.cmod.MainActivity
 import com.winlator.cmod.ui.KeepLandscapeChromeHidden
 import com.winlator.cmod.ui.applyAppFullscreen
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -79,7 +80,7 @@ object GameDetailComposeHost {
     @JvmStatic
     fun create(context: Context, title: String, subtitle: String, artworkPath: String?, fallback: Bitmap?, favorite: Boolean, callbacks: GameDetailCallbacks): ComposeView {
         applyAppFullscreen(context as? MainActivity)
-        return ComposeView(context).apply {
+        return createControllerComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent { WinZTheme { GameDetailScreen(title, subtitle, artworkPath, fallback, favorite, callbacks) } }
         }

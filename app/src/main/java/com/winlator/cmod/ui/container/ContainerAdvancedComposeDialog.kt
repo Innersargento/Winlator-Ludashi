@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import com.winlator.cmod.R
 import com.winlator.cmod.container.ContainerManager
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 import com.winlator.cmod.winhandler.WinHandler
 
 private data class AdvancedEnvEntry(val name: String, val value: String)
@@ -111,7 +112,7 @@ object ContainerAdvancedComposeDialog {
     @JvmStatic
     fun show(context: Context, containerId: Int, onSaved: Runnable? = null) {
         val dialog: Dialog = ComponentDialog(context, R.style.ContentDialog_Dark)
-        val composeView = ComposeView(context).apply {
+        val composeView = createControllerComposeView(context).apply {
             setBackgroundColor(AndroidColor.TRANSPARENT)
             setContent {
                 WinZTheme {

@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.AbstractComposeView
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -208,6 +209,41 @@ fun WinlatorTheme(content: @Composable () -> Unit) {
 @Composable
 fun WinZTheme(content: @Composable () -> Unit) = WinlatorTheme(content)
 
+/**
+ * Creates a Compose host that never becomes the D-pad focus target itself.
+ *
+ * Android restores focus before Compose has rebuilt its virtual focus tree when a screen is
+ * resumed. If the host is eligible, the framework draws its default focus highlight around the
+ * entire screen and subsequent D-pad events cannot reach the individual Compose controls.
+ */
+fun createControllerComposeView(context: Context): ComposeView = ComposeView(context).apply {
+    isFocusable = false
+    isFocusableInTouchMode = false
+    descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
+    defaultFocusHighlightEnabled = false
+    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(view: View) = disableScreenContainerFocus(view)
+        override fun onViewDetachedFromWindow(view: View) = Unit
+    })
+}
+
+/** Disables Android's focus target on every real View that wraps a Compose screen. */
+private fun disableScreenContainerFocus(view: View) {
+    var current: View? = view
+    while (current != null) {
+        // Compose's internal owner is intentionally not changed: it dispatches D-pad events to
+        // the virtual Compose controls. Every outer Android container is presentation only.
+        if (current !is AbstractComposeView) {
+            current.isFocusable = false
+            current.isFocusableInTouchMode = false
+            current.clearFocus()
+        }
+        current.defaultFocusHighlightEnabled = false
+        current = current.parent as? View
+    }
+}
+
 @Composable
 private fun ConfigureComposeHostFocus() {
     val owner = LocalView.current
@@ -216,6 +252,12 @@ private fun ConfigureComposeHostFocus() {
         // Only Compose controls should draw focus, never the full Android host view.
         val previousHighlight = owner.defaultFocusHighlightEnabled
         owner.defaultFocusHighlightEnabled = false
+        disableScreenContainerFocus(owner.parent as? View ?: owner)
+        // Keep input on Compose's internal owner; it routes the first D-pad press to the
+        // appropriate virtual control without showing Android's whole-screen focus outline.
+        owner.post {
+            if (owner.isAttachedToWindow) owner.requestFocus()
+        }
         val host = owner.parent as? AbstractComposeView
         val previousHostFocusable = host?.focusable
         val previousHostTouchFocus = host?.isFocusableInTouchMode
@@ -250,6 +292,11 @@ private fun HideSystemBars(theme: WinlatorThemeType) {
     DisposableEffect(activity, theme) {
         val window = activity?.window
         if (window != null) {
+            // Never allow the decor/root window to be rendered as the selected controller item.
+            // Its Compose descendants continue to receive focus normally.
+            window.decorView.defaultFocusHighlightEnabled = false
+            window.decorView.isFocusable = false
+            window.decorView.isFocusableInTouchMode = false
             WindowCompat.setDecorFitsSystemWindows(window, false)
             window.statusBarColor = colors.background.toArgb()
             window.navigationBarColor = colors.background.toArgb()

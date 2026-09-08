@@ -75,6 +75,7 @@ import com.winlator.cmod.core.StringUtils
 import com.winlator.cmod.ui.applyAppFullscreen
 import com.winlator.cmod.ui.container.ContainerCreateComposeFragment
 import com.winlator.cmod.ui.theme.WinZTheme
+import com.winlator.cmod.ui.theme.createControllerComposeView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -112,7 +113,7 @@ class ContainersSettingsActivity : AppCompatActivity() {
 
     private fun showHome() {
         root.removeAllViews()
-        root.addView(ComposeView(this).apply {
+        root.addView(createControllerComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
                 WinZTheme {
