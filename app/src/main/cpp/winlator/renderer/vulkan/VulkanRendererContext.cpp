@@ -1084,7 +1084,9 @@ void VulkanRendererContext::renderFrame() {
     VkRect2D effectiveScissor{{0,0},swapchainExt};
 
     {
-        std::lock_guard<std::mutex> lk(renderMutex);
+        // Keep cursor CPU data and Vulkan handles stable until the command
+        // buffer that references them has been submitted.
+        std::unique_lock<std::mutex> renderLock(renderMutex);
 
         if (!deleteQueue.empty()) {
             for (auto& wt:deleteQueue) {
@@ -1123,43 +1125,46 @@ void VulkanRendererContext::renderFrame() {
 
         if (isCursorImageDirty.load() && cursorImg!=VK_NULL_HANDLE && !cursorPixels.empty()) {
             VkDeviceSize csz=(VkDeviceSize)cursorTexW*cursorTexH*4;
+            // The cursor has a single staging buffer.  It may still be read
+            // by an earlier submission, so do not overwrite or replace it.
+            vk_.DeviceWaitIdle(device);
             ensureCursorStaging(csz);
             isCursorImageDirty.store(false); hasCurUpload=true; curUpload=cursorStg;
             cursorUploadSize = csz;
         }
+
+        if (hasCurUpload && cursorStgP && !cursorPixels.empty())
+            memcpy(cursorStgP, cursorPixels.data(), cursorUploadSize);
+
+        recordCmdBuf(cmdBufs[currentFrame],imgIdx,frameDraws,
+            frameAhbTransitions,framePreUpload,framePostUpload,
+            curUpload,hasCurUpload,
+            ox,oy,sx,sy,cw,ch,ptrX,ptrY,curHotX,curHotY,curW,curH,curVis,
+            effectiveScissor);
+
+        VkSemaphore wSem[]={imgAvailSems[currentFrame]}, sSem[]={renderDoneSems[currentFrame]};
+        VkPipelineStageFlags wStage[]={VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        VkSubmitInfo si{}; si.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        si.waitSemaphoreCount=1; si.pWaitSemaphores=wSem; si.pWaitDstStageMask=wStage;
+        si.commandBufferCount=1; si.pCommandBuffers=&cmdBufs[currentFrame];
+        si.signalSemaphoreCount=1; si.pSignalSemaphores=sSem;
+
+        vk_.ResetFences(device,1,&inFlightFences[currentFrame]);
+        if (vk_.QueueSubmit(graphicsQueue,1,&si,inFlightFences[currentFrame])!=VK_SUCCESS) {
+            vk_.DestroyFence(device,inFlightFences[currentFrame],nullptr);
+            VkFenceCreateInfo fi{}; fi.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO; fi.flags=VK_FENCE_CREATE_SIGNALED_BIT;
+            vk_.CreateFence(device,&fi,nullptr,&inFlightFences[currentFrame]);
+            return;
+        }
+        VkSwapchainKHR scs[]={swapchain};
+        VkPresentInfoKHR pi{}; pi.sType=VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        pi.waitSemaphoreCount=1; pi.pWaitSemaphores=sSem; pi.swapchainCount=1; pi.pSwapchains=scs; pi.pImageIndices=&imgIdx;
+
+        res = vk_.QueuePresentKHR(graphicsQueue, &pi);
+
+        if (res==VK_ERROR_OUT_OF_DATE_KHR||res==VK_ERROR_SURFACE_LOST_KHR||res==VK_SUBOPTIMAL_KHR) fbResized.store(true);
+        currentFrame=(currentFrame+1)%MAX_FRAMES_IN_FLIGHT;
     }
-
-    if (hasCurUpload && cursorStgP && !cursorPixels.empty())
-        memcpy(cursorStgP, cursorPixels.data(), cursorUploadSize);
-
-    recordCmdBuf(cmdBufs[currentFrame],imgIdx,frameDraws,
-        frameAhbTransitions,framePreUpload,framePostUpload,
-        curUpload,hasCurUpload,
-        ox,oy,sx,sy,cw,ch,ptrX,ptrY,curHotX,curHotY,curW,curH,curVis,
-        effectiveScissor);
-
-    VkSemaphore wSem[]={imgAvailSems[currentFrame]}, sSem[]={renderDoneSems[currentFrame]};
-    VkPipelineStageFlags wStage[]={VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    VkSubmitInfo si{}; si.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    si.waitSemaphoreCount=1; si.pWaitSemaphores=wSem; si.pWaitDstStageMask=wStage;
-    si.commandBufferCount=1; si.pCommandBuffers=&cmdBufs[currentFrame];
-    si.signalSemaphoreCount=1; si.pSignalSemaphores=sSem;
-
-    vk_.ResetFences(device,1,&inFlightFences[currentFrame]);
-    if (vk_.QueueSubmit(graphicsQueue,1,&si,inFlightFences[currentFrame])!=VK_SUCCESS) {
-        vk_.DestroyFence(device,inFlightFences[currentFrame],nullptr);
-        VkFenceCreateInfo fi{}; fi.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO; fi.flags=VK_FENCE_CREATE_SIGNALED_BIT;
-        vk_.CreateFence(device,&fi,nullptr,&inFlightFences[currentFrame]);
-        return;
-    }
-    VkSwapchainKHR scs[]={swapchain};
-    VkPresentInfoKHR pi{}; pi.sType=VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    pi.waitSemaphoreCount=1; pi.pWaitSemaphores=sSem; pi.swapchainCount=1; pi.pSwapchains=scs; pi.pImageIndices=&imgIdx;
-
-    res = vk_.QueuePresentKHR(graphicsQueue, &pi);
-
-    if (res==VK_ERROR_OUT_OF_DATE_KHR||res==VK_ERROR_SURFACE_LOST_KHR||res==VK_SUBOPTIMAL_KHR) fbResized.store(true);
-    currentFrame=(currentFrame+1)%MAX_FRAMES_IN_FLIGHT;
 }
 
 void VulkanRendererContext::onSurfaceResized(int w, int h) {
@@ -1233,6 +1238,10 @@ void VulkanRendererContext::setCursorVisible(bool v) {
 void VulkanRendererContext::updateCursorImage(void* px, short w, short h, short stride, short hotX, short hotY) {
     if (!px||w<=0||h<=0) return;
     std::lock_guard<std::mutex> lk(renderMutex);
+    // Resizing replaces image/view/memory and the staging buffer.  They must
+    // outlive every submitted command buffer that may still reference them.
+    if (cursorImg != VK_NULL_HANDLE && (cursorTexW != w || cursorTexH != h))
+        vk_.DeviceWaitIdle(device);
     ensureCursorTex(w,h);
     cursorPixels.resize((size_t)w*h);
     const size_t srcStrideBytes=(size_t)std::max((int)stride,(int)w)*4;
