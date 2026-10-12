@@ -19,7 +19,6 @@ add_library(winlator SHARED
         winlator/gpu_image.c
         winlator/sysvshared_memory.c
         winlator/xconnector_epoll.c
-        winlator/alsa_client.c
         winlator/vulkan.c
         winlator/renderer/egl.cpp
         winlator/renderer/renderer_jni.cpp
