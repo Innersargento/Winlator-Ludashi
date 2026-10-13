@@ -19,6 +19,9 @@ add_library(winlator SHARED
         winlator/gpu_image.c
         winlator/sysvshared_memory.c
         winlator/xconnector_epoll.c
+        winlator/xinput_stream.c
+        winlator/xoutput_stream.c
+        winlator/arrays.c
         winlator/vulkan.c
         winlator/renderer/egl.cpp
         winlator/renderer/renderer_jni.cpp
@@ -32,7 +35,7 @@ add_library(winlator SHARED
 )
 
 target_compile_options(winlator PRIVATE -Wall -Wextra)
-target_include_directories(winlator PRIVATE winlator/renderer winlator/renderer/effectcomposer)
+target_include_directories(winlator PRIVATE winlator/renderer winlator/renderer/effectcomposer winlator/include)
 
 target_link_libraries(winlator
         log
