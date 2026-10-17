@@ -1752,8 +1752,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
             Log.d(TAG, "Extracting nglide wrapper");
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "ddrawrapper/nglide.tzst", windowsDir, onExtractFileListener);
-
-            if (ddrawrapper.contains("None")) {
+            
+            if (ddrawrapper.contains("none")) {
                 Log.d(TAG, "No DDRaw wrapper has been selected, restoring original ddraw files");
                 restoreOriginalDllFiles(new String[]{ "ddraw.dll", "d3dimm.dll" });
             }
