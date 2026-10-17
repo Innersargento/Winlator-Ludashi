@@ -31,6 +31,7 @@ public class Drawable extends XResource {
 
     public Drawable(int id, int width, int height, Visual visual, int format) {
         super(id);
+        
         this.width = (short)width;
         this.height = (short)height;
         this.visual = visual;
@@ -41,11 +42,18 @@ public class Drawable extends XResource {
         }
     }
     
-    public void setGPUImage(GPUImage texture) {
-        if (this.gpuImage != null)
-            gpuImage.destroy();
-            
-        this.gpuImage = texture;
+    public Drawable(int id, int width, int height, Visual visual, GPUImage gpuImage) {
+        super(id);
+        
+        this.width = (short)width;
+        this.height = (short)height;
+        this.visual = visual;
+        
+        if (gpuImage.getAHB() == 0) {
+            throw new IllegalStateException("Drawable data initialized as null!");
+        }
+        
+        this.gpuImage = gpuImage;
     }
     
     public GPUImage getGPUImage() {

@@ -14,7 +14,7 @@ public class GPUImage {
     public int format;
     private ByteBuffer virtualData;
     private short stride;
-    private boolean locked;
+    private boolean locked = false;
     private static boolean supported = false;
 
     static {
@@ -34,12 +34,15 @@ public class GPUImage {
     }
     
     public void lock() {
+        if (locked)
+            return;
+            
         virtualData = lockHardwareBuffer(hardwareBufferPtr);
         if (virtualData == null) {
             Log.d(LOG_TAG, "Failed to lock hardware buffer");
-            destroy();
             return;
         }
+        
         locked = true;
     }
     
@@ -59,9 +62,8 @@ public class GPUImage {
             
         destroyHardwareBuffer(hardwareBufferPtr);
         hardwareBufferPtr = 0;
-        locked = false;
     }
-
+    
     @Keep
     private void setStride(short stride) {
         this.stride = stride;

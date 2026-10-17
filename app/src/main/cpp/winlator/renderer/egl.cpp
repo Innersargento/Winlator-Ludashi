@@ -476,7 +476,7 @@ void EGLRenderer::renderDrawable(GLTexture *texture, int length, float xform[], 
 }
 
 std::unique_ptr<GLTexture> EGLRenderer::allocateTextureDirect(AHardwareBuffer* hardwareBuffer) {
-    if (!hardwareBuffer || !display) 
+    if (!hardwareBuffer || !display)
         return nullptr;
     
     std::unique_ptr<GLTexture> texture = std::make_unique<GLTexture>();
@@ -484,10 +484,12 @@ std::unique_ptr<GLTexture> EGLRenderer::allocateTextureDirect(AHardwareBuffer* h
     const EGLint attribList[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
 
     EGLClientBuffer clientBuffer = eglGetNativeClientBufferANDROID(hardwareBuffer);
-    if (!clientBuffer) return nullptr;
+    if (!clientBuffer) 
+        return nullptr;
 
     texture->eglImage = eglCreateImageKHR(display, EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, clientBuffer, attribList);
-    if (!texture->eglImage) return nullptr;
+    if (!texture->eglImage)
+        return nullptr;
     
     glGenTextures(1, (GLuint *)&texture->id);
     glActiveTexture(GL_TEXTURE0);
