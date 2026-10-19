@@ -97,14 +97,11 @@ public class XOutputStream implements XStreamLock {
         writePad(nativePtr, length);
     }
 
-    public void writeFP3232(float value) {
-        float tmp;
-        tmp = (float)Math.floor(value);
-        int integral = (int)tmp;
-        tmp = (value - tmp) * (1L<<32);
-        int frac = (int)tmp;
-        writeInt(integral);
-        writeInt(frac);
+    public void writeFP3232(double value) {
+        double integral = Math.floor(value);
+        long frac = (long)((value - integral) * (1L<<32));
+        writeInt((int)integral);
+        writeInt((int)frac);
     }
 
     public XStreamLock lock() {
