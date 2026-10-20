@@ -6,6 +6,7 @@ import com.winlator.cmod.xconnector.ConnectedClient;
 import com.winlator.cmod.xconnector.XInputStream;
 import com.winlator.cmod.xconnector.XOutputStream;
 import com.winlator.cmod.xserver.events.Event;
+import com.winlator.cmod.xserver.extensions.XInputExtension;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -92,6 +93,9 @@ public class XClient extends ConnectedClient implements XResourceManager.OnResou
                 int i = eventListeners.size()-1;
                 eventListeners.keyAt(i).removeEventListener(eventListeners.removeAt(i));
             }
+
+            XInputExtension xInputExtension = xServer.getXInputExtension();
+            if (xInputExtension != null) xInputExtension.removeClient(this);
 
             xServer.windowManager.removeOnResourceLifecycleListener(this);
             xServer.pixmapManager.removeOnResourceLifecycleListener(this);
