@@ -304,7 +304,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeDestroyWindow(JNIEnv *env, jobje
     
     if (xserver.isDisplayX()) {
         displayX.queueEvent([window] { 
-            if (window->inputOutput && window->drawable->composerTexture != nullptr)
+            if (window->drawable && window->drawable->composerTexture != nullptr)
                 effectComposer.destroyComposerTexture(window->drawable.get());
                 
             displayX.destroyWindowControl(window);
@@ -313,7 +313,7 @@ Java_com_winlator_cmod_widget_XServerView_nativeDestroyWindow(JNIEnv *env, jobje
     }    
     else {
         renderer.queueEvent([window] { 
-            if (window->inputOutput && window->drawable->glTexture != nullptr) 
+            if (window->drawable && window->drawable->glTexture != nullptr) 
                 renderer.destroyTexture(window->drawable->glTexture.get());
                 
             windowManager.deleteWindow(window);
@@ -674,10 +674,17 @@ Java_com_winlator_cmod_widget_XServerView_nativeUpdateDirectContent(jint windowI
     
     window->externalContent = directContent;
     
-    if (xserver.isDisplayX())
+    if (xserver.isDisplayX()) {
         displayX.requestWindowUpdate(window);
-    else    
+    }    
+    else {
+        if (window->hasSiblings() && !window->isOnTop()) {
+            windowManager.changeZOrder(1, window, nullptr);
+            renderer.queueEvent([]{ renderer.updateScene(); });
+        }     
+            
         renderer.requestRenderer();
+    }    
 }
 
 extern "C" JNIEXPORT void JNICALL

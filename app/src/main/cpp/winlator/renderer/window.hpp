@@ -98,6 +98,14 @@ struct Window {
         
         return window;
     }
+    
+    bool hasSiblings() {
+        return this->parent->children.size() > 1;
+    }
+    
+    bool isOnTop() {
+        return this->parent->children.back() == this;
+    }
 };
 
 struct WindowLock {
