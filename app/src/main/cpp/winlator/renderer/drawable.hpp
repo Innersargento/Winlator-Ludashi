@@ -42,8 +42,6 @@ struct Drawable {
     bool isDirectContent;
     bool isDisplayX;
     void *data;
-    jobject drawableObj;
-    jobject gpuImageObj;
     AHardwareBuffer *ahb;
     int sync_fence;
 };

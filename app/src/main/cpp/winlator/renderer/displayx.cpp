@@ -298,7 +298,6 @@ void DisplayX::networkThreadLoop() {
                                 drawable->format = outDesc.format;
                                 drawable->isDirectContent = false;
                                 drawable->isDisplayX = true;
-                                drawable->drawableObj = nullptr;
                                 drawable->sync_fence = -1;
                                 
                                 swapchain->images[j] = std::move(drawable);
@@ -344,7 +343,7 @@ void DisplayX::networkThreadLoop() {
                             presentRequest->swapchainId = id;
                             
                             presentRequests.push(std::move(presentRequest), swapchain->presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? true : false);
-                            if (xServer->isShowFPS) env->CallVoidMethod(xServer->xserverDisplayActivity, cache->updateFrameRating, swapchain->window->windowObj);
+                            if (xServer->isShowFPS) env->CallVoidMethod(xServer->xserverDisplayActivity, cache->updateFrameRating, swapchain->window->id);
                             if (!presentRR) presentLock.notify();
                             break;
                         }    
@@ -758,9 +757,6 @@ void DisplayX::destroyWindowControl(Window *window) {
 void DisplayX::mapWindow(Window *window) {
     if (!window->control) 
         return;
-    
-    if (!windowManager->getUnviewableWMClass().empty() && !strcmp(window->className.c_str(), windowManager->getUnviewableWMClass().c_str()))
-        window->enabled = false;
     
     pfnASurfaceTransactionSetVisibility(windowTransaction, window->control, ASURFACE_TRANSACTION_VISIBILITY_SHOW);
     pfnASurfaceTransactionApply(windowTransaction);

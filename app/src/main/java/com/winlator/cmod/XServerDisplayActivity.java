@@ -577,7 +577,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {
             @Override
             public void onUpdateWindowContentDirect(Window window, Drawable drawable) {
-                updateFrameRating(window);
+                updateFrameRating(window.id);
             }
             
             @Override
@@ -588,7 +588,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                     winStarted[0] = true;
                 }
                     
-                updateFrameRating(window);
+                updateFrameRating(window.id);
             }
            
             @Override
@@ -2032,8 +2032,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         this.screenEffectProfile = screenEffectProfile;
     }
     
-    public void updateFrameRating(Window window) {
-        if (frameRatingWindowId != window.id) return;
+    public void updateFrameRating(int id) {
+        if (frameRatingWindowId != id) return;
         frameRating.update();
     }
     

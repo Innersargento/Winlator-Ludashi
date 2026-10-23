@@ -173,7 +173,7 @@ public class XServerView extends SurfaceView implements SurfaceHolder.Callback, 
 
     @Override
     public void onUpdateWindowGeometry(final Window window, boolean resized) {
-        nativeUpdateWindowGeometry(window.id, window.getWidth(), window.getHeight(), window.getX(), window.getY(), resized);
+        nativeUpdateWindowGeometry(window.id, window.getWidth(), window.getHeight(), window.getX(), window.getY(), resized, window);
     }
 
     @Override
@@ -240,7 +240,7 @@ public class XServerView extends SurfaceView implements SurfaceHolder.Callback, 
     @FastNative
     public native void nativeChangeWindowZOrder(int stackMode, int id, int siblingId);
     @FastNative
-    public native void nativeUpdateWindowGeometry(int id, int width, int height, int x, int y, boolean resized);
+    public native void nativeUpdateWindowGeometry(int id, int width, int height, int x, int y, boolean resized, Window window);
     @CriticalNative
     public native static void nativePointerMove(int x, int y);
     @FastNative

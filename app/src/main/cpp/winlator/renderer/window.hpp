@@ -25,8 +25,6 @@ struct Window {
     Cursor *cursor;
     bool enabled;
     std::vector<Window *> children;
-    jobject attributes;
-    jobject windowObj;
     std::unordered_map<int, std::unique_ptr<struct Drawable>> directContents;
     Drawable *externalContent;
     ASurfaceControl *control;

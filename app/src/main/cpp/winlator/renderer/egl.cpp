@@ -357,7 +357,7 @@ void EGLRenderer::collectRenderableWindows(Window *window, int x, int y) {
         return;
     
     if (window != windowManager->getRootWindow()) {
-        bool viewable = env->CallBooleanMethod(window->attributes, cache->windowAttributesIsEnabled);
+        bool viewable = window->enabled;
         bool renderable = window->width > 1 && window->height > 1;
 
         if (viewable && renderable) {

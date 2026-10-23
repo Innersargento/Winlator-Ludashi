@@ -162,7 +162,7 @@ class JNICache {
             LOAD_METHOD_ID(gpuImageGetAHB, env, gpuImageClass, "getAHB", "()J");
             LOAD_FIELD_ID(gpuImageFormat, env, gpuImageClass, "format", "I");
             
-            LOAD_METHOD_ID(updateFrameRating, env, xserverDisplayActivityClass, "updateFrameRating", "(Lcom/winlator/cmod/xserver/Window;)V");
+            LOAD_METHOD_ID(updateFrameRating, env, xserverDisplayActivityClass, "updateFrameRating", "(I)V");
             LOAD_METHOD_ID(isShowFPS, env, xserverDisplayActivityClass, "isShowFPS", "()Z");
             LOAD_METHOD_ID(getRefreshRate, env, xserverDisplayActivityClass, "getRefreshRate", "()F");
             LOAD_FIELD_ID(performanceMode, env, xserverDisplayActivityClass, "performanceMode", "Z");
