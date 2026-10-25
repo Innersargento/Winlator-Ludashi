@@ -89,8 +89,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         Log.d("GuestProgramLauncherComponent", "box64Version: " + box64Version);
 
         File rootDir = imageFs.getRootDir();
+        File box64File = new File(rootDir, "/usr/bin/box64");
 
-        if (!box64Version.equals(container.getExtra("box64Version"))) {
+        // the container keeps the version it extracted, but a reinstalled imagefs no longer has the binary
+        if (!box64Version.equals(container.getExtra("box64Version")) || !box64File.exists()) {
             ContentProfile profile = contentsManager.getProfileByEntryName("box64-" + box64Version);
             if (profile != null)
                 contentsManager.applyContent(profile);
@@ -101,7 +103,6 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         }
 
         // Set execute permissions for box64 just in case
-        File box64File = new File(rootDir, "/usr/bin/box64");
         if (box64File.exists()) {
             FileUtils.chmod(box64File, 0755);
         }
