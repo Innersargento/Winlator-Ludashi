@@ -17,6 +17,7 @@
 #include <limits.h>
 #include <spawn.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -295,12 +296,34 @@ EXPORT char *realpath(const char *path, char *resolved)
 
 static int raw_mprotect(void *addr, size_t len, int prot) { return (int)syscall(__NR_mprotect, addr, len, prot); }
 
+/* execmod only happens on private file mappings: anonymous memory (e.g. [stack]) is denied for other reasons and
+ * swapping it would clobber pages in use, including the frames of this very call */
+static int file_backed(const void *addr)
+{
+    FILE *f = fopen("/proc/self/maps", "r");
+    if (!f) return 1;
+    char line[512];
+    int res = 1;
+    while (fgets(line, sizeof(line), f)) {
+        unsigned long lo, hi, ino = 1;
+        char perms[8];
+        if (sscanf(line, "%lx-%lx %7s %*s %*s %lu", &lo, &hi, perms, &ino) >= 3 &&
+            (unsigned long)addr >= lo && (unsigned long)addr < hi) {
+            res = ino != 0;
+            break;
+        }
+    }
+    fclose(f);
+    return res;
+}
+
 static int make_anon_exec(char *addr, size_t len, int prot)
 {
     void *tmp = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (tmp == MAP_FAILED) return -1;
     int r = -1;
-    if (raw_mprotect(addr, len, PROT_READ) == 0) {
+    /* keep PROT_WRITE: other threads may still be writing to the page, dropping it makes them SIGSEGV */
+    if (raw_mprotect(addr, len, PROT_READ | PROT_WRITE) == 0) {
         memcpy(tmp, addr, len);
         if (mmap(addr, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED) {
             memcpy(addr, tmp, len);
@@ -326,7 +349,9 @@ EXPORT int mprotect(void *addr, size_t len, int prot)
         size_t n = total - off < chunk ? total - off : chunk;
         char *p = (char *)addr + off;
         if (raw_mprotect(p, n, prot) == 0) continue;
-        if (errno != EACCES || make_anon_exec(p, n, prot) != 0) return -1;
+        if (errno != EACCES) return -1;
+        if (!file_backed(p)) { errno = EACCES; return -1; }
+        if (make_anon_exec(p, n, prot) != 0) return -1;
     }
     return 0;
 }
