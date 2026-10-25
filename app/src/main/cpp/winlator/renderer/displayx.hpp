@@ -50,11 +50,23 @@ class DisplayX {
            }
         };
         
+        struct DisplayXSwapchain {
+            uint8_t id;
+            Window *window;
+            uint32_t imageCount;
+            uint32_t presentMode;
+            uint32_t format;
+            uint32_t width;
+            uint32_t height;
+            std::vector<std::unique_ptr<Drawable>> images;
+        };
+        
         struct PresentRequest {
             Drawable *drawable;
             int sync_fence;
             uint64_t presentId;
-            uint8_t swapchainId;
+            DisplayXSwapchain *swapchain;
+            uint32_t index;
             int clientFd;
             Window *window;
         };
@@ -63,7 +75,6 @@ class DisplayX {
             private:
                 std::unordered_map<Window *, std::deque<std::unique_ptr<PresentRequest>>> mUpdatableWindows;
                 std::vector<Window *> mUpdatedWindows;
-                //Window *lastUpdatedWindow = nullptr;
 
             public:
                 void push(std::unique_ptr<PresentRequest> request, bool singleElement) {
@@ -72,7 +83,6 @@ class DisplayX {
                         
                     auto &queue = mUpdatableWindows[request->window];    
                     mUpdatedWindows.push_back(request->window);
-                    //lastUpdatedWindow = request->window;
                     
                     if (queue.empty()) {
                         queue.push_back(std::move(request));
@@ -110,11 +120,6 @@ class DisplayX {
                     auto itv = std::find(mUpdatedWindows.begin(), mUpdatedWindows.end(), window);
                     if (itv != mUpdatedWindows.end()) 
                         mUpdatedWindows.erase(itv);
-                        
-                    /*
-                    if (lastUpdatedWindow == window)
-                        lastUpdatedWindow = nullptr;
-                    */    
                         
                     mUpdatableWindows.erase(it);    
                 }
@@ -160,17 +165,6 @@ class DisplayX {
                 }
         };
         
-        struct DisplayXSwapchain {
-            uint8_t id;
-            Window *window;
-            uint32_t imageCount;
-            uint32_t presentMode;
-            uint32_t format;
-            uint32_t width;
-            uint32_t height;
-            std::vector<std::unique_ptr<Drawable>> images;
-        };
-        
         struct OnCompleteContext {
             std::vector<std::unique_ptr<PresentRequest>> requests;
         };
@@ -205,7 +199,6 @@ class DisplayX {
         std::atomic_bool surfaceChanged{false};
         std::atomic_bool perfMode{true};
         std::atomic_bool presentRR{true};
-        std::atomic_bool backPressure{false};
         std::atomic_bool precisePresentation{false};
         
         bool requestUpdate = false;
@@ -220,7 +213,6 @@ class DisplayX {
         void presentThreadLoop();
         static void onFrameCallback64(int64_t frameTimeNanos, void *data);
         static void onVsyncCallback(const AChoreographerFrameCallbackData* callbackData, void* data);
-        static void onCommitCallback(void *context, ASurfaceTransactionStats *stats);
         static void onCompleteCallback(void *context, ASurfaceTransactionStats *stats);
         int64_t getCurrentTimeNanos();
         bool isPerformanceHintAPIAvailable();
@@ -266,6 +258,5 @@ class DisplayX {
         void toggleFullscreen();
         void setPerformanceMode(bool perfMode);
         void setPresentRR(bool presentRR);
-        void setBackPressure(bool backPressure);
         void setPrecisePresentation(bool precisePresentation);
 };

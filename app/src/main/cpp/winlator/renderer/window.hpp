@@ -28,7 +28,6 @@ struct Window {
     std::unordered_map<int, std::unique_ptr<struct Drawable>> directContents;
     Drawable *externalContent;
     ASurfaceControl *control;
-    bool backPressureEnabled;
     Window *surface;
         
     bool hasExternalContents() {

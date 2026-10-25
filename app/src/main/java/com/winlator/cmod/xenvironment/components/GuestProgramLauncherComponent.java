@@ -363,6 +363,14 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             envVars.put("DISPLAYX_SURFACE_FORMAT", "bgra8");
         }
         
+        String presentMode = displayConfig.get("presentMode");
+        if (presentMode.equals("mailbox")) {
+            envVars.put("DISPLAYX_PRESENT_MODE", "mailbox");
+        }
+        else {
+            envVars.put("DISPLAYX_PRESENT_MODE", "fifo");
+        }
+        
         // Merge any additional environment variables from external sources
         if (this.envVars != null) {
             envVars.putAll(this.envVars);

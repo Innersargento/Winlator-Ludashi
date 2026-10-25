@@ -209,7 +209,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     
     public boolean performanceMode;
     public boolean presentRR;
-    public boolean backPressure;
     public boolean precisePresentation;
     public int textureFilter;
      
@@ -529,7 +528,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             this.displayConfig = DisplayXConfigDialog.parseConfig(displayConfig);
             this.performanceMode = this.displayConfig.get("performanceMode").equals("1") ? true : false;
             this.presentRR = this.displayConfig.get("presentRR").equals("1") ? true : false;
-            this.backPressure = this.displayConfig.get("backPressure").equals("1") ? true : false;
             this.precisePresentation = this.displayConfig.get("precisePresentation").equals("1") ? true : false;
         }
         else {
