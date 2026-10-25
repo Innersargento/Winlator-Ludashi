@@ -18,6 +18,7 @@ import com.winlator.cmod.contentdialog.DisplayXConfigDialog;
 import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
 import com.winlator.cmod.core.Callback;
+import com.winlator.cmod.core.ElfLoader;
 import com.winlator.cmod.core.EnvVars;
 import com.winlator.cmod.core.FileUtils;
 import com.winlator.cmod.core.GPUInformation;
@@ -406,6 +407,11 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         if (box64File.exists()) {
             FileUtils.chmod(box64File, 0755);
         }
+
+        // execve() on imagefs files is denied for targetSdk >= 29, so everything goes through libwinloader.so.
+        // x86_64 targets that the loader can't map (it only loads aarch64 ELFs) are handed to box64.
+        envVars.put(ElfLoader.ENV_FALLBACK, imageFs.getBinDir() + "/box64");
+        command = ElfLoader.wrap(context, command);
 
         return ProcessHelper.exec(command, envVars.toStringArray(), rootDir, (status) -> {
             synchronized (lock) {

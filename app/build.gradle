@@ -119,14 +119,15 @@ preBuild.dependsOn(downloadProton)
 android {
     namespace 'com.winlator.cmod'
     // Keep compileSdk from your current config. If you want to match Termux-X11, you could set to 34.
-    compileSdk 34
+    compileSdk 35
     buildToolsVersion "35.0.0"
 
     defaultConfig {
         applicationId "com.winlator.cmod"
         minSdkVersion 28
-        // We’re preserving Winlator’s request to keep targetSdkVersion at 28
-        targetSdkVersion 28
+        // execve() on app data files is denied for targetSdk >= 29: guest programs are
+        // started through libwinloader.so (see ElfLoader and cpp/winlator/loader)
+        targetSdkVersion 36
 
         versionCode 20
         versionName "7.1.4x-cmod"
