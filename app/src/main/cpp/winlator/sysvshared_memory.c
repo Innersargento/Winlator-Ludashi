@@ -70,6 +70,11 @@ Java_com_winlator_cmod_sysvshm_SysVSharedMemory_unmapSHMSegment(JNIEnv *env, job
 }
 
 JNIEXPORT jint JNICALL
+Java_com_winlator_cmod_sysvshm_SysVSharedMemory_dupFd(JNIEnv *env, jclass obj, jint fd) {
+    return fcntl(fd, F_DUPFD_CLOEXEC, 0);
+}
+
+JNIEXPORT jint JNICALL
 Java_com_winlator_cmod_sysvshm_SysVSharedMemory_createMemoryFd(JNIEnv *env, jclass obj, jstring name,
                                                                jint size) {
     const char *namePtr = (*env)->GetStringUTFChars(env, name, 0);

@@ -99,15 +99,21 @@ public class SysVSharedMemory {
                 try {
                     Method method = sharedMemory.getClass().getMethod("getFd");
                     Object ret = method.invoke(sharedMemory);
-                    if (ret != null) return (int)ret;
+                    if (ret != null) return dupFd((int)ret);
                 }
                 catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {}
+                finally {
+                    // SharedMemory's cleaner would close its fd again after we closed it natively (fdsan abort)
+                    sharedMemory.close();
+                }
             }
         }
         catch (ErrnoException e) {}
         return -1;
     }
     
+    @FastNative
+    private static native int dupFd(int fd);
     @FastNative
     public static native int createMemoryFd(String name, int size);
     @FastNative
