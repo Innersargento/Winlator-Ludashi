@@ -17,8 +17,8 @@ import com.winlator.cmod.container.Shortcut;
 import com.winlator.cmod.contentdialog.DisplayXConfigDialog;
 import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
+import com.winlator.cmod.core.AppUtils;
 import com.winlator.cmod.core.Callback;
-import com.winlator.cmod.core.ElfLoader;
 import com.winlator.cmod.core.EnvVars;
 import com.winlator.cmod.core.FileUtils;
 import com.winlator.cmod.core.GPUInformation;
@@ -247,6 +247,9 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
 
     public void setFEXCorePreset (String fexcorePreset) { this.fexcorePreset = fexcorePreset; }
 
+    // targetSdk >= 29 denies execve() on app data files, but the system linker can still map them
+    private static final String LINKER64 = "/system/bin/linker64";
+
     private int execGuestProgram() {
         Context context = environment.getContext();
         ImageFs imageFs = environment.getImageFs();
@@ -334,6 +337,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             ld_preload = imageFs.getLibDir() + "/libandroid-sysvshm.so";
         }
 
+        // LD_PRELOAD shim: re-routes exec() through linker64 and makes PE/ELF pages executable (targetSdk >= 29)
+        String shim = new File(AppUtils.getNativeLibDir(context), "libexecshim.so").getPath();
+        ld_preload = ld_preload.isEmpty() ? shim : shim + ":" + ld_preload;
+
         envVars.put("LD_PRELOAD", ld_preload);
 
         if (this.envVars.has("MANGOHUD")) {
@@ -393,14 +400,17 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         }
         else {
             if (wineInfo.isArm64EC()) {
-                command = winePath + "/" + guestExecutable;
+                command = LINKER64 + " " + winePath + "/" + guestExecutable;
+                envVars.put("EXECSHIM_EXE", winePath + "/" + guestExecutable.split(" ")[0]);
                 if (emulator.toLowerCase().equals("fexcore"))
                     envVars.put("HODLL", "libwow64fex.dll");
                 else
                     envVars.put("HODLL", "wowbox64.dll");
             }
-            else
-                command = imageFs.getBinDir() + "/box64 " + guestExecutable;
+            else {
+                command = LINKER64 + " " + imageFs.getBinDir() + "/box64 " + guestExecutable;
+                envVars.put("EXECSHIM_EXE", imageFs.getBinDir() + "/box64");
+            }
         }
 
         // **Maybe remove this: Set execute permissions for box64 if necessary (Glibc/Proot artifact)
@@ -408,11 +418,6 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         if (box64File.exists()) {
             FileUtils.chmod(box64File, 0755);
         }
-
-        // execve() on imagefs files is denied for targetSdk >= 29, so everything goes through libwinloader.so.
-        // x86_64 targets that the loader can't map (it only loads aarch64 ELFs) are handed to box64.
-        envVars.put(ElfLoader.ENV_FALLBACK, imageFs.getBinDir() + "/box64");
-        command = ElfLoader.wrap(context, command);
 
         return ProcessHelper.exec(command, envVars.toStringArray(), rootDir, (status) -> {
             synchronized (lock) {

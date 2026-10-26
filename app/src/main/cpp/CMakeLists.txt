@@ -6,7 +6,12 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -Wno-unused-function -Wimplicit-function
 
 add_subdirectory(OpenXR-SDK)
 add_subdirectory(adrenotools)
-add_subdirectory(winlator/loader)
+
+# LD_PRELOADed into bionic guests (box64, wine, ...): sends exec() through /system/bin/linker64 and swaps
+# file-backed pages for anonymous copies when mprotect(PROT_EXEC) is denied (targetSdk >= 29)
+add_library(execshim SHARED winlator/execshim.c)
+target_compile_options(execshim PRIVATE -O2 -Wall -Wextra -Wno-unused-function
+        -fno-builtin -fno-stack-protector -fvisibility=hidden)
 
 # Add Winlator shared library
 add_library(winlator SHARED

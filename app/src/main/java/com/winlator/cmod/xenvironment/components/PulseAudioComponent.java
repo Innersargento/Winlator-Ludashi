@@ -4,7 +4,6 @@ import android.content.Context;
 import android.os.Process;
 
 import com.winlator.cmod.core.AppUtils;
-import com.winlator.cmod.core.ElfLoader;
 import com.winlator.cmod.core.FileUtils;
 import com.winlator.cmod.core.ProcessHelper;
 import com.winlator.cmod.xconnector.UnixSocketConfig;
@@ -96,7 +95,7 @@ public class PulseAudioComponent extends EnvironmentComponent {
         copyFromLibraryDir(workingDir);
 
         // libpulseaudio.so is copied to the app data dir, where execve() is denied for targetSdk >= 29
-        String command = ElfLoader.getPath(environment.getContext()) + " " + workingDir.getAbsolutePath() + "/libpulseaudio.so";
+        String command = "/system/bin/linker64 " + workingDir.getAbsolutePath() + "/libpulseaudio.so";
         command += " --system=false";
         command += " --disable-shm=true";
         command += " --fail=false";

@@ -1,13 +1,14 @@
 /*
- * libwinloader_shim.so - LD_PRELOADed by winloader into bionic programs.
+ * libexecshim.so - LD_PRELOADed into bionic guests (box64, wine, ...).
  *
  * Interposes libc to work around what SELinux denies for targetSdk >= 29:
- *  1. exec*() / posix_spawn*() are rewritten to "libwinloader.so -a argv0 <path> args".
+ *  1. exec*() / posix_spawn*() of ELF files outside the system partitions are rewritten to
+ *     "/system/bin/linker64 <path> args", EXECSHIM_EXE is set to <path> for the new program.
  *  2. mprotect(PROT_EXEC) on written private file pages (execmod, hit by wine when
  *     relocating PE images) swaps the pages for an anonymous copy and retries.
- *  3. readlink("/proc/self/exe") / realpath answer WINLOADER_EXE, the real program.
+ *  3. readlink("/proc/self/exe") / realpath answer EXECSHIM_EXE, the real program.
  *
- * Needs WINLOADER_PATH (set by the loader). WINLOADER_NOSECCOMP disables everything.
+ * EXECSHIM_PATH overrides the launcher (default /system/bin/linker64). EXECSHIM_NOSECCOMP disables everything.
  * Raw syscalls that bypass libc are not covered.
  */
 #define _GNU_SOURCE
@@ -35,9 +36,10 @@ static const char *g_exe;
 
 __attribute__((constructor)) static void shim_init(void)
 {
-    g_off = getenv("WINLOADER_NOSECCOMP") != NULL;
-    g_loader = getenv("WINLOADER_PATH");
-    g_exe = g_off ? NULL : getenv("WINLOADER_EXE");
+    g_off = getenv("EXECSHIM_NOSECCOMP") != NULL;
+    g_loader = getenv("EXECSHIM_PATH");
+    if (!g_loader) g_loader = "/system/bin/linker64";
+    g_exe = g_off ? NULL : getenv("EXECSHIM_EXE");
     if (g_loader) {
         const char *slash = strrchr(g_loader, '/');
         g_loader_dir = slash ? (size_t)(slash - g_loader) + 1 : 0;
@@ -62,7 +64,7 @@ static int needs_loader(const char *path)
     char magic[4] = {0};
     ssize_t n = read(fd, magic, sizeof(magic));
     close(fd);
-    return (n >= 4 && memcmp(magic, "\x7f" "ELF", 4) == 0) || (n >= 2 && magic[0] == '#' && magic[1] == '!');
+    return n >= 4 && memcmp(magic, "" "ELF", 4) == 0;
 }
 
 static char **wrap_argv(const char *path, char *const argv[])
@@ -73,11 +75,45 @@ static char **wrap_argv(const char *path, char *const argv[])
     if (!nv) return NULL;
     int k = 0;
     nv[k++] = (char *)g_loader;
-    if (argc > 0) { nv[k++] = "-a"; nv[k++] = argv[0]; }
     nv[k++] = (char *)path;
     for (int i = 1; i < argc; i++) nv[k++] = argv[i];
     nv[k] = NULL;
     return nv;
+}
+
+/* /proc/self/exe is linker64 for the new program: tell the shim what it really is */
+static char **env_with_exe(char *const envp[], const char *path)
+{
+    int n = 0;
+    if (envp) while (envp[n]) n++;
+    char **ne = malloc(sizeof(char *) * (size_t)(n + 2));
+    char *ev = malloc(strlen(path) + sizeof("EXECSHIM_EXE="));
+    if (!ne || !ev) { free(ne); free(ev); return NULL; }
+    strcpy(ev, "EXECSHIM_EXE=");
+    strcat(ev, path);
+    int k = 0;
+    for (int i = 0; i < n; i++)
+        if (!has_prefix(envp[i], "EXECSHIM_EXE=")) ne[k++] = envp[i];
+    ne[k++] = ev;
+    ne[k] = NULL;
+    return ne;
+}
+
+/* wine-preloader is a non-PIE ET_EXEC binary, which linker64 refuses to load. It only reserves address space and then
+ * runs its first argument, so run that directly */
+static int skip_preloader(const char **path, char *const **argv)
+{
+    const char *base = strrchr(*path, '/');
+    base = base ? base + 1 : *path;
+    if (strcmp(base, "wine-preloader") != 0 && strcmp(base, "wine64-preloader") != 0) return 0;
+    char *const *a = *argv;
+    if (!a || !a[0] || !a[1]) return 0;
+    int i = 1;
+    if (strcmp(a[i], "--") == 0) i++;
+    if (!a[i]) return 0;
+    *path = a[i];
+    *argv = &a[i];
+    return 1;
 }
 
 static int raw_execve(const char *path, char *const argv[], char *const envp[])
@@ -87,13 +123,16 @@ static int raw_execve(const char *path, char *const argv[], char *const envp[])
 
 EXPORT int execve(const char *path, char *const argv[], char *const envp[])
 {
+    if (active()) skip_preloader(&path, &argv);
     if (needs_loader(path)) {
         char **nv = wrap_argv(path, argv);
-        if (!nv) { errno = ENOMEM; return -1; }
+        char **ne = env_with_exe(envp, path);
+        if (!nv || !ne) { free(nv); free(ne); errno = ENOMEM; return -1; }
         int saved;
-        raw_execve(g_loader, nv, envp);
+        raw_execve(g_loader, nv, ne);
         saved = errno;
         free(nv);
+        free(ne);
         errno = saved;
         return -1;
     }
@@ -215,11 +254,14 @@ static int spawn_wrapped(const char *name, pid_t *pid, const char *path, const p
     spawn_fn real = (spawn_fn)dlsym(RTLD_NEXT, "posix_spawn");
     if (!real) return ENOSYS;
     (void)name;
+    if (active()) skip_preloader(&path, &argv);
     if (needs_loader(path)) {
         char **nv = wrap_argv(path, argv);
-        if (!nv) return ENOMEM;
-        int r = real(pid, g_loader, fa, attr, nv, envp);
+        char **ne = env_with_exe(envp, path);
+        if (!nv || !ne) { free(nv); free(ne); return ENOMEM; }
+        int r = real(pid, g_loader, fa, attr, nv, ne);
         free(nv);
+        free(ne);
         return r;
     }
     return real(pid, path, fa, attr, argv, envp);
