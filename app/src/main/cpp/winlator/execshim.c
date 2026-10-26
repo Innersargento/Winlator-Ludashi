@@ -1,16 +1,4 @@
-/*
- * libexecshim.so - LD_PRELOADed into bionic guests (box64, wine, ...).
- *
- * Interposes libc to work around what SELinux denies for targetSdk >= 29:
- *  1. exec*() / posix_spawn*() of ELF files outside the system partitions are rewritten to
- *     "/system/bin/linker64 <path> args", EXECSHIM_EXE is set to <path> for the new program.
- *  2. mprotect(PROT_EXEC) on written private file pages (execmod, hit by wine when
- *     relocating PE images) swaps the pages for an anonymous copy and retries.
- *  3. readlink("/proc/self/exe") / realpath answer EXECSHIM_EXE, the real program.
- *
- * EXECSHIM_PATH overrides the launcher (default /system/bin/linker64). EXECSHIM_NOSECCOMP disables everything.
- * Raw syscalls that bypass libc are not covered.
- */
+/* LD_PRELOADed into guests: exec through linker64 and PROT_EXEC on file pages (targetSdk >= 29). Libc calls only. */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <errno.h>
@@ -81,7 +69,6 @@ static char **wrap_argv(const char *path, char *const argv[])
     return nv;
 }
 
-/* /proc/self/exe is linker64 for the new program: tell the shim what it really is */
 static char **env_with_exe(char *const envp[], const char *path)
 {
     int n = 0;
@@ -99,8 +86,7 @@ static char **env_with_exe(char *const envp[], const char *path)
     return ne;
 }
 
-/* wine-preloader is a non-PIE ET_EXEC binary, which linker64 refuses to load. It only reserves address space and then
- * runs its first argument, so run that directly */
+/* linker64 can't load wine-preloader (ET_EXEC): run its target directly */
 static int skip_preloader(const char **path, char *const **argv)
 {
     const char *base = strrchr(*path, '/');
@@ -151,7 +137,6 @@ EXPORT int fexecve(int fd, char *const argv[], char *const envp[])
     return execve(path, argv, envp);
 }
 
-/* PATH search shared by execvpe and posix_spawnp: calls try(path) until it does not fail with ENOENT/EACCES */
 static const char *search_path(void)
 {
     const char *p = getenv("PATH");
@@ -308,7 +293,7 @@ static ssize_t copy_exe(const char *exe, char *buf, size_t size)
 {
     size_t n = strlen(exe);
     if (n > size) n = size;
-    memcpy(buf, exe, n); /* readlink() does not NUL-terminate */
+    memcpy(buf, exe, n);
     return (ssize_t)n;
 }
 
@@ -338,8 +323,7 @@ EXPORT char *realpath(const char *path, char *resolved)
 
 static int raw_mprotect(void *addr, size_t len, int prot) { return (int)syscall(__NR_mprotect, addr, len, prot); }
 
-/* execmod only happens on private file mappings: anonymous memory (e.g. [stack]) is denied for other reasons and
- * swapping it would clobber pages in use, including the frames of this very call */
+/* only file-backed pages are swapped: anonymous ones (e.g. the stack) are denied for other reasons */
 static int file_backed(const void *addr)
 {
     FILE *f = fopen("/proc/self/maps", "r");

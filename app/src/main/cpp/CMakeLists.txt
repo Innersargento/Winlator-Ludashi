@@ -7,8 +7,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -Wno-unused-function -Wimplicit-function
 add_subdirectory(OpenXR-SDK)
 add_subdirectory(adrenotools)
 
-# LD_PRELOADed into bionic guests (box64, wine, ...): sends exec() through /system/bin/linker64 and swaps
-# file-backed pages for anonymous copies when mprotect(PROT_EXEC) is denied (targetSdk >= 29)
+# LD_PRELOADed into guests, so it must stay a separate library
 add_library(execshim SHARED winlator/execshim.c)
 target_compile_options(execshim PRIVATE -O2 -Wall -Wextra -Wno-unused-function
         -fno-builtin -fno-stack-protector -fvisibility=hidden)

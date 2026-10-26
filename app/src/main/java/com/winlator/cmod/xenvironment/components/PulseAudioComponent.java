@@ -94,7 +94,6 @@ public class PulseAudioComponent extends EnvironmentComponent {
         
         copyFromLibraryDir(workingDir);
 
-        // libpulseaudio.so is copied to the app data dir, where execve() is denied for targetSdk >= 29
         String command = "/system/bin/linker64 " + workingDir.getAbsolutePath() + "/libpulseaudio.so";
         command += " --system=false";
         command += " --disable-shm=true";

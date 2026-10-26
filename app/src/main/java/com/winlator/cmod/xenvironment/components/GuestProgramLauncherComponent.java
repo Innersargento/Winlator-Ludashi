@@ -247,7 +247,6 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
 
     public void setFEXCorePreset (String fexcorePreset) { this.fexcorePreset = fexcorePreset; }
 
-    // targetSdk >= 29 denies execve() on app data files, but the system linker can still map them
     private static final String LINKER64 = "/system/bin/linker64";
 
     private int execGuestProgram() {
@@ -337,7 +336,6 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             ld_preload = imageFs.getLibDir() + "/libandroid-sysvshm.so";
         }
 
-        // LD_PRELOAD shim: re-routes exec() through linker64 and makes PE/ELF pages executable (targetSdk >= 29)
         String shim = new File(AppUtils.getNativeLibDir(context), "libexecshim.so").getPath();
         ld_preload = ld_preload.isEmpty() ? shim : shim + ":" + ld_preload;
 
