@@ -167,6 +167,7 @@ private class ContainerEditorStateV2(
     private val savedCursorColors = CursorTintStore.get(editing)
     var cursorInside by mutableIntStateOf(savedCursorColors[0])
     var cursorOutline by mutableIntStateOf(savedCursorColors[1])
+    var desktopColor by mutableIntStateOf(desktopColorFromValue(editing?.desktopTheme))
     var desktopBackground by mutableStateOf(if (editing?.desktopTheme.orEmpty().contains(",COLOR,", true)) "Solid Color" else "Image")
     var wallpaperStamp by mutableStateOf(
         WineThemeManager.getUserWallpaperFile(context).takeIf { it.isFile }?.lastModified() ?: 0L
@@ -340,7 +341,7 @@ private class ContainerEditorStateV2(
 
     fun fingerprint(): String = listOf(
         name, screen, audio, builtinDecoder, softwareDecoding, hudMode, locale, soundFont,
-        fullscreen, desktopTheme, cursorInside, cursorOutline, desktopBackground, wallpaperStamp, mouseWarp, drives,
+        fullscreen, desktopTheme, cursorInside, cursorOutline, desktopColor, desktopBackground, wallpaperStamp, mouseWarp, drives,
         displayServer, renderer, rendererPresentMode, rendererDriver, filterMode, surfaceFormat, trueDisplayX,
         displayXPerformanceMode, displayXPresentAtRefreshRate, displayXPresentMode, displayXDynamicRange,
         displayXPrecisePresentation, frameGenEngine, frameGenEnabled, frameGenMultiplier,
@@ -518,7 +519,7 @@ internal fun ContainerEditorV2(editId: Int?, onBack: () -> Unit, onCreated: () -
         container.setBox64Preset(state.boxPreset)
         container.setFEXCoreVersion(state.fexVersion)
         container.setFEXCorePreset(state.fexPreset)
-        container.setDesktopTheme(containerDesktopThemeValueV2(state.desktopTheme, state.desktopBackground, state.wallpaperStamp))
+        container.setDesktopTheme(containerDesktopThemeValueV2(state.desktopTheme, state.desktopBackground, state.wallpaperStamp, state.desktopColor))
         CursorTintStore.set(container, state.cursorInside, state.cursorOutline)
         container.setMidiSoundFont(state.soundFont)
         container.setLC_ALL(state.locale)
@@ -576,7 +577,7 @@ internal fun ContainerEditorV2(editId: Int?, onBack: () -> Unit, onCreated: () -
                 put("box64Preset", state.boxPreset)
                 put("fexcoreVersion", state.fexVersion)
                 put("fexcorePreset", state.fexPreset)
-                put("desktopTheme", containerDesktopThemeValueV2(state.desktopTheme, state.desktopBackground, state.wallpaperStamp))
+                put("desktopTheme", containerDesktopThemeValueV2(state.desktopTheme, state.desktopBackground, state.wallpaperStamp, state.desktopColor))
                 put("wineVersion", state.runtime)
                 put("midiSoundFont", state.soundFont)
                 put("lc_all", state.locale)
@@ -853,6 +854,9 @@ private fun ContainerCategoryV2(
                             Text(if (s.wallpaperStamp > 0L) uiStr(R.string.ui_change) else uiStr(R.string.ui_choose))
                         }
                     }
+                } else {
+                    SettingsDivider()
+                    DesktopColorEditor(s.desktopColor) { s.desktopColor = it }
                 }
                 SettingsDivider()
                 SettingChoice(uiStr(R.string.mouse_warp_override), s.mouseWarp, listOf("disable", "enable", "force")) { s.mouseWarp = it }
@@ -1251,11 +1255,11 @@ private fun serializeContainerComponentsV2(values: Map<String, Int>): String = c
     "$key=${values[key] ?: 0}"
 }
 
-private fun containerDesktopThemeValueV2(theme: String, background: String, wallpaperStamp: Long): String {
+private fun containerDesktopThemeValueV2(theme: String, background: String, wallpaperStamp: Long, color: Int): String {
     val themeId = themeIdFromState(theme)
     val backgroundId = if (background.equals("Solid Color", true)) WineThemeManager.BackgroundType.COLOR else WineThemeManager.BackgroundType.IMAGE
     return if (backgroundId == WineThemeManager.BackgroundType.IMAGE)
-        "$themeId,$backgroundId,#0277bd,$wallpaperStamp"
+        "$themeId,$backgroundId,${desktopColorHex(color)},$wallpaperStamp"
     else
-        "$themeId,$backgroundId,#0277bd"
+        "$themeId,$backgroundId,${desktopColorHex(color)}"
 }

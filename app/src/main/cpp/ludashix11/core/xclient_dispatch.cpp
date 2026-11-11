@@ -976,7 +976,8 @@ void XClient::ProcPolyFillRectangle() {
     const xRectangle* rectangles = reinterpret_cast<xRectangle*>(req + 1);
     static_cast<NativeScreen&>(server.GetScreen()).MutateDrawable(drawable, [&] {
         for (u32 i = 0; i < count; i++) {
-            const u32 background = gc->GetForeground() | 0xff000000;
+            // The Java server fills with the GC background too: Winlator's Wine paints the desktop with it.
+            const u32 background = gc->GetBackground() | 0xff000000;
             drawable->FillRect(rectangles[i].x,
                                rectangles[i].y,
                                rectangles[i].width,

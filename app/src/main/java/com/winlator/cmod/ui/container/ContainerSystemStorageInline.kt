@@ -154,14 +154,9 @@ internal fun ContainerSystemInline(containerId: Int, callbacks: ContainerInlineC
                 OutlinedButton(onClick = { imagePicker.launch("image/*") }) { Text(uiStr(R.string.ui_choose_image)) }
             }
         } else {
-            OutlinedTextField(
-                value = backgroundColor,
-                onValueChange = { backgroundColor = it.take(7) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
-                label = { Text(uiStr(R.string.ui_background_color)) },
-                singleLine = true,
-                shape = RoundedCornerShape(10.dp)
-            )
+            DesktopColorEditor(desktopColorFromValue("X,COLOR,$backgroundColor")) {
+                backgroundColor = desktopColorHex(it)
+            }
         }
         SSDivider()
         SSChoice(

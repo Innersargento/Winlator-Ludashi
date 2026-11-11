@@ -18,15 +18,34 @@ std::atomic<s32> tint_outline{-1};
 
 u32 Luma(u32 rgb) { return (((rgb >> 16) & 255) * 299 + ((rgb >> 8) & 255) * 587 + (rgb & 255) * 114) / 1000; }
 
-// Light parts of a cursor take the inside color and dark parts the outline color.
-u32 TintColor(u32 rgb) {
+// Light parts take the inside color and dark parts the outline color; swapped when `flip` is set.
+u32 TintColor(u32 rgb, bool flip = false) {
     const s32 inside = tint_inside.load(), outline = tint_outline.load();
     if (inside < 0 || outline < 0) return rgb & 0xffffff;
-    return static_cast<u32>(Luma(rgb) >= 128 ? inside : outline) & 0xffffff;
+    return static_cast<u32>((Luma(rgb) >= 128) != flip ? inside : outline) & 0xffffff;
+}
+
+// The fill is the brightness that dominates the interior (opaque pixels not touching transparency).
+// Judging by the rim instead inverts the hand, whose antialiased edge is light. Thin cursors have no interior.
+bool FillIsDark(u32 width, u32 height, const std::vector<u8>& alpha, const std::vector<u8>& luma) {
+    size_t light = 0, dark = 0;
+    for (u32 y = 0; y < height; ++y) for (u32 x = 0; x < width; ++x) {
+        const size_t index = size_t(y) * width + x;
+        if (alpha[index] < 255) continue;
+        bool edge = false;
+        for (int dy = -1; dy <= 1 && !edge; ++dy) for (int dx = -1; dx <= 1 && !edge; ++dx) {
+            const int nx = int(x) + dx, ny = int(y) + dy;
+            edge = nx < 0 || ny < 0 || nx >= int(width) || ny >= int(height) ||
+                   alpha[size_t(ny) * width + nx] < 255;
+        }
+        if (edge) continue;
+        (luma[index] >= 128 ? light : dark) += 1;
+    }
+    return dark > light;
 }
 
 // Only black, white and gray cursors (Wine's system cursors) are tinted, colored ones keep their look.
-void TintArgbPixels(std::vector<u32>& pixels) {
+void TintArgbPixels(u32 width, u32 height, std::vector<u32>& pixels) {
     const s32 inside = tint_inside.load(), outline = tint_outline.load();
     if (inside < 0 || outline < 0) return;
     for (const u32 pixel : pixels) {
@@ -34,10 +53,16 @@ void TintArgbPixels(std::vector<u32>& pixels) {
         const int r = (pixel >> 16) & 255, g = (pixel >> 8) & 255, b = pixel & 255;
         if (std::max({r, g, b}) - std::min({r, g, b}) > 24) return;
     }
+    std::vector<u8> alphas(pixels.size()), lumas(pixels.size());
+    for (size_t i = 0; i < pixels.size(); ++i) {
+        alphas[i] = static_cast<u8>(pixels[i] >> 24);
+        lumas[i] = static_cast<u8>(Luma(pixels[i]));
+    }
+    const bool flip = FillIsDark(width, height, alphas, lumas);
     for (auto& pixel : pixels) {
         const u32 alpha = pixel >> 24;
         if (!alpha) continue;
-        const u32 t = Luma(pixel);
+        const u32 t = flip ? 255 - Luma(pixel) : Luma(pixel);
         u32 out = alpha << 24;
         for (int shift = 16; shift >= 0; shift -= 8) {
             const int in = (inside >> shift) & 255, ou = (outline >> shift) & 255;
@@ -133,7 +158,7 @@ Cursor::Cursor(XScreen& screen, u32 id, u16 hotX, u16 hotY, Drawable& image, boo
         pixel = (alpha << 24) | (channel((pixel >> 16) & 255) << 16) |
                 (channel((pixel >> 8) & 255) << 8) | channel(pixel & 255);
     }
-    TintArgbPixels(pixels);
+    TintArgbPixels(cursorWidth, cursorHeight, pixels);
     drawable->WritePixels(reinterpret_cast<const u8*>(pixels.data()), 0, 0, 0, 0,
                           cursorWidth, cursorHeight, cursorWidth);
 }
@@ -157,7 +182,16 @@ void Cursor::UpdateCursorDrawable(u32 width,
 void Cursor::Recolor(u32 fg, u32 bg) {
     if (shape.empty()) return; // Core RecolorCursor does not recolor ARGB cursors.
     origin_fg = fg; origin_bg = bg;
-    fg = TintColor(fg); bg = TintColor(bg);
+    bool flip = false;
+    if (tint_inside.load() >= 0 && tint_outline.load() >= 0) {
+        std::vector<u8> alpha(shape.size()), luma(shape.size());
+        for (size_t i = 0; i < shape.size(); ++i) {
+            alpha[i] = shape[i] ? 255 : 0;
+            luma[i] = static_cast<u8>(Luma(shape[i] == 1 ? fg : bg));
+        }
+        flip = FillIsDark(cursorWidth, cursorHeight, alpha, luma);
+    }
+    fg = TintColor(fg, flip); bg = TintColor(bg, flip);
     // A new drawable also invalidates the cached native cursor snapshot.
     drawable = screen.CreateDrawable(cursorWidth, cursorHeight, 32);
     auto* bitmap = static_cast<u32*>(drawable->Map());

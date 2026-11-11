@@ -8,17 +8,24 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -45,7 +52,7 @@ import com.winlator.cmod.widget.CursorPreviewView
 import java.util.Locale
 
 // Theme choices in the container editors are "Dark", "Light" or "msstyles:<name>" for an imported
-// visual style, which is listed as "<name>.msstyles" so it can't collide with the built-in names.
+// visual style, which is listed by its bare name (without the .msstyles extension).
 
 internal fun themeStateFromValue(value: String?): String {
     val first = value.orEmpty().substringBefore(',')
@@ -62,17 +69,21 @@ internal fun themeIdFromState(state: String): String = when {
     else -> WineThemeManager.Theme.DARK.name
 }
 
+private fun builtinThemeLabel(name: String) = "$name ${uiStr(R.string.ui_theme_builtin)}"
+
 internal fun themeEntries(imported: List<String>): List<String> =
-    listOf("Dark", "Light") + imported.map { it + MsstylesStore.EXTENSION }
+    listOf(builtinThemeLabel("Dark"), builtinThemeLabel("Light")) + imported
 
-internal fun themeEntryLabel(state: String): String =
-    if (state.startsWith(WineThemeManager.MSSTYLES_PREFIX))
-        state.removePrefix(WineThemeManager.MSSTYLES_PREFIX) + MsstylesStore.EXTENSION
-    else state
+internal fun themeEntryLabel(state: String): String = when {
+    state.startsWith(WineThemeManager.MSSTYLES_PREFIX) -> state.removePrefix(WineThemeManager.MSSTYLES_PREFIX)
+    else -> builtinThemeLabel(state)
+}
 
-internal fun themeStateFromEntry(entry: String): String =
-    if (entry.endsWith(MsstylesStore.EXTENSION)) WineThemeManager.MSSTYLES_PREFIX + entry.removeSuffix(MsstylesStore.EXTENSION)
-    else entry
+internal fun themeStateFromEntry(entry: String): String = when (entry) {
+    builtinThemeLabel("Dark") -> "Dark"
+    builtinThemeLabel("Light") -> "Light"
+    else -> WineThemeManager.MSSTYLES_PREFIX + entry.removeSuffix(MsstylesStore.EXTENSION)
+}
 
 /** Falls back to Dark when the selected imported style was deleted. */
 internal fun themeStateOrDefault(context: Context, state: String): String =
@@ -117,12 +128,16 @@ internal fun ThemeImportRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (importedName != null) {
-            TextButton(onClick = {
+            IconButton(onClick = {
                 MsstylesStore.delete(context, importedName)
                 onRemoved(importedName)
-            }) { Text(uiStr(R.string.ui_remove_theme)) }
+            }) {
+                Icon(Icons.Outlined.DeleteOutline, uiStr(R.string.ui_remove_theme), tint = MaterialTheme.colorScheme.error)
+            }
         }
-        TextButton(onClick = { picker.launch(arrayOf("*/*")) }) { Text(uiStr(R.string.ui_import_theme)) }
+        IconButton(onClick = { picker.launch(arrayOf("*/*")) }) {
+            Icon(Icons.Outlined.Add, uiStr(R.string.ui_import_theme))
+        }
     }
 }
 
@@ -130,6 +145,9 @@ private val cursorPalette = intArrayOf(
     0xFFFFFF, 0x000000, 0xD32F2F, 0xFF8F00, 0xFDD835, 0x2E7D32, 0x00838F, 0x0277BD, 0x9575CD,
     0xE91E63, 0x607D8B, 0x795548, 0xB0BEC5, 0x00E676, 0x40C4FF, 0xFF5252, 0xFFAB40, 0x7C4DFF
 )
+
+private const val PALETTE_COLUMNS = 6
+private val PALETTE_DOT_SIZE = 36.dp
 
 private fun rgbColor(rgb: Int) = Color(0xFF000000.toInt() or (rgb and 0xFFFFFF))
 
@@ -219,21 +237,25 @@ private fun ColorPaletteDialog(title: String, current: Int, onDismiss: () -> Uni
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                cursorPalette.toList().chunked(6).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                cursorPalette.toList().chunked(PALETTE_COLUMNS).forEach { row ->
+                    Row(Modifier.fillMaxWidth()) {
                         row.forEach { rgb ->
                             val selected = rgb == (current and 0xFFFFFF)
-                            Box(
-                                Modifier.size(40.dp).clip(CircleShape).background(rgbColor(rgb))
-                                    .clickable { onPicked(rgb) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (selected) Box(
-                                    Modifier.size(14.dp).clip(CircleShape)
-                                        .background(if (rgb == 0xFFFFFF) Color.Black else Color.White)
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                Box(
+                                    Modifier.size(PALETTE_DOT_SIZE).clip(CircleShape).background(rgbColor(rgb))
+                                        .border(
+                                            if (selected) 3.dp else 1.dp,
+                                            if (selected) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.outlineVariant,
+                                            CircleShape
+                                        )
+                                        .clickable { onPicked(rgb) }
                                 )
                             }
                         }
+                        // Keep the last row's dots the same size as the full rows.
+                        repeat(PALETTE_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
                 OutlinedTextField(
@@ -253,4 +275,35 @@ private fun ColorPaletteDialog(title: String, current: Int, onDismiss: () -> Uni
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(uiStr(R.string.cancel)) } }
     )
+}
+
+internal const val DEFAULT_DESKTOP_COLOR = 0x0277BD
+
+/** Reads the solid color out of a container desktopTheme value ("THEME,COLOR,#rrggbb[,stamp]"). */
+internal fun desktopColorFromValue(value: String?): Int =
+    runCatching {
+        android.graphics.Color.parseColor(value.orEmpty().split(',')[2].trim()) and 0xFFFFFF
+    }.getOrDefault(DEFAULT_DESKTOP_COLOR)
+
+internal fun desktopColorHex(rgb: Int): String = String.format(Locale.US, "#%06x", rgb and 0xFFFFFF)
+
+/** Solid desktop background color, picked from the same palette as the cursor colors. */
+@Composable
+internal fun DesktopColorEditor(
+    rgb: Int,
+    modifier: Modifier = Modifier,
+    onChange: (Int) -> Unit
+) {
+    var picking by remember { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+        CursorColorRow(uiStr(R.string.ui_background_color), rgb) { picking = true }
+    }
+    if (picking) {
+        ColorPaletteDialog(
+            title = uiStr(R.string.ui_background_color),
+            current = rgb,
+            onDismiss = { picking = false },
+            onPicked = { onChange(it); picking = false }
+        )
+    }
 }

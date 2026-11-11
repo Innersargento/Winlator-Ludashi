@@ -1508,8 +1508,8 @@ public class XServerDisplayActivity extends AppCompatActivity {
             nativeView.setFilterMode(shortcut != null ? shortcut.getRendererFilterMode()
                     : (container != null ? container.getRendererFilterMode() : 0));
             int[] nativeCursorColors = CursorTintStore.get(container);
-            boolean defaultNativeCursor = nativeCursorColors[0] == CursorTintStore.DEFAULT_INSIDE && nativeCursorColors[1] == CursorTintStore.DEFAULT_OUTLINE;
-            nativeView.setCursorColors(defaultNativeCursor ? -1 : nativeCursorColors[0], defaultNativeCursor ? -1 : nativeCursorColors[1]);
+            // Always tinted, even with the defaults: untinted, X++ shows Wine's cursors with fill and outline swapped.
+            nativeView.setCursorColors(nativeCursorColors[0], nativeCursorColors[1]);
             nativeView.setReadyCallback(() -> {
                 preloaderDialog.closeOnUiThread();
                 if (!simulateTouchScreen) nativeView.setCursorVisible(true);

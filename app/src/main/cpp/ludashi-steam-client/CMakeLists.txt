@@ -11,7 +11,16 @@ set(LUDASHI_STEAM_CLIENT_VERSION_PATCH 0)
 set(LUDASHI_STEAM_CLIENT_VERSION_STRING
     "${LUDASHI_STEAM_CLIENT_VERSION_MAJOR}.${LUDASHI_STEAM_CLIENT_VERSION_MINOR}.${LUDASHI_STEAM_CLIENT_VERSION_PATCH}")
 
-find_program(CARGO_EXECUTABLE cargo REQUIRED)
+# Prefer the rustup cargo (Cargo.lock v4 needs >= 1.78, plus the aarch64-linux-android target),
+# even when the Gradle daemon was started without ~/.cargo/bin in PATH.
+if(DEFINED ENV{CARGO_HOME})
+    set(LUDASHISTEAM_CARGO_HINT "$ENV{CARGO_HOME}/bin")
+elseif(DEFINED ENV{HOME})
+    set(LUDASHISTEAM_CARGO_HINT "$ENV{HOME}/.cargo/bin")
+elseif(DEFINED ENV{USERPROFILE})
+    set(LUDASHISTEAM_CARGO_HINT "$ENV{USERPROFILE}/.cargo/bin")
+endif()
+find_program(CARGO_EXECUTABLE cargo HINTS "${LUDASHISTEAM_CARGO_HINT}" NO_CACHE REQUIRED)
 
 if(NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     message(FATAL_ERROR "Rust ludashisteam currently supports arm64-v8a; got ${CMAKE_ANDROID_ARCH_ABI}")
