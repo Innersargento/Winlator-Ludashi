@@ -138,8 +138,8 @@ private fun rgbColor(rgb: Int) = Color(0xFF000000.toInt() or (rgb and 0xFFFFFF))
 internal fun CursorColorsEditor(
     inside: Int,
     outline: Int,
-    onChange: (inside: Int, outline: Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onChange: (inside: Int, outline: Int) -> Unit
 ) {
     var picking by remember { mutableStateOf(0) } // 0 = closed, 1 = inside, 2 = outline
     Column(modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
