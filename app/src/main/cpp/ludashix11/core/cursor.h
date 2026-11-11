@@ -27,6 +27,15 @@ public:
     ~Cursor() override;
     void Recolor(u32 foreground, u32 background);
 
+    // Re-applies the user's cursor colors to a shape cursor created before they were set.
+    void Retint() { Recolor(origin_fg, origin_bg); }
+
+    // Replaces the light/dark parts of Wine's black and white cursors; negative disables it.
+    static void SetTint(s32 inside_rgb, s32 outline_rgb);
+
+    // Source glyph of an X core font cursor (152 is the I-beam), -1 for any other cursor.
+    s32 GetGlyph() const { return glyph; }
+
     Drawable* GetDrawable() const { return drawable.get(); }
 
     s32 GetHotspotX() const { return hotspot_x; }
@@ -49,6 +58,8 @@ private:
     s32 hotspot_x{};
     s32 hotspot_y{};
     sp<Drawable> drawable;
+    s32 glyph{-1};
+    u32 origin_fg{}, origin_bg{};
 };
 
 }  // namespace xorg

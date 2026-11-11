@@ -15,4 +15,6 @@ abstract class RequestCodes {
     public static final byte KEYBOARD_EVENT = 11;
     public static final byte BRING_TO_FRONT = 12;
     public static final byte CURSOR_POS_FEEDBACK = 13;
+    public static final byte TEXT_INPUT_MONITOR = 14;
+    public static final byte TEXT_INPUT_STATE = 15;
 }

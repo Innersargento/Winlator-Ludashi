@@ -3,13 +3,14 @@
 #define _WIN32_WINNT 0x0600
 #endif
 
+#include <winsock2.h>
+#include <windows.h>
+
 #include <psapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <tlhelp32.h>
-#include <windows.h>
-#include <winsock2.h>
 
 
 #define SERVER_PORT 7946
@@ -33,6 +34,16 @@
 #define RC_KEYBOARD_EVENT 11
 #define RC_BRING_TO_FRONT 12
 #define RC_CURSOR_POS_FEEDBACK 13
+#define RC_TEXT_INPUT_MONITOR 14
+#define RC_TEXT_INPUT_STATE 15
+
+#define TEXT_INPUT_POLL_INTERVAL 100
+#define MIN_CARET_HEIGHT 4
+#define MAX_IME_MANAGED_WINDOWS 64
+
+#define TEXT_INPUT_INACTIVE 0
+#define TEXT_INPUT_ACTIVE 1
+#define TEXT_INPUT_BLOCKED 2
 
 #pragma pack(push, 1)
 typedef struct {
@@ -46,12 +57,24 @@ typedef struct {
   BYTE isWow64;
   char name[32];
 } ProcessPacket;
+
+typedef struct {
+  BYTE code;
+  BYTE state;
+  DWORD hwnd;
+  short left;
+  short top;
+  short right;
+  short bottom;
+} TextInputPacket;
 #pragma pack(pop)
 
 SOCKET sock;
 struct sockaddr_in clientAddr;
 int clientAddrLen = sizeof(clientAddr);
 volatile BOOL running = TRUE;
+volatile BOOL textInputMonitorEnabled = FALSE;
+volatile BOOL textInputForceSend = FALSE;
 
 typedef struct PidNode {
   DWORD pid;
@@ -323,6 +346,190 @@ void handleInput(const char *buffer, int len) {
   }
 }
 
+static BOOL containsIgnoreCase(const char *haystack, const char *needle) {
+  size_t needleLen = strlen(needle);
+  for (; *haystack; haystack++) {
+    if (_strnicmp(haystack, needle, needleLen) == 0)
+      return TRUE;
+  }
+  return FALSE;
+}
+
+/* Standard text controls and their common superclasses: Edit, RichEdit*,
+ * WindowsForms10.EDIT.*, TEdit/TMemo (VCL), ThunderTextBox (VB), Scintilla. */
+static BOOL isTextInputClass(HWND hWnd) {
+  char className[128];
+  if (!GetClassNameA(hWnd, className, sizeof(className)))
+    return FALSE;
+  return containsIgnoreCase(className, "edit") ||
+         containsIgnoreCase(className, "textbox") ||
+         containsIgnoreCase(className, "memo") ||
+         containsIgnoreCase(className, "scintilla");
+}
+
+/* AWT keeps the input context enabled on every focusable Swing component, so
+ * its IME state only tells read-only text apart. */
+static BOOL isAwtWindow(HWND hWnd) {
+  char className[16];
+  return GetClassNameA(hWnd, className, sizeof(className)) &&
+         strncmp(className, "SunAwt", 6) == 0;
+}
+
+static BOOL CALLBACK findImeUiWindow(HWND hWnd, LPARAM lParam) {
+  char className[16];
+  if (GetClassNameA(hWnd, className, sizeof(className)) &&
+      strcmp(className, "Wine IME") == 0) {
+    *(HWND *)lParam = hWnd;
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/* Wine's builtin IME mirrors the input context of the focused window in its
+ * UI window (IMMGWL_IMC), and clears it when the application disassociates
+ * the context. Returns -1 when the thread has no IME UI window yet. */
+static int getImeContextState(DWORD threadId) {
+  HWND uiWindow = NULL;
+  EnumThreadWindows(threadId, findImeUiWindow, (LPARAM)&uiWindow);
+  if (!uiWindow)
+    return -1;
+  return GetWindowLongPtrW(uiWindow, 0) != 0;
+}
+
+/* Windows seen with the IME disabled while focused. Those applications
+ * (browsers, Qt, game engines, SDL with text input stopped) enable the IME
+ * only while a text field has focus. Everything else keeps the default input
+ * context on every window, which says nothing. */
+static HWND imeManagedWindows[MAX_IME_MANAGED_WINDOWS];
+static int imeManagedWindowsNext = 0;
+
+static BOOL isImeManagedWindow(HWND hWnd) {
+  for (int i = 0; i < MAX_IME_MANAGED_WINDOWS; i++) {
+    if (imeManagedWindows[i] == hWnd)
+      return TRUE;
+  }
+  return FALSE;
+}
+
+static void markImeManagedWindow(HWND hWnd) {
+  if (isImeManagedWindow(hWnd))
+    return;
+  imeManagedWindows[imeManagedWindowsNext] = hWnd;
+  imeManagedWindowsNext = (imeManagedWindowsNext + 1) % MAX_IME_MANAGED_WINDOWS;
+}
+
+/* Classifies the keyboard focus of the foreground thread. On ACTIVE, target is
+ * the text input and rect the screen area a tap must hit to target it.
+ * BLOCKED means the focus is known not to accept text (read-only control, or
+ * IME disabled by the application), which vetoes the cursor-based detection
+ * done on the Java side. Besides the standard controls, any window holding a
+ * text-sized system caret counts: that is how custom editors (consoles,
+ * Scintilla-likes, some toolkits) expose their insertion point. Tiny carets
+ * are ignored, since toolkits like Tk keep a hidden 1x1 caret around just to
+ * place the IME window. */
+static int queryTextInput(HWND *target, RECT *rect) {
+  HWND foreground = GetForegroundWindow();
+  DWORD threadId =
+      foreground ? GetWindowThreadProcessId(foreground, NULL) : 0;
+
+  GUITHREADINFO info;
+  ZeroMemory(&info, sizeof(info));
+  info.cbSize = sizeof(info);
+  if (!GetGUIThreadInfo(threadId, &info) || !info.hwndFocus)
+    return TEXT_INPUT_INACTIVE;
+
+  HWND focus = info.hwndFocus;
+  if (!IsWindowEnabled(focus))
+    return TEXT_INPUT_INACTIVE;
+
+  if (isTextInputClass(focus)) {
+    if (GetWindowLongA(focus, GWL_STYLE) & ES_READONLY)
+      return TEXT_INPUT_BLOCKED;
+    if (!GetWindowRect(focus, rect))
+      return TEXT_INPUT_INACTIVE;
+    *target = focus;
+    return TEXT_INPUT_ACTIVE;
+  }
+
+  int caretHeight = info.rcCaret.bottom - info.rcCaret.top;
+  if (info.hwndCaret && caretHeight >= MIN_CARET_HEIGHT &&
+      GetWindowRect(info.hwndCaret, rect)) {
+    /* The caret window may be a whole page or canvas: narrow the target down
+     * to the band around the line being edited. */
+    RECT caret = info.rcCaret;
+    MapWindowPoints(info.hwndCaret, NULL, (POINT *)&caret, 2);
+    rect->top = max(rect->top, caret.top - caretHeight);
+    rect->bottom = min(rect->bottom, caret.bottom + caretHeight);
+    *target = info.hwndCaret;
+    return TEXT_INPUT_ACTIVE;
+  }
+
+  int imeState = getImeContextState(threadId);
+  if (imeState == 0) {
+    markImeManagedWindow(focus);
+    return TEXT_INPUT_BLOCKED;
+  }
+  if (imeState == 1 && isImeManagedWindow(focus) && !isAwtWindow(focus) &&
+      GetWindowRect(focus, rect)) {
+    *target = focus;
+    return TEXT_INPUT_ACTIVE;
+  }
+  return TEXT_INPUT_INACTIVE;
+}
+
+static void sendTextInputState(int state, HWND hWnd, const RECT *rect) {
+  TextInputPacket packet;
+  ZeroMemory(&packet, sizeof(packet));
+  packet.code = RC_TEXT_INPUT_STATE;
+  packet.state = (BYTE)state;
+  packet.hwnd = (DWORD)(ULONG_PTR)hWnd;
+  if (state == TEXT_INPUT_ACTIVE) {
+    packet.left = (short)rect->left;
+    packet.top = (short)rect->top;
+    packet.right = (short)rect->right;
+    packet.bottom = (short)rect->bottom;
+  }
+  sendto(sock, (const char *)&packet, sizeof(packet), 0,
+         (struct sockaddr *)&clientAddr, clientAddrLen);
+}
+
+DWORD WINAPI TextInputMonitorThread(LPVOID lpParam) {
+  /* Report physical coordinates so they match the X server's, whatever DPI
+   * the prefix uses. Only this thread changes awareness. */
+  typedef HANDLE(WINAPI * SetThreadDpiAwarenessContextFn)(HANDLE);
+  SetThreadDpiAwarenessContextFn setThreadDpiAwarenessContext =
+      (SetThreadDpiAwarenessContextFn)GetProcAddress(
+          GetModuleHandleA("user32.dll"), "SetThreadDpiAwarenessContext");
+  if (setThreadDpiAwarenessContext)
+    setThreadDpiAwarenessContext((HANDLE)-3); /* PER_MONITOR_AWARE */
+
+  int lastState = TEXT_INPUT_INACTIVE;
+  HWND lastWnd = NULL;
+  RECT lastRect = {0};
+
+  while (running) {
+    if (textInputMonitorEnabled) {
+      RECT rect = {0};
+      HWND hWnd = NULL;
+      int state = queryTextInput(&hWnd, &rect);
+
+      if (textInputForceSend || state != lastState || hWnd != lastWnd ||
+          !EqualRect(&rect, &lastRect)) {
+        textInputForceSend = FALSE;
+        sendTextInputState(state, hWnd, &rect);
+        lastState = state;
+        lastWnd = hWnd;
+        lastRect = rect;
+      }
+    } else {
+      lastState = TEXT_INPUT_INACTIVE;
+      lastWnd = NULL;
+    }
+    Sleep(TEXT_INPUT_POLL_INTERVAL);
+  }
+  return 0;
+}
+
 DWORD WINAPI ServerThread(LPVOID lpParam) {
   WSADATA wsaData;
   if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
@@ -388,6 +595,12 @@ DWORD WINAPI ServerThread(LPVOID lpParam) {
         break;
       case RC_BRING_TO_FRONT:
         handleBringToFront(buffer, len);
+        break;
+      case RC_TEXT_INPUT_MONITOR:
+        if (len >= 2) {
+          textInputMonitorEnabled = buffer[1] != 0;
+          textInputForceSend = TRUE;
+        }
         break;
       }
     }
@@ -485,6 +698,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     CloseHandle(sei.hProcess);
 
   HANDLE hThread = CreateThread(NULL, 0, ServerThread, NULL, 0, NULL);
+  HANDLE hTextInputThread =
+      CreateThread(NULL, 0, TextInputMonitorThread, NULL, 0, NULL);
+  if (hTextInputThread)
+    CloseHandle(hTextInputThread);
 
   if (affinity > 0) {
     handleChildProcesses(affinity);

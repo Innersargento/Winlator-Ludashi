@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <atomic>
+#include <cstdlib>
 #include <vector>
 
 #include "base/log.h"
@@ -8,6 +11,48 @@
 #include "xscreen.h"
 
 namespace xorg {
+
+namespace {
+std::atomic<s32> tint_inside{-1};
+std::atomic<s32> tint_outline{-1};
+
+u32 Luma(u32 rgb) { return (((rgb >> 16) & 255) * 299 + ((rgb >> 8) & 255) * 587 + (rgb & 255) * 114) / 1000; }
+
+// Light parts of a cursor take the inside color and dark parts the outline color.
+u32 TintColor(u32 rgb) {
+    const s32 inside = tint_inside.load(), outline = tint_outline.load();
+    if (inside < 0 || outline < 0) return rgb & 0xffffff;
+    return static_cast<u32>(Luma(rgb) >= 128 ? inside : outline) & 0xffffff;
+}
+
+// Only black, white and gray cursors (Wine's system cursors) are tinted, colored ones keep their look.
+void TintArgbPixels(std::vector<u32>& pixels) {
+    const s32 inside = tint_inside.load(), outline = tint_outline.load();
+    if (inside < 0 || outline < 0) return;
+    for (const u32 pixel : pixels) {
+        if (!(pixel >> 24)) continue;
+        const int r = (pixel >> 16) & 255, g = (pixel >> 8) & 255, b = pixel & 255;
+        if (std::max({r, g, b}) - std::min({r, g, b}) > 24) return;
+    }
+    for (auto& pixel : pixels) {
+        const u32 alpha = pixel >> 24;
+        if (!alpha) continue;
+        const u32 t = Luma(pixel);
+        u32 out = alpha << 24;
+        for (int shift = 16; shift >= 0; shift -= 8) {
+            const int in = (inside >> shift) & 255, ou = (outline >> shift) & 255;
+            out |= static_cast<u32>(ou + ((in - ou) * static_cast<int>(t) + 127) / 255) << shift;
+        }
+        pixel = out;
+    }
+}
+}  // namespace
+
+void Cursor::SetTint(s32 inside_rgb, s32 outline_rgb) {
+    const bool enabled = inside_rgb >= 0 && outline_rgb >= 0;
+    tint_inside = enabled ? (inside_rgb & 0xffffff) : -1;
+    tint_outline = enabled ? (outline_rgb & 0xffffff) : -1;
+}
 
 Cursor::Cursor(XScreen& screen,
                u32 id,
@@ -55,6 +100,7 @@ Cursor::Cursor(XScreen& screen, u32 id, u32 source_char, u32 mask_char, u32 fg_c
 
     hotspot_x = source_font.xhot;
     hotspot_y = source_font.yhot;
+    glyph = static_cast<s32>(source_char);
 
     std::vector<u8> source_data = source_font.ToRGBA();
     std::vector<u8> mask_data = mask_font.ToRGBA();
@@ -87,6 +133,7 @@ Cursor::Cursor(XScreen& screen, u32 id, u16 hotX, u16 hotY, Drawable& image, boo
         pixel = (alpha << 24) | (channel((pixel >> 16) & 255) << 16) |
                 (channel((pixel >> 8) & 255) << 8) | channel(pixel & 255);
     }
+    TintArgbPixels(pixels);
     drawable->WritePixels(reinterpret_cast<const u8*>(pixels.data()), 0, 0, 0, 0,
                           cursorWidth, cursorHeight, cursorWidth);
 }
@@ -109,6 +156,8 @@ void Cursor::UpdateCursorDrawable(u32 width,
 }
 void Cursor::Recolor(u32 fg, u32 bg) {
     if (shape.empty()) return; // Core RecolorCursor does not recolor ARGB cursors.
+    origin_fg = fg; origin_bg = bg;
+    fg = TintColor(fg); bg = TintColor(bg);
     // A new drawable also invalidates the cached native cursor snapshot.
     drawable = screen.CreateDrawable(cursorWidth, cursorHeight, 32);
     auto* bitmap = static_cast<u32*>(drawable->Map());

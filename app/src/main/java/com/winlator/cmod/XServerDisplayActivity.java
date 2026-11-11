@@ -26,12 +26,15 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
@@ -68,6 +71,7 @@ import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
 import com.winlator.cmod.contents.AdrenotoolsManager;
 import com.winlator.cmod.core.AppUtils;
+import com.winlator.cmod.core.CursorTintStore;
 import com.winlator.cmod.core.DefaultVersion;
 import com.winlator.cmod.core.EnvVars;
 import com.winlator.cmod.core.FileUtils;
@@ -116,12 +120,14 @@ import com.winlator.cmod.xenvironment.components.GuestProgramLauncherComponent;
 import com.winlator.cmod.xenvironment.components.PulseAudioComponent;
 import com.winlator.cmod.xenvironment.components.SysVSharedMemoryComponent;
 import com.winlator.cmod.xenvironment.components.XServerComponent;
+import com.winlator.cmod.xserver.CursorManager;
 import com.winlator.cmod.xserver.Drawable;
 import com.winlator.cmod.xserver.Pointer;
 import com.winlator.cmod.xserver.Property;
 import com.winlator.cmod.xserver.ScreenInfo;
 import com.winlator.cmod.xserver.Window;
 import com.winlator.cmod.xserver.WindowManager;
+import com.winlator.cmod.xserver.XLock;
 import com.winlator.cmod.xserver.XServer;
 import com.winlator.cmod.xserver.extensions.RandrExtension;
 
@@ -223,6 +229,20 @@ public class XServerDisplayActivity extends AppCompatActivity {
     private boolean isRelativeMouseMovement = false;
     private boolean isMouseDisabled = false;
     private boolean simulateTouchScreen = false;
+
+    // Soft keyboard follows text input focus in simulated touchscreen mode
+    private static final long TEXT_INPUT_TAP_WINDOW_MS = 2000;
+    private static final long TEXT_INPUT_TAP_SETTLE_MS = 400;
+    private static final long SOFT_KEYBOARD_TOGGLE_GUARD_MS = 1000;
+    private static final int TEXT_INPUT_TAP_MARGIN = 8;
+    private final Handler textInputHandler = new Handler(Looper.getMainLooper());
+    private byte textInputState = WinHandler.TEXT_INPUT_INACTIVE;
+    private int textInputHwnd = 0;
+    private final Rect textInputRect = new Rect();
+    private long lastSimulatedClickTime = 0;
+    private boolean softKeyboardVisible = false;
+    private boolean softKeyboardAutoShown = false;
+    private long softKeyboardShowTime = 0;
 
     private SensorManager sensorManager;
 
@@ -601,6 +621,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
                 : new XServer(new ScreenInfo(screenSize), useDisplayX ? "displayx" : "egl", displayxConfig);
         if (isNativeX11Enabled() && useDisplayX) xServer.setDisplayDriver("displayx");
         xServer.setWinHandler(winHandler);
+        int[] cursorColors = CursorTintStore.get(container);
+        boolean defaultCursorColors = cursorColors[0] == CursorTintStore.DEFAULT_INSIDE && cursorColors[1] == CursorTintStore.DEFAULT_OUTLINE;
+        xServer.cursorManager.setCursorColors(defaultCursorColors ? -1 : cursorColors[0], defaultCursorColors ? -1 : cursorColors[1]);
         xServer.setRelativeMouseMovement(isRelativeMouseMovement);
         advertisePanelRefreshRates();
 
@@ -1030,6 +1053,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
             }
             com.winlator.cmod.steam.SteamSession.endGame(getApplicationContext());
         }
+        textInputHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
 
@@ -1237,9 +1261,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
         }
 
         String desktopTheme = container.getDesktopTheme();
-        if (!(desktopTheme + "," + xServer.screenInfo).equals(container.getExtra("desktopTheme"))) {
+        String desktopThemeKey = WineThemeManager.getApplyKey(this, desktopTheme, xServer.screenInfo);
+        if (!desktopThemeKey.equals(container.getExtra("desktopTheme"))) {
             WineThemeManager.apply(this, new WineThemeManager.ThemeInfo(desktopTheme), xServer.screenInfo);
-            container.putExtra("desktopTheme", desktopTheme + "," + xServer.screenInfo);
+            container.putExtra("desktopTheme", desktopThemeKey);
             containerDataChanged = true;
         }
 
@@ -1278,6 +1303,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
         envVars.put("LC_ALL", lc_all);
         envVars.put("WINEPREFIX", imageFs.wineprefix);
+        // Without cursor themes, winex11 falls back to X core glyph cursors, which
+        // lets the X server tell when the pointer is over text (I-beam). The cursor
+        // is hidden in simulated touchscreen mode anyway.
+        if (simulateTouchScreen) envVars.put("XCURSOR_PATH", "/nonexistent");
 
         boolean enableWineDebug = preferences.getBoolean("enable_wine_debug", false);
         String wineDebugChannels = preferences.getString("wine_debug_channels",
@@ -1478,6 +1507,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
                             useDisplayX ? 2 : useEGL ? 1 : 0, displayXFlags);
             nativeView.setFilterMode(shortcut != null ? shortcut.getRendererFilterMode()
                     : (container != null ? container.getRendererFilterMode() : 0));
+            int[] nativeCursorColors = CursorTintStore.get(container);
+            boolean defaultNativeCursor = nativeCursorColors[0] == CursorTintStore.DEFAULT_INSIDE && nativeCursorColors[1] == CursorTintStore.DEFAULT_OUTLINE;
+            nativeView.setCursorColors(defaultNativeCursor ? -1 : nativeCursorColors[0], defaultNativeCursor ? -1 : nativeCursorColors[1]);
             nativeView.setReadyCallback(() -> {
                 preloaderDialog.closeOnUiThread();
                 if (!simulateTouchScreen) nativeView.setCursorVisible(true);
@@ -1664,10 +1696,16 @@ public class XServerDisplayActivity extends AppCompatActivity {
             touchpadView.setSimTouchScreen(simTouchScreen.equals("1"));
             if (simulateTouchScreen) {
                 renderer.setCursorVisible(false);
+                touchpadView.setOnSimulatedClickListener(this::onSimulatedClick);
+                winHandler.setTextInputMonitorEnabled(true);
             }
         }
 
-        AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
+        AppUtils.observeSoftKeyboardVisibility(drawerLayout, visible -> {
+            softKeyboardVisible = visible;
+            if (!visible) softKeyboardAutoShown = false;
+            renderer.setScreenOffsetYRelativeToCursor(visible);
+        });
 
         setupSidebarHudControls();
         setupSidebarGraphicsControls();
@@ -3520,6 +3558,90 @@ public class XServerDisplayActivity extends AppCompatActivity {
             }
         }
         return filename;
+    }
+
+    /**
+     * Called on the UI thread with the keyboard focus reported by winhandler.exe.
+     * A text input getting focus right after a tap opens the soft keyboard; focus
+     * leaving it closes the keyboard if it was opened automatically.
+     */
+    public void onTextInputStateChanged(byte state, int hwnd, Rect rect) {
+        boolean focusMoved = state == WinHandler.TEXT_INPUT_ACTIVE
+                && (textInputState != WinHandler.TEXT_INPUT_ACTIVE || hwnd != textInputHwnd);
+        textInputState = state;
+        textInputHwnd = hwnd;
+        textInputRect.set(rect);
+        if (!simulateTouchScreen) return;
+
+        if (focusMoved && SystemClock.uptimeMillis() - lastSimulatedClickTime <= TEXT_INPUT_TAP_WINDOW_MS) {
+            showSoftKeyboardForTextInput();
+        }
+        else if (state != WinHandler.TEXT_INPUT_ACTIVE && softKeyboardAutoShown
+                && !isTextCursorAt(xServer.pointer.getX(), xServer.pointer.getY())) {
+            hideAutoShownSoftKeyboard();
+        }
+    }
+
+    private void onSimulatedClick(int x, int y, boolean pressed) {
+        lastSimulatedClickTime = SystemClock.uptimeMillis();
+        if (pressed) return;
+
+        // Give the application time to move the focus and update the cursor
+        textInputHandler.removeCallbacksAndMessages(null);
+        textInputHandler.postDelayed(() -> {
+            if (isTextInputAt(x, y)) showSoftKeyboardForTextInput();
+            else if (softKeyboardAutoShown) hideAutoShownSoftKeyboard();
+        }, TEXT_INPUT_TAP_SETTLE_MS);
+    }
+
+    private boolean isTextInputAt(int x, int y) {
+        if (textInputState == WinHandler.TEXT_INPUT_BLOCKED) return false;
+        if (textInputState == WinHandler.TEXT_INPUT_ACTIVE) {
+            Rect area = new Rect(textInputRect);
+            area.inset(-TEXT_INPUT_TAP_MARGIN, -TEXT_INPUT_TAP_MARGIN);
+            if (area.contains(x, y)) return true;
+        }
+        // Toolkits that draw their own text fields (Swing, browsers, Tk...) still
+        // show the system I-beam cursor over them
+        return isTextCursorAt(x, y);
+    }
+
+    private boolean isTextCursorAt(int x, int y) {
+        if (xServerView instanceof com.winlator.cmod.widget.NativeX11View) {
+            return ((com.winlator.cmod.widget.NativeX11View) xServerView).isTextCursorAt(x, y);
+        }
+        try (XLock lock = xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
+            Window window = xServer.windowManager.findPointWindow((short)x, (short)y);
+            return window != null && window.attributes.getCursorGlyph() == CursorManager.GLYPH_XTERM;
+        }
+    }
+
+    private boolean isSoftKeyboardVisible() {
+        if (softKeyboardVisible) return true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsets insets = getWindow().getDecorView().getRootWindowInsets();
+            return insets != null && insets.isVisible(WindowInsets.Type.ime());
+        }
+        return false;
+    }
+
+    private void showSoftKeyboardForTextInput() {
+        if (isSoftKeyboardVisible()) return;
+        if (getResources().getConfiguration().hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO) return;
+        long now = SystemClock.uptimeMillis();
+        // toggleSoftInput would close a keyboard that is still opening
+        if (now - softKeyboardShowTime < SOFT_KEYBOARD_TOGGLE_GUARD_MS) return;
+        softKeyboardShowTime = now;
+        softKeyboardAutoShown = true;
+        InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+        imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
+    }
+
+    private void hideAutoShownSoftKeyboard() {
+        softKeyboardAutoShown = false;
+        softKeyboardShowTime = 0;
+        InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+        imm.hideSoftInputFromWindow(getWindow().getDecorView().getWindowToken(), 0);
     }
 
     public XServer getXServer() {

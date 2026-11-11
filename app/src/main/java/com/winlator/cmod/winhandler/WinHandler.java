@@ -1,6 +1,7 @@
 package com.winlator.cmod.winhandler;
 
 import android.content.SharedPreferences;
+import android.graphics.Rect;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -50,6 +51,9 @@ public class WinHandler {
     public static final byte FLAG_INPUT_TYPE_XINPUT = 0x04;
     public static final byte FLAG_INPUT_TYPE_DINPUT = 0x08;
     public static final byte DEFAULT_INPUT_TYPE = FLAG_INPUT_TYPE_XINPUT;
+    public static final byte TEXT_INPUT_INACTIVE = 0;
+    public static final byte TEXT_INPUT_ACTIVE = 1;
+    public static final byte TEXT_INPUT_BLOCKED = 2;
     private DatagramSocket socket;
     private final ByteBuffer sendData = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN);
     private final ByteBuffer receiveData = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN);
@@ -79,6 +83,7 @@ public class WinHandler {
     private boolean[] vibrationEnabledSlots = new boolean[MAX_CONTROLLERS];
 
     private boolean xinputDisabled;
+    private boolean textInputMonitorEnabled = false;
     private boolean xinputDisabledInitialized = false;
 
     private int fallbackSlot = -1;
@@ -248,6 +253,21 @@ public class WinHandler {
             sendData.put(RequestCodes.KEYBOARD_EVENT);
             sendData.put(vkey);
             sendData.putInt(flags);
+            sendPacket(CLIENT_PORT);
+        });
+    }
+
+    public void setTextInputMonitorEnabled(boolean enabled) {
+        textInputMonitorEnabled = enabled;
+        if (initReceived) sendTextInputMonitorState();
+    }
+
+    private void sendTextInputMonitorState() {
+        final boolean enabled = textInputMonitorEnabled;
+        addAction(() -> {
+            sendData.rewind();
+            sendData.put(RequestCodes.TEXT_INPUT_MONITOR);
+            sendData.put((byte)(enabled ? 1 : 0));
             sendPacket(CLIENT_PORT);
         });
     }
@@ -490,6 +510,7 @@ public void setVibrationEnabledForSlot(int slot, boolean enabled) {
                 if (!xinputDisabledInitialized) {
                     xinputDisabled = preferences.getBoolean("xinput_toggle", false);
                 }
+                if (textInputMonitorEnabled) sendTextInputMonitorState();
                 synchronized (actions) {
                     actions.notify();
                 }
@@ -533,6 +554,13 @@ public void setVibrationEnabledForSlot(int slot, boolean enabled) {
                 xServer.pointer.setX(x);
                 xServer.pointer.setY(y);
                 activity.getXServerView().onPointerMove(x, y);
+                break;
+            }
+            case RequestCodes.TEXT_INPUT_STATE: {
+                byte state = receiveData.get();
+                int hwnd = receiveData.getInt();
+                Rect rect = new Rect(receiveData.getShort(), receiveData.getShort(), receiveData.getShort(), receiveData.getShort());
+                activity.runOnUiThread(() -> activity.onTextInputStateChanged(state, hwnd, rect));
                 break;
             }
             default: {

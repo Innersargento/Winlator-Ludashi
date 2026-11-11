@@ -45,6 +45,7 @@ public class TouchpadView extends View {
     private boolean scrolling = false;
     private final XServer xServer;
     private Runnable fourFingersTapCallback;
+    private OnSimulatedClickListener onSimulatedClickListener;
     private final float[] xform = XForm.getInstance();
     private boolean simTouchScreen = false;
     private boolean continueClick = true;
@@ -61,6 +62,10 @@ public class TouchpadView extends View {
 
     private SharedPreferences preferences;
 
+
+    public interface OnSimulatedClickListener {
+        void onSimulatedClick(int x, int y, boolean pressed);
+    }
 
     // Flag to control touchpad vs touchscreen mode
 
@@ -283,6 +288,8 @@ public class TouchpadView extends View {
                         if (continueClick) {
                             xServer.injectPointerWarp(lastTouchedPosX, lastTouchedPosY);
                             xServer.injectPointerButtonPress(Pointer.Button.BUTTON_LEFT);
+                            if (onSimulatedClickListener != null)
+                                onSimulatedClickListener.onSimulatedClick(lastTouchedPosX, lastTouchedPosY, true);
                         }
                     };
                     if (pointerId == 0) {
@@ -449,8 +456,11 @@ public class TouchpadView extends View {
             case 1:
                 if (simTouchScreen) {
                     final Runnable clickDelay = () -> {
-                        if (continueClick)
+                        if (continueClick) {
                             xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
+                            if (onSimulatedClickListener != null)
+                                onSimulatedClickListener.onSimulatedClick(xServer.pointer.getX(), xServer.pointer.getY(), false);
+                        }
                     };
                     postDelayed(clickDelay, CLICK_DELAYED_TIME);
                 }
@@ -615,6 +625,10 @@ public class TouchpadView extends View {
 
     public void setPointerButtonRightEnabled(boolean pointerButtonRightEnabled) {
         this.pointerButtonRightEnabled = pointerButtonRightEnabled;
+    }
+
+    public void setOnSimulatedClickListener(OnSimulatedClickListener onSimulatedClickListener) {
+        this.onSimulatedClickListener = onSimulatedClickListener;
     }
 
     public void setFourFingersTapCallback(Runnable fourFingersTapCallback) {

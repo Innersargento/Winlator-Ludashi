@@ -6,6 +6,7 @@
 #include "core/window.h"
 #include "core/window_manager.h"
 #include "core/atom.h"
+#include "core/cursor.h"
 #include "native_screen.h"
 #include <map>
 
@@ -86,6 +87,22 @@ extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeOptions)(JNIEnv*, jclass, jlong
                                                           jboolean cursor, jint fps, jfloat refresh) {
     auto server = session(handle); if (!server) return;
     static_cast<xorg::NativeScreen&>(server->GetScreen()).SetOptions(fullscreen, cursor, fps, refresh);
+}
+extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeCursorColors)(JNIEnv*, jclass, jlong handle, jint inside, jint outline) {
+    auto server = session(handle); if (!server) return;
+    auto lock = server->Lock();
+    xorg::Cursor::SetTint(inside, outline);
+    // The default cursor is created with the server, before the colors are known.
+    if (auto* root = server->GetWindowManager().GetRootWindow())
+        if (auto* cursor = root->GetCursor()) cursor->Retint();
+}
+// True when the window under (x, y) shows the X core I-beam, how toolkits that draw their own text fields look.
+extern "C" JNIEXPORT jboolean JNICALL JNI_NAME(nativeIsTextCursorAt)(JNIEnv*, jclass, jlong handle, jint x, jint y) {
+    auto server = session(handle); if (!server) return JNI_FALSE;
+    auto lock = server->Lock();
+    auto* window = server->GetWindowManager().GetPointerWindow(x, y);
+    auto* cursor = window ? window->GetCursor() : nullptr;
+    return cursor && cursor->GetGlyph() == 152 ? JNI_TRUE : JNI_FALSE;
 }
 extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeMagnifierZoom)(JNIEnv*, jclass, jlong handle, jfloat zoom) {
     auto server = session(handle); if (!server) return;

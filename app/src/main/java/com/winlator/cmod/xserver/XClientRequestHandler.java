@@ -393,7 +393,9 @@ public class XClientRequestHandler implements RequestHandler {
                     }
                     break;
                 case ClientOpcodes.CREATE_GLYPH_CURSOR:
-                    client.skipRequest();
+                    try (XLock lock = client.xServer.lock(XServer.Lockable.CURSOR_MANAGER)) {
+                        CursorRequests.createGlyphCursor(client, inputStream, outputStream);
+                    }
                     break;
                 case ClientOpcodes.FREE_CURSOR:
                     try (XLock lock = client.xServer.lock(XServer.Lockable.PIXMAP_MANAGER, XServer.Lockable.DRAWABLE_MANAGER, XServer.Lockable.CURSOR_MANAGER)) {

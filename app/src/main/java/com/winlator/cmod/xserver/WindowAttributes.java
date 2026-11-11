@@ -27,6 +27,7 @@ public class WindowAttributes {
     private BackingStore backingStore = BackingStore.NOT_USEFUL;
     private BitGravity bitGravity = BitGravity.CENTER;
     private Cursor cursor;
+    private int cursorGlyph = -1;
     private Bitmask doNotPropagateMask = new Bitmask(0);
     private Bitmask eventMask = new Bitmask(0);
     private boolean mapped = false;
@@ -60,6 +61,13 @@ public class WindowAttributes {
     public Cursor getCursor() {
         Window parent = window.getParent();
         return cursor == null && parent != null ? parent.attributes.getCursor() : cursor;
+    }
+
+    public int getCursorGlyph() {
+        if (cursor != null) return -1;
+        if (cursorGlyph != -1) return cursorGlyph;
+        Window parent = window.getParent();
+        return parent != null ? parent.attributes.getCursorGlyph() : -1;
     }
 
     public Bitmask getEventMask() {
@@ -144,7 +152,9 @@ public class WindowAttributes {
                     doNotPropagateMask = new Bitmask(inputStream.readInt());
                     break;
                 case FLAG_CURSOR:
-                    cursor = client.xServer.cursorManager.getCursor(inputStream.readInt());
+                    int cursorId = inputStream.readInt();
+                    cursor = client.xServer.cursorManager.getCursor(cursorId);
+                    cursorGlyph = client.xServer.cursorManager.getGlyphCursorShape(cursorId);
                     break;
                 case FLAG_BACKGROUND_PIXMAP:
                 case FLAG_BORDER_PIXMAP:

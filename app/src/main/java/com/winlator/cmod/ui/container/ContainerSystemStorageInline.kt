@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import com.winlator.cmod.container.ContainerManager
 import com.winlator.cmod.core.FileUtils
 import com.winlator.cmod.core.WineRegistryEditor
+import com.winlator.cmod.core.CursorTintStore
+import com.winlator.cmod.core.MsstylesStore
 import com.winlator.cmod.core.WineThemeManager
 import java.io.File
 import java.io.FileOutputStream
@@ -69,8 +71,12 @@ internal fun ContainerSystemInline(containerId: Int, callbacks: ContainerInlineC
         mutableStateOf(container.getExtra("hudMode").toIntOrNull() ?: if (container.isShowFPS()) 2 else 0)
     }
     var desktopTheme by remember {
-        mutableStateOf(if (themeInfo.theme == WineThemeManager.Theme.LIGHT) "Light" else "Dark")
+        mutableStateOf(themeStateOrDefault(context, themeStateFromValue(container.getDesktopTheme())))
     }
+    var importedThemes by remember { mutableStateOf(MsstylesStore.list(context)) }
+    val savedCursorColors = remember(containerId) { CursorTintStore.get(container) }
+    var cursorInside by remember { mutableStateOf(savedCursorColors[0]) }
+    var cursorOutline by remember { mutableStateOf(savedCursorColors[1]) }
     var backgroundType by remember {
         mutableStateOf(if (themeInfo.backgroundType == WineThemeManager.BackgroundType.COLOR) "Color" else "Image")
     }
@@ -116,7 +122,27 @@ internal fun ContainerSystemInline(containerId: Int, callbacks: ContainerInlineC
             hudMode = arrayOf("Off", "Classic", "Modern").indexOf(it).coerceAtLeast(0)
         }
         SSDivider()
-        SSChoice(uiStr(R.string.theme), desktopTheme, arrayOf("Light", "Dark")) { desktopTheme = it }
+        SSChoice(
+            uiStr(R.string.theme),
+            themeEntryLabel(desktopTheme),
+            themeEntries(importedThemes).toTypedArray()
+        ) { desktopTheme = themeStateFromEntry(it) }
+        ThemeImportRow(
+            selectedState = desktopTheme,
+            onImported = {
+                importedThemes = MsstylesStore.list(context)
+                desktopTheme = WineThemeManager.MSSTYLES_PREFIX + it
+            },
+            onRemoved = {
+                importedThemes = MsstylesStore.list(context)
+                desktopTheme = "Dark"
+            }
+        )
+        SSDivider()
+        CursorColorsEditor(cursorInside, cursorOutline) { inside, outline ->
+            cursorInside = inside
+            cursorOutline = outline
+        }
         SSDivider()
         SSChoice(uiStr(R.string.background), backgroundType, arrayOf("Image", "Color")) { backgroundType = it }
         if (backgroundType == "Image") {
@@ -148,8 +174,9 @@ internal fun ContainerSystemInline(containerId: Int, callbacks: ContainerInlineC
             container.setShowFPS(hudMode != 0)
             container.putExtra("hudMode", hudMode.toString())
             container.setDesktopTheme(
-                "${desktopTheme.uppercase(Locale.ENGLISH)},${backgroundType.uppercase(Locale.ENGLISH)},${normalizeDesktopColor(backgroundColor)}"
+                "${themeIdFromState(desktopTheme)},${backgroundType.uppercase(Locale.ENGLISH)},${normalizeDesktopColor(backgroundColor)}"
             )
+            CursorTintStore.set(container, cursorInside, cursorOutline)
             runCatching {
                 WineRegistryEditor(userReg).use {
                     it.setStringValue("Software\\Wine\\DirectInput", "MouseWarpOverride", mouseWarp)

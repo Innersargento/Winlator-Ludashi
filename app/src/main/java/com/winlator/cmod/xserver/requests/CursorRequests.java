@@ -50,6 +50,14 @@ public abstract class CursorRequests {
         client.registerAsOwnerOfResource(cursor);
     }
 
+    public static void createGlyphCursor(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError {
+        int cursorId = inputStream.readInt();
+        inputStream.skip(8);
+        int sourceChar = inputStream.readUnsignedShort();
+        inputStream.skip(14);
+        client.xServer.cursorManager.createGlyphCursor(cursorId, sourceChar);
+    }
+
     public static void freeCursor(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError {
         client.xServer.cursorManager.freeCursor(inputStream.readInt());
     }
