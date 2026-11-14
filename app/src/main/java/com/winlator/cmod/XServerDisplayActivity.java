@@ -230,6 +230,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
     private boolean isPaused = false;
     private boolean isRelativeMouseMovement = false;
     private boolean isMouseDisabled = false;
+    private boolean isCursorHidden = false;
     private boolean simulateTouchScreen = false;
 
     // Soft keyboard follows text input focus in simulated touchscreen mode
@@ -579,6 +580,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
             Log.d("XServerDisplayActivity", "XInput Disabled from Shortcut: " + xinputDisabledFromShortcut);
 
             simulateTouchScreen = shortcut.getExtra("simTouchScreen").equals("1");
+            isCursorHidden = shortcut.getExtra("hideCursor").equals("1");
             isRelativeMouseMovement = shortcut.getExtra("enableRelativeMouse").equals("1");
             isMouseDisabled = shortcut.getExtra("disableMouse").equals("1");
         }
@@ -642,9 +644,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
             @Override
             public void onUpdateWindowContent(Window window) {
                 if (!winStarted[0] && window.isApplicationWindow()) {
-                    if (!simulateTouchScreen) {
-                        xServerView.setCursorVisible(true);
-                    }
+                    applyCursorVisibility();
                     preloaderDialog.closeOnUiThread();
                     winStarted[0] = true;
                 }
@@ -1419,7 +1419,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
             nativeView.setCursorColors(nativeCursorColors[0], nativeCursorColors[1]);
             nativeView.setReadyCallback(() -> {
                 preloaderDialog.closeOnUiThread();
-                if (!simulateTouchScreen) nativeView.setCursorVisible(true);
+                applyCursorVisibility();
             });
             xServerView = nativeView;
         } else if (useDisplayX || useEGL) {
@@ -1718,6 +1718,19 @@ public class XServerDisplayActivity extends AppCompatActivity {
                 isRelativeMouseMovement = checked;
                 if (xServer != null)
                     xServer.setRelativeMouseMovement(isRelativeMouseMovement);
+            });
+        }
+
+        Switch swHideCursor = findViewById(R.id.SWHideCursor);
+        if (swHideCursor != null) {
+            swHideCursor.setChecked(isCursorHidden);
+            swHideCursor.setOnCheckedChangeListener((btn, checked) -> {
+                isCursorHidden = checked;
+                applyCursorVisibility();
+                if (shortcut != null) {
+                    shortcut.putExtra("hideCursor", checked ? "1" : null);
+                    shortcut.saveData();
+                }
             });
         }
 
@@ -3714,6 +3727,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
         if (window == null || frameRatingWindowId != window.id) return;
         if (classicHud != null) classicHud.update();
         if (modernHud != null) modernHud.onFrame();
+    }
+
+    private void applyCursorVisibility() {
+        if (xServerView != null) xServerView.setCursorVisible(!isCursorHidden && !simulateTouchScreen);
     }
 
     private void assignTaskAffinity(Window window) {
