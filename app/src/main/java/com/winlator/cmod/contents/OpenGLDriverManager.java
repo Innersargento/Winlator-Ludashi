@@ -134,6 +134,35 @@ public final class OpenGLDriverManager {
         }
     }
 
+    /**
+     * Version of the packaged Lorica build (assets/graphics_driver/opengl_lorica.tzst). Bump it whenever that asset
+     * changes so devices that already extracted an older copy replace it. Zink and Freedreno keep their old behaviour.
+     */
+    private static final String LORICA_BUNDLED_VERSION = "1";
+    private static final String BUNDLED_VERSION_FILE = ".bundled-version";
+
+    private static String expectedBundledVersion(String driver) {
+        return "lorica".equals(driver) ? LORICA_BUNDLED_VERSION : null;
+    }
+
+    private static boolean isBundledCurrent(File directory, String driver) {
+        String expected = expectedBundledVersion(driver);
+        if (expected == null) return true;
+        try {
+            return expected.equals(FileUtils.readString(new File(directory, BUNDLED_VERSION_FILE)).trim());
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
+    private static void writeBundledVersion(File directory, String driver) {
+        String expected = expectedBundledVersion(driver);
+        if (expected == null) return;
+        try {
+            FileUtils.writeString(new File(directory, BUNDLED_VERSION_FILE), expected);
+        } catch (Exception ignored) {}
+    }
+
     public synchronized File resolve(String driver, String selected) throws Exception {
         if ("freedreno".equals(driver) && selected != null && !selected.isEmpty() && !BUNDLED.equals(selected)) {
             if (!versions().contains(selected)) throw new IOException("Selected Freedreno version is not installed: " + selected);
@@ -146,7 +175,11 @@ public final class OpenGLDriverManager {
         }
         File builtins = new File(context.getFilesDir(), "opengl-bundled-v1"); builtins.mkdirs();
         File destination = new File(builtins, driver);
-        if (new File(destination, "libGL.so.1").isFile()) return destination;
+        if (new File(destination, "libGL.so.1").isFile()) {
+            if (isBundledCurrent(destination, driver)) return destination;
+            // The packaged driver changed since it was extracted: drop the old copy and extract again.
+            FileUtils.delete(destination);
+        }
         File stage = Files.createTempDirectory(builtins.toPath(), ".install-").toFile();
         try {
             if (!TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context,
@@ -158,6 +191,7 @@ public final class OpenGLDriverManager {
             aliases(libs, gl);
             if (destination.exists()) throw new IOException("Incomplete bundled driver installation");
             if (!libs.renameTo(destination)) throw new IOException("Cannot finalize bundled OpenGL driver");
+            writeBundledVersion(destination, driver);
             return destination;
         } finally { FileUtils.delete(stage); }
     }

@@ -395,9 +395,14 @@ private fun settingFieldLabel(label: String): String = when (label) {
 }
 
 private fun settingChoiceEntries(label: String, entries: List<String>): List<String> =
-    if (label == uiStr(R.string.graphics_driver)) listOf("Zink", "Freedreno") else entries
+    if (label == uiStr(R.string.graphics_driver)) listOf("Zink", "Freedreno", "Lorica") else entries
 private fun settingChoiceSelected(label: String, selected: String): String =
-    if (label == uiStr(R.string.graphics_driver) && selected.equals("wrapper", ignoreCase = true)) "Zink" else selected
+    if (label != uiStr(R.string.graphics_driver)) selected else when (selected.lowercase()) {
+        "wrapper", "zink" -> "Zink"
+        "freedreno" -> "Freedreno"
+        "lorica" -> "Lorica"
+        else -> selected
+    }
 
 @Composable
 internal fun SettingsCard(content: @Composable () -> Unit) {

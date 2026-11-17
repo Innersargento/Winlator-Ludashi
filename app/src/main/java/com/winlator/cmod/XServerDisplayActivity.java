@@ -2990,7 +2990,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
     private String openGlLibraryPath;
 
     private String getSelectedOpenGLDriver() {
-        return "freedreno".equalsIgnoreCase(graphicsDriver) ? "freedreno" : "zink";
+        if ("freedreno".equalsIgnoreCase(graphicsDriver)) return "freedreno";
+        if ("lorica".equalsIgnoreCase(graphicsDriver)) return "lorica";
+        return "zink";
     }
 
     private void extractOpenGLDriver(File rootDir) {
@@ -3026,6 +3028,19 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
         envVars.remove("GALLIUM_DRIVER");
         if (openGlLibraryPath != null) envVars.put("LD_LIBRARY_PATH", openGlLibraryPath);
+
+        if ("lorica".equals(getSelectedOpenGLDriver())) {
+            // Lorica translates desktop OpenGL to the device's own GLES (through libEGL/libGLESv2 from /system/lib64),
+            // so none of the Mesa/Zink/Freedreno settings apply. Defaults only fill what the user has not set.
+            envVars.remove("MESA_LOADER_DRIVER_OVERRIDE");
+            envVars.remove("ZINK_DESCRIPTORS");
+            envVars.remove("ZINK_DEBUG");
+            envVars.remove("ZINK_INLINE_UNIFORMS");
+            if (!envVars.has("LIBGL_ES3")) envVars.put("LIBGL_ES3", "1");   // AHB presentation needs an ES 3.x backend context
+            if (!envVars.has("LIBGL_GL")) envVars.put("LIBGL_GL", "21");    // OpenGL version ceiling (21 = 2.1)
+            return;
+        }
+
         envVars.put("MESA_LOADER_DRIVER_OVERRIDE", freedreno ? "kgsl" : "zink");
 
         if (freedreno) {
