@@ -176,9 +176,9 @@ jobs:
 
       - name: Verify native Steam library is packaged
         run: |
-          python3 -c 'import zipfile; z = zipfile.ZipFile("app/build/outputs/apk/release/app-release.apk"); assert not any(n.lower().endswith((".p12", ".pfx", ".jks", ".keystore")) or n.rsplit("/", 1)[-1].lower() == "password.txt" for n in z.namelist()), "Signing files must not be packaged"; assert "lib/arm64-v8a/libludashisteam.so" in z.namelist(); assert b"libludashisteam.so" not in z.read("lib/arm64-v8a/libwinlator.so"), "Steam must not be a dependency of the emulator core"'
+          python3 -c 'import zipfile; z = zipfile.ZipFile("app/build/outputs/apk/debug/app-debug.apk"); assert not any(n.lower().endswith((".p12", ".pfx", ".jks", ".keystore")) or n.rsplit("/", 1)[-1].lower() == "password.txt" for n in z.namelist()), "Signing files must not be packaged"; assert "lib/arm64-v8a/libludashisteam.so" in z.namelist(); assert b"libludashisteam.so" not in z.read("lib/arm64-v8a/libwinlator.so"), "Steam must not be a dependency of the emulator core"'
 
-      - name: Upload signed release APK artifact
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Winlator-Ludashi-5.0-${{ github.run_number }}-r${{ github.run_attempt }}
