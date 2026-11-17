@@ -138,7 +138,7 @@ public final class OpenGLDriverManager {
      * Version of the packaged Lorica build (assets/graphics_driver/opengl_lorica.tzst). Bump it whenever that asset
      * changes so devices that already extracted an older copy replace it. Zink and Freedreno keep their old behaviour.
      */
-    private static final String LORICA_BUNDLED_VERSION = "1";
+    private static final String LORICA_BUNDLED_VERSION = "3";
     private static final String BUNDLED_VERSION_FILE = ".bundled-version";
 
     private static String expectedBundledVersion(String driver) {
