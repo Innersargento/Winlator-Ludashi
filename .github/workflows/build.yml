@@ -95,7 +95,6 @@ jobs:
           python3 app/src/main/scripts/test_magnifier_pan.py
 
   android-apk:
-    needs: native-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
