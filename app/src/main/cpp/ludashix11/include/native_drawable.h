@@ -34,7 +34,7 @@ private:
     u32 stride{};
     u64 revision{1}, id{};
     void* mapped{};
-    bool locked{}, contentReady{}, scenePending{};
+    bool locked{}, contentReady{}, scenePending{}, strideUnknown{};
 };
 }
 

@@ -1,5 +1,6 @@
 #include "native_drawable.h"
 #include "core/exceptions.h"
+#include <dlfcn.h>
 
 namespace xorg {
 static std::atomic<u64> next_drawable{1};
@@ -12,10 +13,12 @@ NativeDrawable::NativeDrawable(u16 w, u16 h, u8 d, AHardwareBuffer* ahb)
         AHardwareBuffer_describe(ahb, &desc);
         // Android gralloc may pad an AHB allocation beyond the X11 pixmap extent.
         // Keep the logical X11 size and sample only that region, without CPU copies.
-        if (desc.width < w || desc.height < h || desc.stride < w || desc.layers != 1 ||
+        const bool unknownStride = desc.stride == 0;
+        if (desc.width < w || desc.height < h || (!unknownStride && desc.stride < w) || desc.layers != 1 ||
             desc.stride > UINT32_MAX / 4u)
             throw BadMatchError();
-        stride = desc.stride * 4;
+        strideUnknown = unknownStride;
+        stride = (unknownStride ? desc.width : desc.stride) * 4;
         AHardwareBuffer_acquire(ahb); buffer = ahb;
     } else pixels = std::make_shared<std::vector<u8>>(size_t(stride) * h);
 }
@@ -30,8 +33,15 @@ void NativeDrawable::Writable() {
 }
 void* NativeDrawable::Map() {
     if (buffer && !locked) {
-        if (AHardwareBuffer_lock(buffer, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
-                AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, nullptr, &mapped) != 0)
+        const u64 usage = AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN | AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;
+        using LockInfoFn = int (*)(AHardwareBuffer*, uint64_t, int32_t, const ARect*, void**, int32_t*, int32_t*);
+        static const auto lockInfo = reinterpret_cast<LockInfoFn>(dlsym(RTLD_DEFAULT, "AHardwareBuffer_lockAndGetInfo"));
+        int32_t bytesPerPixel = 0, bytesPerStride = 0;
+        if (strideUnknown && lockInfo &&
+            lockInfo(buffer, usage, -1, nullptr, &mapped, &bytesPerPixel, &bytesPerStride) == 0) {
+            if (bytesPerStride > 0 && u32(bytesPerStride) >= u32(width) * 4u) stride = u32(bytesPerStride);
+            strideUnknown = false;
+        } else if (AHardwareBuffer_lock(buffer, usage, -1, nullptr, &mapped) != 0)
             throw BadAccessError();
         locked = true;
     }
