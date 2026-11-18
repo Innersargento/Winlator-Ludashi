@@ -163,6 +163,17 @@ public final class OpenGLDriverManager {
         } catch (Exception ignored) {}
     }
 
+    private static final String SYSTEM_VULKAN = "/system/lib64/libvulkan.so";
+
+    private static void linkSystemVulkan(File directory, String driver) {
+        if (!"lorica".equals(driver) || !new File(SYSTEM_VULKAN).isFile()) return;
+        java.nio.file.Path link = new File(directory, "libvulkan.so").toPath();
+        try {
+            if (Files.exists(link, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return;
+            Files.createSymbolicLink(link, java.nio.file.Paths.get(SYSTEM_VULKAN));
+        } catch (Exception ignored) {}
+    }
+
     public synchronized File resolve(String driver, String selected) throws Exception {
         if ("freedreno".equals(driver) && selected != null && !selected.isEmpty() && !BUNDLED.equals(selected)) {
             if (!versions().contains(selected)) throw new IOException("Selected Freedreno version is not installed: " + selected);
@@ -176,7 +187,10 @@ public final class OpenGLDriverManager {
         File builtins = new File(context.getFilesDir(), "opengl-bundled-v1"); builtins.mkdirs();
         File destination = new File(builtins, driver);
         if (new File(destination, "libGL.so.1").isFile()) {
-            if (isBundledCurrent(destination, driver)) return destination;
+            if (isBundledCurrent(destination, driver)) {
+                linkSystemVulkan(destination, driver);
+                return destination;
+            }
             // The packaged driver changed since it was extracted: drop the old copy and extract again.
             FileUtils.delete(destination);
         }
@@ -192,6 +206,7 @@ public final class OpenGLDriverManager {
             if (destination.exists()) throw new IOException("Incomplete bundled driver installation");
             if (!libs.renameTo(destination)) throw new IOException("Cannot finalize bundled OpenGL driver");
             writeBundledVersion(destination, driver);
+            linkSystemVulkan(destination, driver);
             return destination;
         } finally { FileUtils.delete(stage); }
     }
