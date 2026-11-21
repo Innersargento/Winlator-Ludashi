@@ -16,6 +16,7 @@ import android.util.Rational;
 import android.util.TypedValue;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
@@ -73,6 +74,7 @@ import com.winlator.cmod.contents.AdrenotoolsManager;
 import com.winlator.cmod.core.AppUtils;
 import com.winlator.cmod.core.CursorTintStore;
 import com.winlator.cmod.core.DefaultVersion;
+import com.winlator.cmod.core.AudioOutputSettings;
 import com.winlator.cmod.core.EnvVars;
 import com.winlator.cmod.core.FileUtils;
 import com.winlator.cmod.core.GameSaveManager;
@@ -1044,8 +1046,25 @@ public class XServerDisplayActivity extends AppCompatActivity {
             }
 
             preloaderDialog.closeOnUiThread();
-            runOnUiThread(() -> AppUtils.restartApplication(getApplicationContext()));
+            runOnUiThread(this::finishGameActivity);
         });
+    }
+
+    private void finishGameActivity() {
+        Uri referrer = getReferrer();
+        boolean externalLaunch = referrer != null
+                && "android-app".equals(referrer.getScheme())
+                && referrer.getHost() != null
+                && !getPackageName().equals(referrer.getHost());
+        if (isTaskRoot()) {
+            finishAndRemoveTask();
+        } else if (externalLaunch) {
+            // A singleTask launch can reuse a Ludashi task with MainActivity below it.
+            moveTaskToBack(true);
+            finish();
+        } else {
+            AppUtils.restartApplication(getApplicationContext());
+        }
     }
 
     @Override
@@ -1120,8 +1139,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
 
-        if (hasFocus && cursorLock)
+        if (hasFocus && cursorLock) {
             touchpadView.requestPointerCapture();
+            touchpadView.requestFocus();
+        }
         else if (!hasFocus)
             touchpadView.releasePointerCapture();
     }
@@ -1315,6 +1336,15 @@ public class XServerDisplayActivity extends AppCompatActivity {
                     UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.XSERVER_PATH)));
         }
 
+        if (container != null) {
+            String api = container.getExtra(AudioOutputSettings.API, AudioOutputSettings.AUTO);
+            String buffer = container.getExtra(AudioOutputSettings.BUFFER, AudioOutputSettings.AUTO);
+            String latency = container.getExtra(AudioOutputSettings.LATENCY, AudioOutputSettings.AUTO);
+            AudioOutputSettings.apply(envVars, audioDriver,
+                    shortcut != null ? shortcut.getExtra(AudioOutputSettings.API, api) : api,
+                    shortcut != null ? shortcut.getExtra(AudioOutputSettings.BUFFER, buffer) : buffer,
+                    shortcut != null ? shortcut.getExtra(AudioOutputSettings.LATENCY, latency) : latency);
+        }
         if (audioDriver.equals("alsa-oboe")) {
             environment.addComponent(new ALSAComponent(this, imageFs));
         } else if (audioDriver.equals("pulse-audio-gn")) {
@@ -1528,17 +1558,18 @@ public class XServerDisplayActivity extends AppCompatActivity {
             if (!drawerLayout.isDrawerOpen(GravityCompat.START))
                 drawerLayout.openDrawer(GravityCompat.START);
         });
-        View.OnCapturedPointerListener capturedPointerListener = new View.OnCapturedPointerListener() {
+
+        touchpadView.setOnCapturedPointerListener(cursorLock ? new View.OnCapturedPointerListener() {
             @Override
             public boolean onCapturedPointer(View view, MotionEvent event) {
                 handleCapturedPointer(event);
                 return true;
             }
-        };
-        touchpadView.setOnCapturedPointerListener(cursorLock ? capturedPointerListener : null);
+        } : null);
         touchpadView.setFocusable(true);
         touchpadView.setFocusableInTouchMode(true);
         rootView.addView(touchpadView);
+        touchpadView.requestFocus();
 
         inputControlsView = new InputControlsView(this, timeoutHandler, hideControlsRunnable);
         inputControlsView
@@ -3031,13 +3062,12 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
         if ("lorica".equals(getSelectedOpenGLDriver())) {
             // Lorica translates desktop OpenGL to the device's own GLES (through libEGL/libGLESv2 from /system/lib64),
-            // so none of the Mesa/Zink/Freedreno settings apply. Defaults only fill what the user has not set.
+            // so none of the Mesa/Zink/Freedreno settings apply. Lorica picks its own GLES/GL versions;
+            // LIBGL_* is only passed through when the user sets it.
             envVars.remove("MESA_LOADER_DRIVER_OVERRIDE");
             envVars.remove("ZINK_DESCRIPTORS");
             envVars.remove("ZINK_DEBUG");
             envVars.remove("ZINK_INLINE_UNIFORMS");
-            if (!envVars.has("LIBGL_ES3")) envVars.put("LIBGL_ES3", "1");   // AHB presentation needs an ES 3.x backend context
-            if (!envVars.has("LIBGL_GL")) envVars.put("LIBGL_GL", "21");    // OpenGL version ceiling (21 = 2.1)
             return;
         }
 

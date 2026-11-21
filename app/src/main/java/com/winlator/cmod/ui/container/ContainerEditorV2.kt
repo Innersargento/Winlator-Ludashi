@@ -95,6 +95,8 @@ import com.winlator.cmod.ui.settings.SettingMappedChoice
 import com.winlator.cmod.ui.settings.SettingText
 import com.winlator.cmod.ui.settings.SettingToggle
 import com.winlator.cmod.ui.settings.SettingWineRuntimeChoice
+import com.winlator.cmod.ui.settings.AudioDriverOptions
+import com.winlator.cmod.ui.settings.audioOutputKeys
 import com.winlator.cmod.ui.settings.SettingsCard
 import com.winlator.cmod.ui.settings.SettingsCatalog
 import com.winlator.cmod.ui.settings.SettingsDivider
@@ -149,6 +151,11 @@ private class ContainerEditorStateV2(
     var builtinDecoder by mutableStateOf(editing?.getBuiltinDecoder() ?: "gstreamer")
     var softwareDecoding by mutableStateOf(editing?.getSoftwareDecoding() ?: false)
     var audio by mutableStateOf(editing?.audioDriver ?: Container.DEFAULT_AUDIO_DRIVER)
+    val audioOptions = mutableStateMapOf<String, String>().apply {
+        for (key in audioOutputKeys) {
+            editing?.getExtra(key)?.takeIf { it.isNotEmpty() }?.let { put(key, it) }
+        }
+    }
     var hudMode by mutableIntStateOf(
         editing?.getExtra("hudMode", if (editing.isShowFPS) "2" else "0")?.toIntOrNull() ?: 0
     )
@@ -167,7 +174,6 @@ private class ContainerEditorStateV2(
     private val savedCursorColors = CursorTintStore.get(editing)
     var cursorInside by mutableIntStateOf(savedCursorColors[0])
     var cursorOutline by mutableIntStateOf(savedCursorColors[1])
-    var desktopColor by mutableIntStateOf(desktopColorFromValue(editing?.desktopTheme))
     var desktopBackground by mutableStateOf(if (editing?.desktopTheme.orEmpty().contains(",COLOR,", true)) "Solid Color" else "Image")
     var wallpaperStamp by mutableStateOf(
         WineThemeManager.getUserWallpaperFile(context).takeIf { it.isFile }?.lastModified() ?: 0L
@@ -340,8 +346,8 @@ private class ContainerEditorStateV2(
     }
 
     fun fingerprint(): String = listOf(
-        name, screen, audio, builtinDecoder, softwareDecoding, hudMode, locale, soundFont,
-        fullscreen, desktopTheme, cursorInside, cursorOutline, desktopColor, desktopBackground, wallpaperStamp, mouseWarp, drives,
+        name, screen, audio, audioOptions.toSortedMap(), builtinDecoder, softwareDecoding, hudMode, locale, soundFont,
+        fullscreen, desktopTheme, cursorInside, cursorOutline, desktopBackground, wallpaperStamp, mouseWarp, drives,
         displayServer, renderer, rendererPresentMode, rendererDriver, filterMode, surfaceFormat, trueDisplayX,
         displayXPerformanceMode, displayXPresentAtRefreshRate, displayXPresentMode, displayXDynamicRange,
         displayXPrecisePresentation, frameGenEngine, frameGenEnabled, frameGenMultiplier,
@@ -504,6 +510,9 @@ internal fun ContainerEditorV2(editId: Int?, onBack: () -> Unit, onCreated: () -
         container.setBuiltinDecoder(state.builtinDecoder)
         container.setSoftwareDecoding(state.softwareDecoding)
         container.setAudioDriver(state.audio)
+        for (key in audioOutputKeys) {
+            container.putExtra(key, state.audioOptions[key])
+        }
         container.setEmulator(if (arm64) if (state.emulator == "FEXCore") "FEXCore" else "Box64" else "Box64")
         container.setWinComponents(serializeContainerComponentsV2(state.components))
         container.setShowFPS(state.hudMode != 0)
@@ -519,7 +528,7 @@ internal fun ContainerEditorV2(editId: Int?, onBack: () -> Unit, onCreated: () -
         container.setBox64Preset(state.boxPreset)
         container.setFEXCoreVersion(state.fexVersion)
         container.setFEXCorePreset(state.fexPreset)
-        container.setDesktopTheme(containerDesktopThemeValueV2(state.desktopTheme, state.desktopBackground, state.wallpaperStamp, state.desktopColor))
+        container.setDesktopTheme(containerDesktopThemeValueV2(state.desktopTheme, state.desktopBackground, state.wallpaperStamp))
         CursorTintStore.set(container, state.cursorInside, state.cursorOutline)
         container.setMidiSoundFont(state.soundFont)
         container.setLC_ALL(state.locale)
@@ -577,11 +586,11 @@ internal fun ContainerEditorV2(editId: Int?, onBack: () -> Unit, onCreated: () -
                 put("box64Preset", state.boxPreset)
                 put("fexcoreVersion", state.fexVersion)
                 put("fexcorePreset", state.fexPreset)
-                put("desktopTheme", containerDesktopThemeValueV2(state.desktopTheme, state.desktopBackground, state.wallpaperStamp, state.desktopColor))
+                put("desktopTheme", containerDesktopThemeValueV2(state.desktopTheme, state.desktopBackground, state.wallpaperStamp))
                 put("wineVersion", state.runtime)
                 put("midiSoundFont", state.soundFont)
                 put("lc_all", state.locale)
-                put("extraData", JSONObject().put("freedrenoVersion", state.freedrenoVersion)
+                put("extraData", JSONObject(state.audioOptions.toMap()).put("freedrenoVersion", state.freedrenoVersion)
                     .put("builtinDecoder", state.builtinDecoder)
                     .put("softwareDecoding", if (state.softwareDecoding) "1" else "0")
                     .put("hudMode", state.hudMode.toString())
@@ -781,11 +790,13 @@ private fun ContainerCategoryV2(
                 SettingWineRuntimeChoice(uiStr(R.string.ui_wine_proton), s.runtime, runtimes, installing, installWine) { s.runtime = it }
             }
             SettingsCard {
-                SettingChoice(
-                    uiStr(R.string.audio_driver),
-                    audioEntries.firstOrNull { StringUtils.parseIdentifier(it).equals(s.audio, true) } ?: s.audio,
-                    audioEntries
-                ) { s.audio = StringUtils.parseIdentifier(it) }
+                AudioDriverOptions(
+                    s.audio,
+                    audioEntries,
+                    value = { s.audioOptions[it].orEmpty() },
+                    onDriverChanged = { s.audio = it },
+                    onOptionsConfirmed = { s.audioOptions.putAll(it) }
+                )
                 SettingsDivider()
                 val hudEntries = listOf("Off", "Classic", "Modern")
                 SettingChoice(uiStr(R.string.ui_winlator_hud), hudEntries.getOrElse(s.hudMode) { "Off" }, hudEntries) {
@@ -854,9 +865,6 @@ private fun ContainerCategoryV2(
                             Text(if (s.wallpaperStamp > 0L) uiStr(R.string.ui_change) else uiStr(R.string.ui_choose))
                         }
                     }
-                } else {
-                    SettingsDivider()
-                    DesktopColorEditor(s.desktopColor) { s.desktopColor = it }
                 }
                 SettingsDivider()
                 SettingChoice(uiStr(R.string.mouse_warp_override), s.mouseWarp, listOf("disable", "enable", "force")) { s.mouseWarp = it }
@@ -1255,11 +1263,11 @@ private fun serializeContainerComponentsV2(values: Map<String, Int>): String = c
     "$key=${values[key] ?: 0}"
 }
 
-private fun containerDesktopThemeValueV2(theme: String, background: String, wallpaperStamp: Long, color: Int): String {
+private fun containerDesktopThemeValueV2(theme: String, background: String, wallpaperStamp: Long): String {
     val themeId = themeIdFromState(theme)
     val backgroundId = if (background.equals("Solid Color", true)) WineThemeManager.BackgroundType.COLOR else WineThemeManager.BackgroundType.IMAGE
     return if (backgroundId == WineThemeManager.BackgroundType.IMAGE)
-        "$themeId,$backgroundId,${desktopColorHex(color)},$wallpaperStamp"
+        "$themeId,$backgroundId,#0277bd,$wallpaperStamp"
     else
-        "$themeId,$backgroundId,${desktopColorHex(color)}"
+        "$themeId,$backgroundId,#0277bd"
 }

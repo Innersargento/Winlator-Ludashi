@@ -109,6 +109,8 @@ import com.winlator.cmod.ui.settings.SettingInstallChoice
 import com.winlator.cmod.ui.settings.SettingMappedChoice
 import com.winlator.cmod.ui.settings.SettingText
 import com.winlator.cmod.ui.settings.SettingToggle
+import com.winlator.cmod.ui.settings.AudioDriverOptions
+import com.winlator.cmod.ui.settings.audioOutputKeys
 import com.winlator.cmod.ui.settings.SettingsCard
 import com.winlator.cmod.ui.settings.SettingsCatalog
 import com.winlator.cmod.ui.settings.SettingsDivider
@@ -233,6 +235,11 @@ private class ShortcutEditorStateV2(val shortcut: Shortcut) {
     var builtinDecoder by mutableStateOf(shortcut.getBuiltinDecoder())
     var softwareDecoding by mutableStateOf(shortcut.getSoftwareDecoding())
     var audio by mutableStateOf(shortcut.getAudioDriver())
+    val audioOptions = mutableStateMapOf<String, String>().apply {
+        for (key in audioOutputKeys) {
+            shortcut.getExtra(key).takeIf { it.isNotEmpty() }?.let { put(key, it) }
+        }
+    }
     var wrapper by mutableStateOf(StringUtils.parseIdentifier(shortcut.getExtra("dxwrapper", container.getDXWrapper())))
     var wrapperConfig by mutableStateOf(shortcut.getExtra("dxwrapperConfig", container.getDXWrapperConfig()))
     var dxvkVersion by mutableStateOf(readConfig(wrapperConfig, "version", ',').ifBlank { DefaultVersion.DXVK })
@@ -314,6 +321,12 @@ private class ShortcutEditorStateV2(val shortcut: Shortcut) {
 
     fun extra(key: String, value: String?) {
         shortcut.putExtra(key, value)
+        save()
+    }
+
+    fun setAudioOptions(options: Map<String, String>) {
+        audioOptions.putAll(options)
+        options.forEach { (key, value) -> shortcut.putExtra(key, value) }
         save()
     }
 
@@ -997,9 +1010,17 @@ private fun ShortcutCategoryV2(
                 }
             }
             SettingsCard {
-                SettingChoice(uiStr(R.string.audio_driver), audioEntries.firstOrNull { StringUtils.parseIdentifier(it).equals(s.audio, true) } ?: s.audio, audioEntries) {
-                    s.audio = StringUtils.parseIdentifier(it); s.extra("audioDriver", s.audio)
-                }
+                AudioDriverOptions(
+                    s.audio,
+                    audioEntries,
+                    value = { s.audioOptions[it].orEmpty() },
+                    inherited = { s.shortcut.container.getExtra(it) },
+                    onDriverChanged = {
+                        s.audio = it
+                        s.extra("audioDriver", it)
+                    },
+                    onOptionsConfirmed = s::setAudioOptions
+                )
                 SettingsDivider()
                 SettingToggle(uiStr(R.string.ui_fullscreen_stretched), s.fullscreen) {
                     s.fullscreen = it; s.extra("fullscreenStretched", if (it) "1" else null)
