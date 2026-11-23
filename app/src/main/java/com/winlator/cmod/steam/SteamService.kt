@@ -453,11 +453,14 @@ object SteamSession {
         private set
     @Volatile var installError = ""
         private set
+    @Volatile var installErrorAppId = 0
+        private set
 
     @Synchronized fun install(id: Int) {
         if (installRequestId != 0) return
         installRequestId = id
         installError = ""
+        installErrorAppId = id
         work {
             try { installNow(id) }
             catch (error: Exception) {
@@ -473,7 +476,19 @@ object SteamSession {
         val context = app ?: error("Steam is starting")
         val s = session ?: error("Steam is starting")
         check(s.state() == 3) { "Sign in first" }
-        val info = info(id)
+        var info = info(id)
+        val isDemo = info.optJSONObject("common")?.optString("type").equals("demo", true)
+        if (isDemo && !File(context.filesDir, "steam-library/$id.json").isFile) {
+            // A cached library entry can outlive a free weekend or demo package.
+            val license = s.requestFreeLicense(id)?.let(::JSONObject)
+            android.util.Log.i("SteamDownload", "Demo license app=$id status=${license?.optString("status")} result=${license?.optInt("eresult")} visible=${license?.optBoolean("libraryUpdated")}")
+            if (license?.optBoolean("granted") == true) {
+                appMetadata.clear()
+                librarySync.reset(forceRefresh = true)
+                libraryCacheSaved = false
+                info = runCatching { this.info(id) }.getOrDefault(info)
+            }
+        }
         val name = SteamCatalog.installName(info)
         val branch = SteamInstallOptions.branch(context, id)
         val language = SteamInstallOptions.language(context, id)
@@ -500,7 +515,8 @@ object SteamSession {
                         val reading = downloadReading()
                         downloadDone = reading?.done ?: depotDone; downloadTotal = reading?.total ?: depotTotal
                         if (!closing && downloading && !gameActive && downloadId == id) com.winlator.cmod.stores.DownloadNotifications.update(context, SteamService.NOTIFICATION_ID, "steam", "Steam", name, downloadDone, downloadTotal,
-                            com.winlator.cmod.ui.uiStr(if (verifying) R.string.steam_download_verifying else R.string.gog_downloading))
+                            com.winlator.cmod.ui.uiStr(if (verifying) R.string.steam_download_verifying else R.string.gog_downloading),
+                            speed = if (verifying) null else reading?.bytesPerSecond ?: 0L)
                         status = "$name: depot ${depotsDone + 1}/$depotsTotal — ${if (depotTotal > 0) depotDone * 100 / depotTotal else 0}%" + if (verifying) " (verifying)" else ""
                     }
                     override fun onComplete(success: Boolean, error: String, bytesWritten: Long, depotsCompleted: Int, depotsSkipped: Int) {
@@ -520,10 +536,22 @@ object SteamSession {
                                     SteamGoldberg.invalidate(dir)
                                     main.post { SteamGames.changed() }
                                 }
-                                status = if (success) "$name installed" else if (gameActive) "Download paused while the container runs" else "Download failed: $error"
+                                val deniedDemo = isDemo && error.startsWith("download: no entitled depots")
+                                status = when {
+                                    success -> "$name installed"
+                                    gameActive -> "Download paused while the container runs"
+                                    deniedDemo -> context.getString(R.string.steam_demo_access_denied)
+                                    else -> "Download failed: $error"
+                                }
+                                if (!success && !gameActive && error != "cancelled") {
+                                    installErrorAppId = id
+                                    installError = status
+                                }
                             } catch (failure: Exception) {
                                 android.util.Log.e("SteamDownload", "Cannot finalize installation for app $id", failure)
                                 status = "Download failed: ${failure.message ?: "Cannot finalize installation"}"
+                                installErrorAppId = id
+                                installError = status
                             } finally {
                                 downloading = false
                                 downloadMeter = null

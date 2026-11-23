@@ -16,6 +16,19 @@ import com.winlator.cmod.ui.bindOverlayOwners
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [28])
 class StoreExperienceTest {
+    @Test fun catalogDownloadHasALiveGameWithoutAnOwnedLibraryEntry() {
+        val game = StoreGame(LudashiStore.ITCH, "https://example.itch.io/catalog-game", "Catalog game")
+        val old = JSONObject().put("game", game.json()).put("status", "paused")
+        val snapshot = StoreSnapshot(activeGame = game, stage = "Downloading", done = 42, total = 100,
+            transfers = mapOf(game.key to old))
+        assertTrue(snapshot.games.isEmpty())
+        assertTrue(snapshot.busy)
+        assertSame(game, snapshot.gameForTransfer(null))
+        assertEquals(game.id, snapshot.gameForTransfer(old)?.id)
+        val completed = snapshot.copy(activeGame = null)
+        assertFalse(completed.busy)
+        assertNull(completed.gameForTransfer(null))
+    }
     @Test fun itchRefreshKeepsManualLibrarySelectionWhenOwnedMetadataIsRefreshed() {
         val previous = StoreGame(LudashiStore.ITCH, "https://author.itch.io/game", "Old", metadata = JSONObject().put("custom", true))
         val owned = previous.copy(title = "Updated", metadata = JSONObject().put("owned", true))
@@ -23,6 +36,23 @@ class StoreExperienceTest {
         assertEquals("Updated", refreshed.title)
         assertTrue(refreshed.metadata.getBoolean("custom"))
         assertTrue(refreshed.metadata.getBoolean("owned"))
+    }
+    @Test fun removingAnUninstalledItchGameHidesItEvenAfterStoreRefresh() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val store = LudashiStore.ITCH
+        val game = StoreGame(store, "https://example.itch.io/galvan", "GALVAN", metadata = JSONObject().put("custom", true))
+        val owned = game.copy(metadata = JSONObject().put("owned", true))
+        val before = StoreSnapshot(games = listOf(game))
+        assertEquals(listOf(game.uri), StoreSessions.items(context, store, before, mainLibraryOnly = true).map { it.shortcutPath })
+        try {
+            StoreSessions.removeFromLibrary(context, store, game.uri)
+            val refreshed = before.copy(games = StoreSessions.libraryResult(listOf(owned), before.games))
+            assertTrue(StoreSessions.items(context, store, refreshed, mainLibraryOnly = true).isEmpty())
+            assertTrue(StoreSessions.items(context, store, refreshed).isEmpty())
+            assertTrue(refreshed.games.single().metadata.getBoolean("owned"))
+            StoreSessions.setLibraryVisibility(context, store, game.id, true)
+            assertEquals(listOf(game.uri), StoreSessions.items(context, store, refreshed, mainLibraryOnly = true).map { it.shortcutPath })
+        } finally { context.getSharedPreferences("ludashi-store-games", 0).edit().clear().apply() }
     }
     @Test fun savesAndUninstallOverlaysHaveTheirOwnActivityOwners() {
         val controller = org.robolectric.Robolectric.buildActivity(androidx.activity.ComponentActivity::class.java).setup()

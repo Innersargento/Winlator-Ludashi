@@ -101,6 +101,11 @@
   <string name="audio_output_api">API de áudio</string>
   <string name="audio_buffer_size">Tamanho do buffer de áudio</string>
   <string name="audio_pulse_latency">Latência do PulseAudio</string>
+  <string name="game_save_edit_locations">Editar pastas de saves</string>
+  <string name="game_save_source_folder">Pasta dos saves no Windows</string>
+  <string name="game_save_source_hint">Deixe em branco para detectar as pastas automaticamente.</string>
+  <string name="game_save_choose_backup_folder">Escolher pasta de backups</string>
+  <string name="game_save_use_default_backup_folder">Usar pasta de backups padrão</string>
   <string name="loading">"Carregando…"</string>
   <string name="press_any_button_on_your_controller">"Pressione qualquer botão do controle"</string>
   <string name="bindings">"atribuições"</string>
@@ -700,4 +705,7 @@
 <string name="gog_resume_download">Continuar</string>
 <string name="gog_delete_download">Excluir download</string>
 <string name="gog_download_cancelled">Cancelado</string>
+  <string name="steam_demo_access_denied">A Steam recusou o acesso ao download desta demo. Se ela ainda estiver disponível, adicione-a à mesma conta pelo cliente Steam e tente novamente.</string>
+  <string name="itch_remove_installed_help">Este jogo do itch.io está instalado. Remova apenas o atalho ou desinstale o jogo e remova o atalho.</string>
+  <string name="itch_remove_shortcut_only">Remover só o atalho</string>
 </resources>

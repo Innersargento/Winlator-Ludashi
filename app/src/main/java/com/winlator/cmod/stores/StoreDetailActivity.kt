@@ -108,6 +108,11 @@ class StoreDetailFragment : Fragment() {
                 val prefs = context.getSharedPreferences(if (storeId == "gog") "gog-settings" else "ludashi-store-games", 0)
                 val favorite = prefs.getBoolean(if (storeId == "gog") "favorite-$gameId" else "$storeId-${storeHash(gameId).take(32)}-favorite", false)
                 GameDetailComposeHost.StoreContent(item.title, item.brand, item.artwork?.path, favorite, item.shortcut, callbacks, item.record.optLong("installedSize").takeIf { it > 0 }?.let { if (it >= 1073741824L) "%.1f GiB".format(it / 1073741824.0) else "%.1f MiB".format(it / 1048576.0) } ?: if (StoreSessions.paused) "—" else null, installed = item.installed, executable = item.record.optString("executable"), installOptions = { StoreInstallOptions(storeId, gameId, item.record) }) {
+                    if (item.installed && extraStore != null && StoreSessions.isHiddenFromLibrary(context, extraStore, gameId)) {
+                        OutlinedButton(onClick = { StoreSessions.setLibraryVisibility(context, extraStore, gameId, true) }) {
+                            Text(uiStr(R.string.store_add_library))
+                        }
+                    }
                     StoreInformation(storeId, gameId, item.record)
                     if (storeId == "itch") {
                         val description = item.record.optJSONObject("game")?.optJSONObject("metadata")?.optJSONObject("information")?.optString("description").orEmpty()
@@ -160,13 +165,14 @@ class StoreDetailFragment : Fragment() {
             return Detail(record.getString("title"), "GOG", File(context.cacheDir, "gog-art/$gameId.jpg").takeIf { it.isFile }, record, shortcut)
         }
         val store = LudashiStore.find(storeId) ?: error("Unknown store")
-        val file = File(StoreSessions.records(context, store), "${storeHash(gameId).take(32)}.json")
-        if (!file.isFile) {
-            val game = StoreSessions.state(store).value.games.find { it.id == gameId } ?: ItchCatalog.selected(context, gameId) ?: error("Game not found in the library")
+        val key = storeHash(gameId).take(32)
+        val record = StoreInstalls.installedRecord(context, store, key)
+        if (record == null) {
+            val previous = runCatching { StoreGame.parse(JSONObject(File(StoreSessions.records(context, store), "$key.json").readText()).getJSONObject("game")) }.getOrNull()
+            val game = StoreSessions.state(store).value.games.find { it.id == gameId } ?: ItchCatalog.selected(context, gameId) ?: previous ?: error("Game not found in the library")
             StoreSessions.requestArt(context, game.uri)
             return Detail(game.title, store.title, File(context.cacheDir, "$storeId-art/${game.key}.jpg").takeIf { it.isFile }, JSONObject().put("game", game.json()), null, false)
         }
-        val record = JSONObject(file.readText())
         val game = StoreGame.parse(record.getJSONObject("game"))
         return Detail(game.title, store.title, File(context.cacheDir, "$storeId-art/${game.key}.jpg").takeIf { it.isFile }, record, runCatching { StoreInstalls.shortcut(context, record) }.getOrNull())
     }

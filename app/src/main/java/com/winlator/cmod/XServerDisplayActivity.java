@@ -884,13 +884,20 @@ public class XServerDisplayActivity extends AppCompatActivity {
         }
     }
 
+    static boolean shouldSuspendGuestOnPause(Shortcut shortcut) {
+        return shortcut == null || shortcut.getExtra("steamAppId").isEmpty()
+                || !"RealSteam".equals(shortcut.getExtra("steamLaunchMode", "RealSteam"));
+    }
+
     @Override
     public void onResume() {
         super.onResume();
 
         if (!isInPictureInPictureMode()) {
-            ProcessHelper.resumeAllWineProcesses();
-            if (environment != null) environment.onResume();
+            if (shouldSuspendGuestOnPause(shortcut)) {
+                ProcessHelper.resumeAllWineProcesses();
+                if (environment != null) environment.onResume();
+            }
             if (xServerView != null) xServerView.onResume();
         }
         startTime = System.currentTimeMillis();
@@ -904,12 +911,14 @@ public class XServerDisplayActivity extends AppCompatActivity {
         super.onPause();
 
         if (!isInPictureInPictureMode()) {
+            boolean suspendGuest = shouldSuspendGuestOnPause(shortcut);
             if (environment != null) {
                 if (xServerView != null) xServerView.onPause();
-                environment.onPause();
+                // The Steam client needs to keep exchanging heartbeats while the app is backgrounded.
+                if (suspendGuest) environment.onPause();
             }
 
-            ProcessHelper.pauseAllWineProcesses();
+            if (suspendGuest) ProcessHelper.pauseAllWineProcesses();
         }
 
         savePlaytimeData();
@@ -1420,10 +1429,8 @@ public class XServerDisplayActivity extends AppCompatActivity {
             String driverPath = "", libraryName = "";
             if (!useEGL && !useDisplayX && driverId != null && !driverId.isEmpty() && !"system".equalsIgnoreCase(driverId)) {
                 AdrenotoolsManager manager = new AdrenotoolsManager(this);
-                driverPath = getFilesDir().getAbsolutePath() + "/contents/adrenotools/" + driverId + "/";
-                if (manager.isFromResources(driverId) && !new File(driverPath).isDirectory())
-                    manager.extractDriverFromResources(driverId);
-                libraryName = manager.getLibraryName(driverId);
+                driverPath = manager.getDriverPath(driverId);
+                libraryName = manager.ensureDriverLibrary(driverId);
                 if (libraryName.isEmpty()) {
                     Log.w("LudashiX11", "Selected renderer driver is unavailable: " + driverId);
                     driverPath = "";
@@ -1480,13 +1487,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
             }
             if (rendererDriverId != null && !rendererDriverId.isEmpty() && !rendererDriverId.equalsIgnoreCase("system")) {
                 try {
-                    String driverPath = getFilesDir().getAbsolutePath() + "/contents/adrenotools/" + rendererDriverId + "/";
                     AdrenotoolsManager adrenotoolsManager = new AdrenotoolsManager(this);
-                    if (adrenotoolsManager.isFromResources(rendererDriverId) &&
-                            !new File(driverPath).isDirectory()) {
-                        adrenotoolsManager.extractDriverFromResources(rendererDriverId);
-                    }
-                    String libraryName = adrenotoolsManager.getLibraryName(rendererDriverId);
+                    String driverPath = adrenotoolsManager.getDriverPath(rendererDriverId);
+                    String libraryName = adrenotoolsManager.ensureDriverLibrary(rendererDriverId);
                     String nativeLibDir = AppUtils.getNativeLibDir(this);
                     if (!libraryName.isEmpty())
                         vkRenderer.setDriverInfo(driverPath, libraryName, nativeLibDir);
@@ -3132,15 +3135,23 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
         extractOpenGLDriver(rootDir);
 
-        if (!"System".equals(adrenoToolsDriverId)) {
-            AdrenotoolsManager adrenotoolsManager = new AdrenotoolsManager(this);
-            adrenotoolsManager.setDriverById(envVars, imageFs, adrenoToolsDriverId);
+        AdrenotoolsManager drivers = new AdrenotoolsManager(this);
+        String actualVersion = "";
+        if (!drivers.ensureDriverLibrary(adrenoToolsDriverId).isEmpty()) {
+            actualVersion = GPUInformation.getVulkanVersion(adrenoToolsDriverId, this);
+            if (!actualVersion.isEmpty() && !"Unknown".equals(actualVersion)) {
+                drivers.setDriverById(envVars, imageFs, adrenoToolsDriverId);
+            }
         }
-
+        if (actualVersion.isEmpty() || "Unknown".equals(actualVersion)) {
+            if (!"System".equalsIgnoreCase(adrenoToolsDriverId)) {
+                Log.w("GraphicsDriverExtraction", "Using system Vulkan because driver is unavailable: " + adrenoToolsDriverId);
+            }
+            actualVersion = GPUInformation.getVulkanVersion("System", this);
+        }
         String vulkanVersion = graphicsDriverConfig.get("vulkanVersion");
-        String vulkanVersionPatch = GPUInformation.getVulkanVersion(adrenoToolsDriverId, this).split("\\.")[2];
-        vulkanVersion = vulkanVersion + "." + vulkanVersionPatch;
-        envVars.put("WRAPPER_VK_VERSION", vulkanVersion);
+        String[] versionParts = actualVersion.split("\\.", -1);
+        envVars.put("WRAPPER_VK_VERSION", vulkanVersion + "." + (versionParts.length == 3 ? versionParts[2] : "0"));
 
         String blacklistedExtensions = graphicsDriverConfig.get("blacklistedExtensions");
         envVars.put("WRAPPER_EXTENSION_BLACKLIST", blacklistedExtensions);
@@ -3247,11 +3258,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
     static boolean isSidebarKey(KeyEvent event) {
         int code = event.getKeyCode();
-        if (code == KeyEvent.KEYCODE_BUTTON_MODE || code == KeyEvent.KEYCODE_HOME) return true;
+        if (code == KeyEvent.KEYCODE_BUTTON_MODE) return true;
+        if (code == KeyEvent.KEYCODE_HOME) return ExternalController.isControllerKeyEvent(event);
         return code == KeyEvent.KEYCODE_BACK && (event.getFlags() & KeyEvent.FLAG_FALLBACK) == 0
-                && (event.isFromSource(InputDevice.SOURCE_GAMEPAD)
-                        || event.isFromSource(InputDevice.SOURCE_JOYSTICK)
-                        || ExternalController.isGameController(event.getDevice()));
+                && ExternalController.isControllerKeyEvent(event);
     }
 
     @Override
@@ -3265,7 +3275,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
         if (inputControlsView != null && inputControlsView.onKeyEvent(event)) return true;
         if (winHandler != null && winHandler.onKeyEvent(event)) return true;
         if (xServer != null && xServer.keyboard.onKeyEvent(event)) return true;
-        return !ExternalController.isGameController(event.getDevice()) && super.dispatchKeyEvent(event);
+        return !ExternalController.isControllerKeyEvent(event) && super.dispatchKeyEvent(event);
     }
 
     public InputControlsView getInputControlsView() {
@@ -3465,7 +3475,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
         String args = "";
 
         if (shortcut != null) {
-            String execArgs = shortcut.getExtra("execArgs");
+            String execArgs = com.winlator.cmod.steam.SteamLaunch.launcherArguments(shortcut);
             execArgs = !execArgs.isEmpty() ? " " + execArgs : "";
 
             if (shortcut.path.endsWith(".lnk")) {

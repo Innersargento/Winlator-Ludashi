@@ -107,17 +107,12 @@ private fun GameDetailScreen(title: String, subtitle: String, artworkPath: Strin
         onDispose { }
     }
     val artworkRevision = LibraryImageCache.revision
-    val key = LibraryImageCache.keyFor(artworkPath)
+    val steamArtwork = if (steamId != null && artworkPath == null) com.winlator.cmod.steam.rememberSteamArtwork(steamId, "banner") else null
+    val imagePath = artworkPath ?: steamArtwork
+    val key = LibraryImageCache.keyFor(imagePath)
     val artwork by produceState(LibraryImageCache.peek(key) ?: fallback, key, fallback, artworkRevision) {
         value = withContext(Dispatchers.IO) {
-            LibraryImageCache.load(artworkPath) ?: fallback ?: steamId?.let { id ->
-                runCatching {
-                    val request = com.bumptech.glide.Glide.with(context).downloadOnly()
-                        .load("https://shared.steamstatic.com/store_item_assets/steam/apps/$id/header.jpg").submit()
-                    try { android.graphics.BitmapFactory.decodeFile(request.get(20, java.util.concurrent.TimeUnit.SECONDS).path) }
-                    finally { com.bumptech.glide.Glide.with(context).clear(request) }
-                }.getOrNull()
-            }
+            LibraryImageCache.load(imagePath) ?: fallback
         }
     }
     var resumeSerial by remember { mutableIntStateOf(0) }
@@ -251,6 +246,11 @@ private fun PortraitDetail(title: String, subtitle: String, artwork: Bitmap?, fa
             LocalSteamInfoId.current?.let { com.winlator.cmod.steam.SteamGameInfoPanel(it) }
             if (LocalStoreInstalled.current) {
                 PlayButton(callbacks::onPlay, { mode -> (callbacks as? SteamDetailCallbacks)?.onSteamMode(mode) }, { if (callbacks is StoreDetailCallbacks) callbacks.onStoreExecutable() else (callbacks as? SteamDetailCallbacks)?.onSteamExecutable() })
+                val steamId = LocalSteamInfoId.current
+                val context = LocalContext.current
+                if (steamId != null) DetailAction(Icons.Outlined.FileUpload, stringResource(R.string.export), click = {
+                    com.winlator.cmod.steam.SteamLibrary.exportShortcut(context, steamId)
+                })
                 DetailAction(Icons.Outlined.Settings, stringResource(R.string.ui_configure), callbacks::onConfigure)
                 DetailAction(Icons.Outlined.Dns, stringResource(R.string.ui_enter_container), callbacks::onArguments)
                 DetailAction(Icons.Outlined.Backup, savesLabel(), callbacks::onSaves)
@@ -295,6 +295,16 @@ private fun PlayButton(click: () -> Unit, chooseMode: (String) -> Unit, chooseEx
                         trailingIcon = { if (mode == value) Icon(Icons.Outlined.Check, null) })
                 }
             }
+        }
+        val steamId = LocalSteamInfoId.current
+        val context = LocalContext.current
+        val configuration = LocalConfiguration.current
+        if (steamId != null && configuration.screenWidthDp > configuration.screenHeightDp) {
+            IconButton(
+                onClick = { com.winlator.cmod.steam.SteamLibrary.exportShortcut(context, steamId) },
+                enabled = !modeBusy,
+                modifier = Modifier.size(40.dp)
+            ) { Icon(Icons.Outlined.FileUpload, stringResource(R.string.export)) }
         }
     }
     if (modeProgress != null && modeBusy) {

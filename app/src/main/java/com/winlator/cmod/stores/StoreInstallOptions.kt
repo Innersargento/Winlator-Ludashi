@@ -85,8 +85,9 @@ internal fun preferredStoreUpload(uploads: List<StoreUpload>, locale: Locale): I
             }
         }
         if (extra != null) {
-            val inLibrary = remote?.games?.any { it.id == gameId } == true
-            if (!inLibrary && canDownload && signedIn) OutlinedButton(enabled = !loading && !busy, onClick = {
+            val hidden = remember(gameId, remote?.revision) { StoreSessions.isHiddenFromLibrary(context, extra, gameId) }
+            val added = remote?.games?.any { it.id == gameId && it.metadata.optBoolean("custom") } == true
+            if ((hidden || !added) && canDownload && signedIn) OutlinedButton(enabled = !loading && !busy, onClick = {
                 scope.launch {
                     withContext(Dispatchers.IO) { runCatching { StoreSessions.keepGame(context, resolved ?: game!!) } }.onFailure { error = it.message.orEmpty() }
                 }
@@ -98,7 +99,12 @@ internal fun preferredStoreUpload(uploads: List<StoreUpload>, locale: Locale): I
         if (!canDownload) return@Column
         if (busy) {
             if (extra == null && gog.activeId == gameId) GogDownloadPanel(gog)
-            else if (extra != null && remote?.active == gameId) StoreTransferPanel(extra, remote)
+            else if (extra != null && remote?.activeGame?.id == gameId) StoreTransferPanel(extra, remote)
+        }
+        if (extra != null && remote != null && remote.activeGame?.id != gameId) {
+            remote.transfers[storeHash(gameId).take(32)]?.takeIf { it.optString("status") != "completed" }?.let {
+                StoreTransferPanel(extra, remote, transfer = it)
+            }
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (error.isNotBlank()) {
@@ -126,11 +132,9 @@ internal fun preferredStoreUpload(uploads: List<StoreUpload>, locale: Locale): I
         }
         Button(enabled = signedIn && !loading && !busy && !StoreSessions.paused && container > 0 && downloads.isNotEmpty(), modifier = Modifier.fillMaxWidth(), onClick = {
             if (extra == null) context.startForegroundService(Intent(context, GogDownloadService::class.java).putExtra("game", gameId).putExtra("container", container).putExtra("installer", downloads[selected].toString()))
-            else scope.launch {
+            else {
                 val selectedGame = resolved ?: game!!
-                val result = withContext(Dispatchers.IO) { runCatching { StoreSessions.keepGame(context, selectedGame) } }
-                result.onSuccess { context.startForegroundService(Intent(context, StoreDownloadService::class.java).putExtra("store", storeId).putExtra("game", selectedGame.json().toString()).putExtra("container", container).putExtra("upload", downloads[selected].toString())) }
-                    .onFailure { error = it.message.orEmpty() }
+                context.startForegroundService(Intent(context, StoreDownloadService::class.java).putExtra("store", storeId).putExtra("game", selectedGame.json().toString()).putExtra("container", container).putExtra("upload", downloads[selected].toString()))
             }
         }) { Icon(Icons.Outlined.Download, null); Spacer(Modifier.width(8.dp)); Text(uiStr(R.string.gog_download_install)) }
     }

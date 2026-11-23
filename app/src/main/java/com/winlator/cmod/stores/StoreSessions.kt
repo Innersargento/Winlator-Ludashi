@@ -46,6 +46,7 @@ object StoreSessions {
     }
     @JvmStatic fun pauseForGame() {
         paused = true
+        com.winlator.cmod.steam.SteamLibrary.pauseArtwork()
         LudashiStore.entries.forEach(::cancel)
         processes.values.forEach { it.destroy() }
         com.winlator.cmod.gog.GogLibrary.cancelled = true
@@ -82,10 +83,7 @@ object StoreSessions {
     internal fun installed(context: Context, store: LudashiStore, check: () -> Unit = {}) {
         val records = records(context, store).listFiles().orEmpty().filter { it.extension == "json" }.mapNotNull { file ->
             check()
-            runCatching {
-                val record = JSONObject(file.readText())
-                if (File(record.getString("path")).isDirectory) file.nameWithoutExtension to record else null
-            }.getOrNull()
+            StoreInstalls.installedRecord(context, store, file.nameWithoutExtension)?.let { file.nameWithoutExtension to it }
         }.toMap()
         state(store).update { it.copy(installed = records, revision = it.revision + 1) }
     }
@@ -103,7 +101,7 @@ object StoreSessions {
                 StoreNetwork.check(app, store)
                 installed(app, store) { StoreNetwork.check(app, store) }
                 StoreNetwork.check(app, store)
-                state(store).update { it.copy(transfers = StoreTransfers.load(app, store)) }
+                StoreTransfers.restore(app, store)
                 val saved = StoreVault.load(app, store)
                 state(store).update { it.copy(signedIn = saved != null) }
                 val cache = cache(app, store)
@@ -177,7 +175,23 @@ object StoreSessions {
         val selected = game.copy(metadata = JSONObject(game.metadata.toString()).put("custom", true))
         val games = (state(store).value.games.filterNot { it.id == game.id } + selected)
         atomicStoreFile(cache(context, store) ?: error("Sign in first"), JSONArray().apply { games.forEach { put(it.json()) } }.toString())
+        setLibraryVisibility(context, store, game.id, true)
         state(store).update { it.copy(games = games) }
+    }
+    private fun libraryVisibilityKey(store: LudashiStore, id: String) = "${store.id}-${storeHash(id).take(32)}-library-visible"
+
+    internal fun isHiddenFromLibrary(context: Context, store: LudashiStore, id: String): Boolean =
+        !context.getSharedPreferences("ludashi-store-games", 0).getBoolean(libraryVisibilityKey(store, id), true)
+
+    internal fun setLibraryVisibility(context: Context, store: LudashiStore, id: String, visible: Boolean) {
+        context.getSharedPreferences("ludashi-store-games", 0).edit()
+            .putBoolean(libraryVisibilityKey(store, id), visible).apply()
+        state(store).update { it.copy(revision = it.revision + 1) }
+    }
+
+    internal fun removeFromLibrary(context: Context, store: LudashiStore, path: String) {
+        val id = Uri.decode(path.substringAfter("://"))
+        setLibraryVisibility(context, store, id, false)
     }
     internal fun allGames(snapshot: StoreSnapshot): List<StoreGame> =
         (snapshot.games + snapshot.installed.values.mapNotNull { runCatching { StoreGame.parse(it.getJSONObject("game")) }.getOrNull() }).distinctBy { it.id }
@@ -191,7 +205,11 @@ object StoreSessions {
         }
         val prefs = context.getSharedPreferences("ludashi-store-games", 0)
         val artNames = File(context.cacheDir, "${store.id}-art").list()?.toSet().orEmpty()
-        return allGames(snapshot).filter { !mainLibraryOnly || it.key in snapshot.installed || it.metadata.optBoolean("custom") }.map { game ->
+        return allGames(snapshot).filter { game ->
+            val visibility = libraryVisibilityKey(store, game.id)
+            prefs.getBoolean(visibility, true) && (!mainLibraryOnly || game.key in snapshot.installed ||
+                prefs.contains(visibility) || game.metadata.optBoolean("custom"))
+        }.map { game ->
             val record = snapshot.installed[game.key]
             val art = File(context.cacheDir, "${store.id}-art/${game.key}.jpg").takeIf { "${game.key}.jpg" in artNames }
             LibraryItem("${store.id}-${game.key}", game.uri, game.title, "${store.title} · " + if (record != null) "Installed" else "Not installed",
