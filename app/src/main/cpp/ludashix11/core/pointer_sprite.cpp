@@ -118,7 +118,7 @@ PointerSprite::PointerSprite(NativeScreen& display, uint32_t id, int32_t hotX, i
 
 PointerSprite::PointerSprite(NativeScreen& display, uint32_t id, uint32_t sourceGlyph, uint32_t maskGlyph,
                uint32_t foreground, uint32_t background, bool hasMask)
-    : ProtocolObject(ObjectKind::PointerSprite, id), display(display), glyph(static_cast<int32_t>(sourceGlyph)) {
+    : ProtocolObject(ObjectKind::PointerSprite, id), display(display) {
     const auto& source = GetCursorGlyph(sourceGlyph);
     const auto* mask = hasMask ? &GetCursorGlyph(maskGlyph) : nullptr;
     int32_t left = std::min<int32_t>(source.left, 0);
