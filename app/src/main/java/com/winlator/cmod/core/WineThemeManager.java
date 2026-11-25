@@ -15,20 +15,41 @@ import com.winlator.cmod.xenvironment.ImageFs;
 import com.winlator.cmod.xserver.ScreenInfo;
 
 import java.io.File;
+import java.util.Map;
 
 public abstract class WineThemeManager {
     public enum Theme {LIGHT, DARK}
     public enum BackgroundType {IMAGE, COLOR}
+    private static final int APPLY_REVISION = 3;
+    public static final String MSSTYLES_PREFIX = "msstyles:";
+    private static final String THEME_MANAGER_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\ThemeManager";
+    private static final String[][] STYLE_COLOR_NAMES = {
+            {"ActiveCaption", "ActiveTitle"}, {"CaptionText", "TitleText"},
+            {"InactiveCaption", "InactiveTitle"}, {"InactiveCaptionText", "InactiveTitleText"},
+            {"GradientActiveCaption", "GradientActiveTitle"}, {"GradientInactiveCaption", "GradientInactiveTitle"},
+            {"Btnface", "ButtonFace"}, {"BtnHighlight", "ButtonHilight"}, {"BtnShadow", "ButtonShadow"},
+            {"DkShadow3d", "ButtonDkShadow"}, {"Light3d", "ButtonLight"}, {"GrayText", "GrayText"},
+            {"Highlight", "Hilight"}, {"HighlightText", "HilightText"}, {"Menu", "Menu"}, {"MenuBar", "MenuBar"},
+            {"MenuHilight", "MenuHilight"}, {"Window", "Window"}
+    };
     public static final String DEFAULT_DESKTOP_THEME = Theme.DARK+","+BackgroundType.IMAGE+",#0277bd";
 
     public static class ThemeInfo {
         public final Theme theme;
+        public final String msstyles;
         public final BackgroundType backgroundType;
         public final int backgroundColor;
 
         public ThemeInfo(String value) {
             String[] values = value.split(",");
-            theme = Theme.valueOf(values[0]);
+            if (values[0].startsWith(MSSTYLES_PREFIX)) {
+                msstyles = values[0].substring(MSSTYLES_PREFIX.length());
+                theme = Theme.LIGHT;
+            }
+            else {
+                msstyles = null;
+                theme = Theme.valueOf(values[0]);
+            }
             if (values.length < 3) {
                 backgroundColor = Color.parseColor(values[1]);
                 backgroundType = BackgroundType.IMAGE;
@@ -38,6 +59,14 @@ public abstract class WineThemeManager {
                 backgroundColor = Color.parseColor(values[2]);
             }
         }
+    }
+
+    /** Changes whenever the theme string, the screen size, the apply logic or the imported style file changes. */
+    public static String getApplyKey(Context context, String desktopTheme, ScreenInfo screenInfo) {
+        String key = desktopTheme + "," + screenInfo + ",r" + APPLY_REVISION;
+        ThemeInfo themeInfo = new ThemeInfo(desktopTheme);
+        if (themeInfo.msstyles != null) key += "," + MsstylesStore.getFile(context, themeInfo.msstyles).lastModified();
+        return key;
     }
 
     public static void apply(Context context, ThemeInfo themeInfo, ScreenInfo screenInfo) {
@@ -53,12 +82,22 @@ public abstract class WineThemeManager {
             }
             else registryEditor.removeValue("Control Panel\\Desktop", "Wallpaper");
 
-            registryEditor.removeValue(
-                "Software\\Microsoft\\Windows\\CurrentVersion\\ThemeManager",
-                "DllName");
-            registryEditor.setStringValue(
-                "Software\\Microsoft\\Windows\\CurrentVersion\\ThemeManager",
-                "ThemeActive", "0");
+            registryEditor.removeKey("Control Panel\\Colors");
+            // the visual style paints dialogs, tabs and edits regardless of the colors below
+            boolean customStyle = themeInfo.msstyles != null && installMsstyles(context, themeInfo.msstyles);
+            if (customStyle) {
+                String name = themeInfo.msstyles;
+                registryEditor.setStringValue(THEME_MANAGER_KEY, "DllName", "C:\\windows\\resources\\themes\\"+name+"\\"+name+MsstylesStore.EXTENSION);
+                String[] variants = MsstylesStore.getVariants(context, name);
+                registryEditor.setStringValue(THEME_MANAGER_KEY, "ColorName", variants[0]);
+                registryEditor.setStringValue(THEME_MANAGER_KEY, "SizeName", variants[1]);
+            }
+            else {
+                registryEditor.setStringValue(THEME_MANAGER_KEY, "DllName", "C:\\windows\\resources\\themes\\light\\light.msstyles");
+                registryEditor.setStringValue(THEME_MANAGER_KEY, "ColorName", "Blue");
+                registryEditor.setStringValue(THEME_MANAGER_KEY, "SizeName", "NormalSize");
+            }
+            registryEditor.setStringValue(THEME_MANAGER_KEY, "ThemeActive", customStyle || themeInfo.theme == Theme.LIGHT ? "1" : "0");
 
             if (themeInfo.theme == Theme.LIGHT) {
                 registryEditor.setStringValue("Control Panel\\Colors", "ActiveBorder", "245 245 245");
@@ -124,7 +163,26 @@ public abstract class WineThemeManager {
                 registryEditor.setStringValue("Control Panel\\Colors", "WindowFrame", "0 0 0");
                 registryEditor.setStringValue("Control Panel\\Colors", "WindowText", "255 255 255");
             }
+
+            if (customStyle) {
+                // after the colors above, which they replace
+                Map<String, String> sysColors = MsstylesStore.getSysColors(context, themeInfo.msstyles);
+                for (String[] pair : STYLE_COLOR_NAMES) {
+                    String color = sysColors.get(pair[0]);
+                    if (color != null) registryEditor.setStringValue("Control Panel\\Colors", pair[1], color);
+                }
+            }
         }
+    }
+
+    private static boolean installMsstyles(Context context, String name) {
+        File srcFile = MsstylesStore.getFile(context, name);
+        if (!srcFile.isFile()) return false;
+
+        File rootDir = ImageFs.find(context).getRootDir();
+        File dstFile = new File(rootDir, ImageFs.WINEPREFIX+"/drive_c/windows/resources/themes/"+name+"/"+name+MsstylesStore.EXTENSION);
+        dstFile.getParentFile().mkdirs();
+        return FileUtils.copy(srcFile, dstFile);
     }
 
     private static void createWallpaperBMPFile(Context context, ScreenInfo screenInfo) {

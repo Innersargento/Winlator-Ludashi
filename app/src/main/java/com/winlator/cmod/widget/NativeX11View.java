@@ -354,6 +354,10 @@ public final class NativeX11View extends XServerRendererView implements SurfaceH
     @Override public void toggleFullscreen() { fullscreen = !fullscreen; updateOptions(); }
     @Override public boolean isFullscreen() { return fullscreen; }
     @Override public void setCursorVisible(boolean value) { cursorVisible = value; updateOptions(); }
+    /** @param insideRgb 0xRRGGBB for the light part of Wine's cursors, @param outlineRgb for the dark part; -1 keeps Wine's colors */
+    public synchronized void setCursorColors(int insideRgb, int outlineRgb) {
+        if (handle != 0) nativeCursorColors(handle, insideRgb, outlineRgb);
+    }
     @Override public void setFpsLimit(int value) { fpsLimit = Math.max(0, value); updateOptions(); }
     @Override public int getFpsLimit() { return fpsLimit; }
     @Override public synchronized void setMagnifierZoom(float value) {
@@ -477,6 +481,7 @@ public final class NativeX11View extends XServerRendererView implements SurfaceH
     private static native void nativeInput(long handle, int kind, int a, int b);
     private static native void nativeFrameTimeline(long handle, long id);
     private static native void nativeOptions(long handle, boolean fullscreen, boolean cursor, int fps, float refresh);
+    private static native void nativeCursorColors(long handle, int insideRgb, int outlineRgb);
     private static native void nativeMagnifierZoom(long handle, float zoom);
     private static native void nativeRefreshRates(long handle, int[] rates);
     private static native void nativeDiagnostics(long handle, boolean enabled, boolean commandCacheEnabled);

@@ -69,6 +69,7 @@ import com.winlator.cmod.contents.ContentProfile;
 import com.winlator.cmod.contents.ContentsManager;
 import com.winlator.cmod.contents.AdrenotoolsManager;
 import com.winlator.cmod.core.AppUtils;
+import com.winlator.cmod.core.CursorTintStore;
 import com.winlator.cmod.core.DefaultVersion;
 import com.winlator.cmod.core.AudioOutputSettings;
 import com.winlator.cmod.core.EnvVars;
@@ -614,6 +615,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
                 : new XServer(new ScreenInfo(screenSize), useDisplayX ? "displayx" : "egl", displayxConfig);
         if (isNativeX11Enabled() && useDisplayX) xServer.setDisplayDriver("displayx");
         xServer.setWinHandler(winHandler);
+        int[] cursorColors = CursorTintStore.get(container);
+        boolean defaultCursorColors = cursorColors[0] == CursorTintStore.DEFAULT_INSIDE && cursorColors[1] == CursorTintStore.DEFAULT_OUTLINE;
+        xServer.cursorManager.setCursorColors(defaultCursorColors ? -1 : cursorColors[0], defaultCursorColors ? -1 : cursorColors[1]);
         xServer.setRelativeMouseMovement(isRelativeMouseMovement);
         advertisePanelRefreshRates();
 
@@ -1184,9 +1188,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
         }
 
         String desktopTheme = container.getDesktopTheme();
-        if (!(desktopTheme + "," + xServer.screenInfo).equals(container.getExtra("desktopTheme"))) {
+        String desktopThemeKey = WineThemeManager.getApplyKey(this, desktopTheme, xServer.screenInfo);
+        if (!desktopThemeKey.equals(container.getExtra("desktopTheme"))) {
             WineThemeManager.apply(this, new WineThemeManager.ThemeInfo(desktopTheme), xServer.screenInfo);
-            container.putExtra("desktopTheme", desktopTheme + "," + xServer.screenInfo);
+            container.putExtra("desktopTheme", desktopThemeKey);
             containerDataChanged = true;
         }
 
@@ -1422,6 +1427,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
                             useDisplayX ? 2 : useEGL ? 1 : 0, displayXFlags);
             nativeView.setFilterMode(shortcut != null ? shortcut.getRendererFilterMode()
                     : (container != null ? container.getRendererFilterMode() : 0));
+            int[] nativeCursorColors = CursorTintStore.get(container);
+            // Always tinted, even with the defaults: untinted, X++ shows Wine's cursors with fill and outline swapped.
+            nativeView.setCursorColors(nativeCursorColors[0], nativeCursorColors[1]);
             nativeView.setReadyCallback(() -> {
                 preloaderDialog.closeOnUiThread();
                 applyCursorVisibility();

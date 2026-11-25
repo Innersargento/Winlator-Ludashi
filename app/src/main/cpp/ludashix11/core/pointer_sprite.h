@@ -19,6 +19,15 @@ public:
            NativeDrawable& source, bool premultiplied = true);
 
     void Recolor(uint32_t foreground, uint32_t background);
+
+    // Re-applies the user's cursor colors to a shape cursor created before they were set.
+    void Retint() { Recolor(originForeground, originBackground); }
+
+    // Replaces the light/dark parts of Wine's black and white cursors; negative disables it.
+    static void SetTint(int32_t insideRgb, int32_t outlineRgb);
+
+    // Source glyph of an X core font cursor (152 is the I-beam), -1 for any other cursor.
+    int32_t GetGlyph() const { return glyph; }
     const sp<NativeDrawable>& Image() const { return image; }
     int32_t GetHotspotX() const { return hotX; }
     int32_t GetHotspotY() const { return hotY; }
@@ -35,6 +44,9 @@ private:
     uint16_t height{};
     uint32_t foreground{};
     uint32_t background{};
+    uint32_t originForeground{};
+    uint32_t originBackground{};
+    int32_t glyph{-1};
 };
 
 } // namespace ludashi::x11

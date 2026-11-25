@@ -6,6 +6,7 @@
 #include "core/window_node.h"
 #include "core/window_tree.h"
 #include "core/atom_catalog.h"
+#include "core/pointer_sprite.h"
 #include "native_screen.h"
 #include <map>
 
@@ -142,6 +143,14 @@ extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeOptions)(JNIEnv*, jclass, jlong
                                                           jboolean cursor, jint fps, jfloat refresh) {
     auto server = session(handle); if (!server) return;
     server->GetScreen().SetOptions(fullscreen, cursor, fps, refresh);
+}
+extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeCursorColors)(JNIEnv*, jclass, jlong handle, jint inside, jint outline) {
+    auto server = session(handle); if (!server) return;
+    auto lock = server->Lock();
+    ludashi::x11::PointerSprite::SetTint(inside, outline);
+    // The default cursor is created with the server, before the colors are known.
+    if (auto* root = server->Windows().GetRootWindow())
+        if (auto* cursor = root->GetCursor()) cursor->Retint();
 }
 extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeMagnifierZoom)(JNIEnv*, jclass, jlong handle, jfloat zoom) {
     auto server = session(handle); if (!server) return;

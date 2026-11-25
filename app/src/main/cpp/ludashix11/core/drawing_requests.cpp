@@ -23,10 +23,28 @@ void ClientSession::ApplyRasterCommand(u8 opcode) {
         if (context->GetDepth() != image->GetDepth()) throw BadMatchError();
         const auto rectangles = std::span(reinterpret_cast<const xRectangle*>(&request + 1), bytes / sizeof(xRectangle));
         const u32 color = context->GetForeground() | 0xff000000;
+        // Tiles and stipples follow the GC fill style. Wine paints its desktop with an empty
+        // monochrome pattern brush (FillOpaqueStippled), which shows only the GC background.
+        NativeDrawable* pattern = nullptr;
+        const u32 fillStyle = context->GetFillStyle();
+        if (fillStyle == FillTiled) {
+            pattern = GetDrawable(context->GetTile());
+            if (pattern && pattern->GetDepth() != image->GetDepth()) throw BadMatchError();
+        } else if (fillStyle == FillStippled || fillStyle == FillOpaqueStippled) {
+            pattern = GetDrawable(context->GetStipple());
+            if (pattern && pattern->GetDepth() != 1) throw BadMatchError();
+        }
+        const u32 background = context->GetBackground() | 0xff000000;
         server.GetScreen().MutateDrawable(image, [&] {
-            for (const auto& rectangle : rectangles)
-                context->PaintRectangle(*image, {rectangle.x, rectangle.y,
-                    s32{rectangle.x} + rectangle.width, s32{rectangle.y} + rectangle.height}, color);
+            for (const auto& rectangle : rectangles) {
+                const Rect bounds{rectangle.x, rectangle.y,
+                    s32{rectangle.x} + rectangle.width, s32{rectangle.y} + rectangle.height};
+                // Without a tile or stipple the X defaults (foreground tile, all-ones stipple) are solid.
+                if (pattern && pattern->GetWidth() && pattern->GetHeight())
+                    context->PaintPatternRectangle(*image, bounds, *pattern, color, background);
+                else
+                    context->PaintRectangle(*image, bounds, color);
+            }
         });
         return;
     }

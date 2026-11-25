@@ -24,9 +24,16 @@ public:
     u32 GetForeground() const { return attributes[2]; }
     u32 GetBackground() const { return attributes[3]; }
     u32 GetLineWidth() const { return attributes[4]; }
+    u32 GetFillStyle() const { return attributes[std::countr_zero(u32(GCFillStyle))]; }
+    u32 GetTile() const { return attributes[std::countr_zero(u32(GCTile))]; }
+    u32 GetStipple() const { return attributes[std::countr_zero(u32(GCStipple))]; }
     // Solid color rectangle path. Pixmap clip masks, non-copy raster operations,
     // plane masks and dashed/tiled rendering still require separate support.
     void PaintRectangle(NativeDrawable& image, const Rect& bounds, u32 color) const;
+    // FillTiled, FillStippled and FillOpaqueStippled rectangles. `pattern` is the GC tile (same depth
+    // as the image) or stipple (depth 1), repeated from the GC tile/stipple origin.
+    void PaintPatternRectangle(NativeDrawable& image, const Rect& bounds, NativeDrawable& pattern,
+                               u32 foreground, u32 background) const;
 
 private:
     const u8 depth;
