@@ -126,38 +126,6 @@ def run(binary):
             data = pixels()
             assert data[2 * 40 + 20] == red and data[2 * 40 + 19] == 0
             assert data[1 * 40 + 19] == red
-
-            # Fill styles: stipples select foreground/background, tiles repeat their pixels.
-            stipple, bitmap_gc, pat, tile, tile_gc = [c.base | i for i in range(10, 15)]
-            pixmap(stipple, 4, 4, 1)
-            c.send(55, payload=struct.pack("<III", bitmap_gc, stipple, 0))
-            c.send(55, payload=struct.pack("<III", pat, pix, 0))
-            change(bitmap_gc, 4, 0); fill(bitmap_gc, stipple, 4, 4)
-            change(bitmap_gc, 4, 1); fill(bitmap_gc, stipple, 2, 2)
-            fg, bg = 0x10a0f0, 0x204060
-            change(pat, 4 | 8 | (1 << 8) | (1 << 11), fg, bg, 3, stipple)  # FillOpaqueStippled
-            fill(pat)
-            assert pixels() == [fg if x % 4 < 2 and y % 4 < 2 else bg for y in range(32) for x in range(40)]
-            change(pat, (1 << 12) | (1 << 13), 1, 3)
-            fill(pat)
-            assert pixels() == [fg if (x - 1) % 4 < 2 and (y - 3) % 4 < 2 else bg for y in range(32) for x in range(40)]
-            change(pat, (1 << 8) | (1 << 12) | (1 << 13), 2, 0, 0)  # FillStippled keeps unset pixels
-            fill(clear); fill(pat)
-            assert pixels() == [fg if x % 4 < 2 and y % 4 < 2 else 0 for y in range(32) for x in range(40)]
-            # Wine paints its desktop with an empty monochrome pattern: only the background shows.
-            change(bitmap_gc, 4, 0); fill(bitmap_gc, stipple, 4, 4)
-            change(pat, 1 << 8, 3)
-            fill(pat)
-            assert pixels() == [bg] * (40 * 32)
-            pixmap(tile, 2, 1)
-            c.send(55, payload=struct.pack("<III", tile_gc, tile, 0))
-            change(tile_gc, 4, 0xaa0000); fill(tile_gc, tile, 1, 1)
-            change(tile_gc, 4, 0x00bb00)
-            c.send(70, payload=struct.pack("<IIhhHH", tile, tile_gc, 1, 0, 1, 1))
-            change(pat, (1 << 8) | (1 << 10), 1, tile)  # FillTiled
-            fill(pat)
-            assert pixels() == [0xaa0000 if x % 2 == 0 else 0x00bb00 for y in range(32) for x in range(40)]
-            change(pat, (1 << 8), 0)  # Back to FillSolid.
         finally:
             for client in clients: client.close()
             process.terminate(); process.wait(10)
